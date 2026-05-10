@@ -14,6 +14,16 @@ export function Logo({ className = '', style, variant = 'default' }: { className
         ...style,
       }}
     >
+      <style>{`
+        @keyframes pulse-cyan {
+          0%, 100% { opacity: 1; filter: brightness(1); }
+          50% { opacity: 0.7; filter: brightness(1.4) drop-shadow(0 0 4px #00e5ff); }
+        }
+        .logo-accent {
+          animation: pulse-cyan 2s infinite ease-in-out;
+        }
+      `}</style>
+
       {/* Hexagon Background */}
       <path d="M32 4 56 18v28L32 60 8 46V18L32 4Z" fill={fill} />
       
@@ -23,8 +33,11 @@ export function Logo({ className = '', style, variant = 'default' }: { className
         fill={glyph} 
       />
 
-      {/* Cyan Accent Box */}
-      <rect x="38" y="32" width="10" height="10" fill="#00e5ff" rx="1" />
+      {/* Cyan Accent Box (Animated) */}
+      <rect 
+        className="logo-accent"
+        x="38" y="32" width="10" height="10" fill="#00e5ff" rx="1" 
+      />
     </svg>
   );
 }
