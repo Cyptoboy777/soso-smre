@@ -14,17 +14,44 @@ const SYMBOLS = ['BTCUSDT','ETHUSDT','SOLUSDT','BNBUSDT','XRPUSDT','ADAUSDT','AV
 
 export async function GET() {
   try {
-    const binanceUrl = `https://api.binance.com/api/v3/ticker/24hr?symbols=${JSON.stringify(SYMBOLS)}`;
-    const [binanceRes, cgPriceRes, cgGlobalRes] = await Promise.all([
-      fetch(binanceUrl, { next: { revalidate: 10 } }),
-      fetch('https://api.coingecko.com/api/v3/simple/price?ids=sosovalue&vs_currencies=usd&include_24hr_vol=true&include_24hr_change=true', { next: { revalidate: 30 } }),
-      fetch('https://api.coingecko.com/api/v3/global', { next: { revalidate: 60 } })
+    const endpoints = [
+      'https://api.binance.com/api/v3/ticker/24hr',
+      'https://api1.binance.com/api/v3/ticker/24hr',
+      'https://api2.binance.com/api/v3/ticker/24hr',
+      'https://api3.binance.com/api/v3/ticker/24hr'
+    ];
+
+    let binanceData: BinanceTicker[] = [];
+    const symbolsQuery = `?symbols=${JSON.stringify(SYMBOLS)}`;
+
+    // Try endpoints until one works
+    for (const baseUrl of endpoints) {
+      try {
+        const res = await fetch(baseUrl + symbolsQuery, { 
+          next: { revalidate: 10 },
+          headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' }
+        });
+        if (res.ok) {
+          binanceData = await res.json() as BinanceTicker[];
+          if (binanceData.length > 0) break;
+        }
+      } catch (err) {
+        console.error(`Binance endpoint ${baseUrl} failed:`, err);
+      }
+    }
+
+    const [cgPriceRes, cgGlobalRes] = await Promise.all([
+      fetch('https://api.coingecko.com/api/v3/simple/price?ids=sosovalue&vs_currencies=usd&include_24hr_vol=true&include_24hr_change=true', { 
+        next: { revalidate: 30 },
+        headers: { 'User-Agent': 'SoSoSmre/1.0' }
+      }),
+      fetch('https://api.coingecko.com/api/v3/global', { 
+        next: { revalidate: 60 },
+        headers: { 'User-Agent': 'SoSoSmre/1.0' }
+      })
     ]);
 
-    let data: BinanceTicker[] = [];
-    if (binanceRes.ok) {
-      data = await binanceRes.json() as BinanceTicker[];
-    }
+    const data = binanceData;
 
     let sosoPrice = '0.40';
     let sosoChange = '0.00';
