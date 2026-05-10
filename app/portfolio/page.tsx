@@ -52,7 +52,10 @@ export default function PortfolioPage() {
       fetchAnalytics(nextPortfolio);
     };
 
-    load().catch(() => setLoading(false));
+    load().catch(err => {
+      console.error("Portfolio sync error:", err);
+      setLoading(false);
+    });
   }, [fetchAnalytics, user]);
 
   // Live PnL Polling

@@ -97,11 +97,15 @@ export default function AITradeAgentPage() {
       }
 
       setPortfolio(nextPortfolio);
-      setPortfolioLoaded(true);
+      setPortfolioLoaded(true); // ONLY set to true after successful load
       fetchAnalytics(nextPortfolio);
     };
 
-    loadPortfolio().catch(() => setPortfolioLoaded(true));
+    loadPortfolio().catch(err => {
+      console.error("Critical: Portfolio Load Failed", err);
+      // We do NOT setPortfolioLoaded(true) here to prevent accidental overwrites
+      setToast("Network error: Could not sync your portfolio. Please refresh.");
+    });
     fetch('/api/news').then(r => r.json()).then((d: { news?: typeof news }) => { if (d.news) setNews(d.news.slice(0, 2)); }).catch(() => {});
   }, [user, fetchAnalytics]);
 
@@ -155,6 +159,8 @@ export default function AITradeAgentPage() {
     const amtStr = typeof overrideAmount === 'string' ? overrideAmount : amount;
     const tradeAmount = parseFloat(amtStr);
     const price = parseFloat(limitPrice) || livePrice || 78000;
+    
+    if (!portfolioLoaded) { setToast('Waiting for portfolio to sync...'); return; }
     if (!tradeAmount || tradeAmount <= 0) { setToast('Enter a valid amount'); return; }
     if (tradeAmount > portfolio.usdc) { setToast(`Insufficient USDC. Balance: $${portfolio.usdc.toFixed(2)}`); return; }
 
@@ -173,28 +179,44 @@ export default function AITradeAgentPage() {
       if (d.trade) {
         setTradeStatus('SUCCESS');
         setTimeout(() => setTradeStatus('IDLE'), 2000);
-        const p = { ...portfolio };
-        p.usdc = Math.max(0, p.usdc - tradeAmount);
-        if (!p.holdings[baseCoin]) {
-          p.holdings[baseCoin] = { symbol: baseCoin, amount: 0, avgBuyPrice: price };
-        }
-        const h = p.holdings[baseCoin];
-        const newTotal = h.amount + d.trade.amount;
-        h.avgBuyPrice = (h.amount * h.avgBuyPrice + d.trade.total) / newTotal;
-        h.amount = newTotal;
-        if (!p.trades) p.trades = [];
-        p.trades.unshift(d.trade);
-        p.soPoints = (p.soPoints ?? 0) + (d.soPointsEarned ?? 0);
-        if (user && db) {
-          await setDoc(doc(db, 'users', user.uid, 'private', 'portfolio'), { ...p, updatedAt: serverTimestamp() });
-        }
-        setPortfolio(p);
-        fetchAnalytics(p);
+        
+        // Use functional state update to prevent stale closures and ensure immutability
+        setPortfolio(prev => {
+          const next = { 
+            ...prev, 
+            usdc: Math.max(0, prev.usdc - tradeAmount),
+            holdings: { ...prev.holdings },
+            trades: [d.trade!, ...(prev.trades ?? [])],
+            soPoints: (prev.soPoints ?? 0) + (d.soPointsEarned ?? 0)
+          };
+
+          const h = next.holdings[baseCoin] ? { ...next.holdings[baseCoin] } : { symbol: baseCoin, amount: 0, avgBuyPrice: price };
+          const newTotal = h.amount + d.trade!.amount;
+          h.avgBuyPrice = (h.amount * h.avgBuyPrice + d.trade!.total) / newTotal;
+          h.amount = newTotal;
+          next.holdings[baseCoin] = h;
+
+          // PERSIST TO FIREBASE IMMEDIATELY
+          if (user && db) {
+            const ref = doc(db, 'users', user.uid, 'private', 'portfolio');
+            setDoc(ref, { ...next, updatedAt: serverTimestamp() }).catch(err => {
+              console.error("Firestore Save Failed:", err);
+            });
+          }
+
+          fetchAnalytics(next);
+          return next;
+        });
+
         setToast(`Order filled: Simulated paper trade: BUY ${baseCoin} for $${tradeAmount.toLocaleString()}`);
         setAmount('0.00');
       }
-    } catch { setToast('Network error. Try again.'); setTradeStatus('IDLE'); }
-  }, [amount, limitPrice, livePrice, portfolio, baseCoin]);
+    } catch (err) { 
+      console.error("Trade execution error:", err);
+      setToast('Network error. Try again.'); 
+      setTradeStatus('IDLE'); 
+    }
+  }, [amount, limitPrice, livePrice, portfolioLoaded, portfolio.usdc, baseCoin, user, fetchAnalytics]);
 
   const displayHoldings = analytics?.holdings ?? Object.values(portfolio.holdings ?? {}).map(h => ({ ...h, currentPrice: h.avgBuyPrice, currentValue: h.amount * h.avgBuyPrice, pnl: 0, pnlPct: 0 }));
   const totalValue = analytics?.totalValue ?? (portfolio.usdc + displayHoldings.reduce((s, h) => s + h.amount * h.avgBuyPrice, 0));
