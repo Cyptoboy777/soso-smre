@@ -1,0 +1,60 @@
+@import "tailwindcss";
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; background: #000; color: #fff; font-family: 'Inter', system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #2a2a2a; border-radius: 2px; }
+::-webkit-scrollbar-thumb:hover { background: #3a3a3a; }
+::selection { background: rgba(249,115,22,0.25); }
+
+/* ── Ticker ── */
+@keyframes ticker { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } }
+.ticker { animation: ticker 50s linear infinite; display: flex; white-space: nowrap; }
+.ticker:hover { animation-play-state: paused; }
+
+/* ── Live dot pulse ── */
+@keyframes livePulse { 0%,100% { box-shadow: 0 0 0 0 rgba(0,230,118,0.7); } 70% { box-shadow: 0 0 0 6px rgba(0,230,118,0); } }
+.live-dot { animation: livePulse 1.8s ease-in-out infinite; }
+
+/* ── BUY glow ── */
+@keyframes buyGlow { 0%,100% { text-shadow: 0 0 20px rgba(0,230,118,0.8), 0 0 40px rgba(0,230,118,0.4); } 50% { text-shadow: 0 0 40px rgba(0,230,118,1), 0 0 80px rgba(0,230,118,0.6), 0 0 120px rgba(0,230,118,0.3); } }
+.buy-glow { animation: buyGlow 2s ease-in-out infinite; }
+
+/* ── SELL glow ── */
+@keyframes sellGlow { 0%,100% { text-shadow: 0 0 20px rgba(244,63,94,0.8); } 50% { text-shadow: 0 0 40px rgba(244,63,94,1), 0 0 80px rgba(244,63,94,0.5); } }
+.sell-glow { animation: sellGlow 2s ease-in-out infinite; }
+
+/* ── Fade up ── */
+@keyframes fadeUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+.fade-up { animation: fadeUp 0.35s ease forwards; }
+
+/* ── Shimmer loading ── */
+@keyframes shimmer { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } }
+.shimmer { background: linear-gradient(90deg, #111 25%, #1c1c1c 50%, #111 75%); background-size: 200% 100%; animation: shimmer 1.5s infinite; border-radius: 8px; }
+
+/* ── Sync dot ── */
+@keyframes sync { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
+.sync { animation: sync 1.2s ease-in-out infinite; }
+
+/* ── Toast ── */
+@keyframes toastIn { from { transform: translateX(110%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+.toast-in { animation: toastIn 0.35s ease forwards; }
+
+/* ── Spin ── */
+@keyframes spin { to { transform: rotate(360deg); } }
+.spin { animation: spin 0.8s linear infinite; }
+
+/* ── Dot bounce (loading) ── */
+@keyframes bounce { 0%,80%,100% { transform: scale(0.6); opacity: 0.4; } 40% { transform: scale(1.1); opacity: 1; } }
+.bounce-1 { animation: bounce 1.2s ease-in-out infinite; }
+.bounce-2 { animation: bounce 1.2s ease-in-out 0.2s infinite; }
+.bounce-3 { animation: bounce 1.2s ease-in-out 0.4s infinite; }
+
+/* -- AI Terminal Blink -- */
+@keyframes terminalBlink { 0%,100% { opacity: 1; } 50% { opacity: 0; } }
+.blink { animation: terminalBlink 1s step-end infinite; }
+
+/* -- AI Blob Pulse -- */
+@keyframes blobPulse { 0% { box-shadow: 0 0 0 0 rgba(59,130,246,0.7); } 70% { box-shadow: 0 0 0 8px rgba(59,130,246,0); } 100% { box-shadow: 0 0 0 0 rgba(59,130,246,0); } }
+.pulse-blob { animation: blobPulse 2s ease-in-out infinite; }
