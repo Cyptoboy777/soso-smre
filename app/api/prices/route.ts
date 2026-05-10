@@ -14,34 +14,25 @@ const SYMBOLS = ['BTCUSDT','ETHUSDT','SOLUSDT','BNBUSDT','XRPUSDT','ADAUSDT','AV
 
 export async function GET() {
   try {
-    const endpoints = [
-      'https://api.binance.com/api/v3/ticker/24hr',
-      'https://api1.binance.com/api/v3/ticker/24hr',
-      'https://api2.binance.com/api/v3/ticker/24hr',
-      'https://api3.binance.com/api/v3/ticker/24hr'
-    ];
+    const CG_IDS = {
+      'bitcoin': 'BTCUSDT',
+      'ethereum': 'ETHUSDT',
+      'solana': 'SOLUSDT',
+      'binancecoin': 'BNBUSDT',
+      'ripple': 'XRPUSDT',
+      'cardano': 'ADAUSDT',
+      'avalanche-2': 'AVAXUSDT',
+      'dogecoin': 'DOGEUSDT',
+      'chainlink': 'LINKUSDT',
+      'polygon-ecosystem': 'MATICUSDT',
+      'sosovalue': 'SOSOUSDT'
+    };
 
-    let binanceData: BinanceTicker[] = [];
-    const symbolsQuery = `?symbols=${JSON.stringify(SYMBOLS)}`;
+    const ids = Object.keys(CG_IDS).join(',');
+    const url = `https://api.coingecko.com/api/v3/simple/price?ids=${ids}&vs_currencies=usd&include_24hr_vol=true&include_24hr_change=true&include_high_24h=true&include_low_24h=true`;
 
-    // Try endpoints until one works
-    for (const baseUrl of endpoints) {
-      try {
-        const res = await fetch(baseUrl + symbolsQuery, { 
-          next: { revalidate: 10 },
-          headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' }
-        });
-        if (res.ok) {
-          binanceData = await res.json() as BinanceTicker[];
-          if (binanceData.length > 0) break;
-        }
-      } catch (err) {
-        console.error(`Binance endpoint ${baseUrl} failed:`, err);
-      }
-    }
-
-    const [cgPriceRes, cgGlobalRes] = await Promise.all([
-      fetch('https://api.coingecko.com/api/v3/simple/price?ids=sosovalue&vs_currencies=usd&include_24hr_vol=true&include_24hr_change=true', { 
+    const [cgRes, cgGlobalRes] = await Promise.all([
+      fetch(url, { 
         next: { revalidate: 30 },
         headers: { 'User-Agent': 'SoSoSmre/1.0' }
       }),
@@ -51,60 +42,40 @@ export async function GET() {
       })
     ]);
 
-    const data = binanceData;
+    if (!cgRes.ok) throw new Error('CoinGecko API unreachable');
 
-    let sosoPrice = '0.40';
-    let sosoChange = '0.00';
-    let sosoVol = '0';
-    if (cgPriceRes.ok) {
-      const cgData = await cgPriceRes.json();
-      if (cgData?.sosovalue) {
-        sosoPrice = cgData.sosovalue.usd.toString();
-        sosoChange = (cgData.sosovalue.usd_24h_change || 0).toString();
-        sosoVol = (cgData.sosovalue.usd_24h_vol || 0).toString();
-      }
-    }
-
+    const cgData = await cgRes.json();
+    
     let globalMarketCap = '2.45T';
     if (cgGlobalRes.ok) {
       const cgGlobal = await cgGlobalRes.json();
       if (cgGlobal?.data?.total_market_cap?.usd) {
-        const mcap = cgGlobal.data.total_market_cap.usd;
-        globalMarketCap = (mcap / 1e12).toFixed(2) + 'T';
+        globalMarketCap = (cgGlobal.data.total_market_cap.usd / 1e12).toFixed(2) + 'T';
       }
     }
 
-    const map: Record<string, BinanceTicker> = {};
-    data.forEach(t => { map[t.symbol] = t; });
+    const prices = Object.entries(CG_IDS).map(([cgId, symbol]) => {
+      const d = cgData[cgId] || {};
+      const priceVal = d.usd || 0;
+      return {
+        symbol,
+        price: priceVal.toFixed(symbol === 'BTCUSDT' || symbol === 'ETHUSDT' ? 2 : 4),
+        change: (d.usd_24h_change || 0).toFixed(2),
+        volume: (d.usd_24h_vol || 0).toLocaleString('en-US', { maximumFractionDigits: 0 }),
+        high: (d.usd_high_24h || priceVal).toFixed(2),
+        low: (d.usd_low_24h || priceVal).toFixed(2),
+        rawPrice: priceVal
+      };
+    });
 
-    // Inject SOSO token price from CoinGecko
-    map['SOSOUSDT'] = {
-      symbol: 'SOSOUSDT',
-      lastPrice: sosoPrice,
-      priceChangePercent: sosoChange,
-      volume: sosoVol,
-      quoteVolume: sosoVol,
-      highPrice: sosoPrice,
-      lowPrice: sosoPrice,
-    };
-
-    const ALL_SYMBOLS = [...SYMBOLS, 'SOSOUSDT'];
-
-    const prices = ALL_SYMBOLS.map(sym => ({
-      symbol: sym,
-      price: parseFloat(map[sym]?.lastPrice ?? '0').toFixed(sym === 'BTCUSDT' ? 2 : sym === 'ETHUSDT' ? 2 : 4),
-      change: parseFloat(map[sym]?.priceChangePercent ?? '0').toFixed(2),
-      volume: parseFloat(map[sym]?.quoteVolume ?? '0').toFixed(0),
-      high: parseFloat(map[sym]?.highPrice ?? '0').toFixed(2),
-      low: parseFloat(map[sym]?.lowPrice ?? '0').toFixed(2),
-    }));
+    const find = (s: string) => prices.find(p => p.symbol === s)?.rawPrice || 0;
 
     return NextResponse.json({
-      btc: parseFloat(map['BTCUSDT']?.lastPrice ?? '0'),
-      eth: parseFloat(map['ETHUSDT']?.lastPrice ?? '0'),
-      sol: parseFloat(map['SOLUSDT']?.lastPrice ?? '0'),
-      bnb: parseFloat(map['BNBUSDT']?.lastPrice ?? '0'),
-      soso: parseFloat(map['SOSOUSDT']?.lastPrice ?? '0'),
+      btc: find('BTCUSDT'),
+      eth: find('ETHUSDT'),
+      sol: find('SOLUSDT'),
+      bnb: find('BNBUSDT'),
+      soso: find('SOSOUSDT'),
       globalMarketCap,
       prices,
       updatedAt: Date.now(),
