@@ -9,6 +9,7 @@ interface Body {
   timeframe?: string;
   buyZone?: string;
   sellZone?: string;
+  chatId?: string;
 }
 
 interface AISignal {
@@ -49,14 +50,13 @@ async function fetchLivePrice(token: string) {
     if (found) {
       return { price: found.price, change: found.change };
     }
-    // Fallback if not found in pre-configured lists
     const sym = token.toUpperCase() + 'USDT';
     const r = await fetch(`https://api.binance.com/api/v3/ticker/24hr?symbol=${sym}`);
     if (r.ok) {
       const d = await r.json() as { lastPrice: string; priceChangePercent: string };
       return { price: parseFloat(d.lastPrice).toFixed(4), change: parseFloat(d.priceChangePercent).toFixed(2) };
     }
-    return { price: '1.00', change: '0' }; // Hard fallback to prevent $N/A errors
+    return { price: '1.00', change: '0' };
   } catch {
     return { price: '1.00', change: '0' };
   }
@@ -65,13 +65,12 @@ async function fetchLivePrice(token: string) {
 async function runGemini(prompt: string): Promise<AISignal> {
   const key = process.env.GEMINI_API_KEY;
   if (!key) throw new Error('GEMINI_API_KEY not set');
-  const ai = new GoogleGenAI({ apiKey: key });
-  const res = await ai.models.generateContent({
+  const client = new GoogleGenAI({ apiKey: key });
+  const res = await client.models.generateContent({
     model: 'gemini-2.5-flash',
     contents: prompt,
   });
-  const text = (res.text ?? '')
-    .replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+  const text = (res.text ?? '').replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
   return JSON.parse(text) as AISignal;
 }
 
@@ -80,13 +79,12 @@ async function runGroq(prompt: string): Promise<AISignal> {
   if (!key) throw new Error('GROQ_API_KEY not set');
   const groq = new Groq({ apiKey: key });
   const c = await groq.chat.completions.create({
-    model: 'llama-3.3-70b-versatile',
+    model: 'llama-3.1-8b-instant',
     messages: [{ role: 'user', content: prompt }],
-    temperature: 0.3,
+    temperature: 0.1,
     max_tokens: 500,
   });
-  const text = (c.choices[0]?.message?.content ?? '')
-    .replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+  const text = (c.choices[0]?.message?.content ?? '').replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
   return JSON.parse(text) as AISignal;
 }
 
@@ -106,25 +104,46 @@ export async function POST(req: NextRequest) {
       body.sellZone ?? '',
     );
 
-    // Try Gemini first, then Groq. If both live providers fail, return an error.
     let signal: AISignal;
-    let model = 'gemini-2.5-flash';
+    let modelUsed = 'gemini-2.5-flash';
 
     try {
       signal = await runGemini(prompt);
     } catch (e1) {
-      console.warn('Gemini failed:', e1);
+      console.warn('Gemini failed, falling back to Groq:', e1);
       try {
         signal = await runGroq(prompt);
-        model = 'llama-3.3-70b-versatile';
-      } catch (e2) {
-        console.warn('Groq failed:', e2);
-        return NextResponse.json({ error: 'Live AI providers failed', price, change }, { status: 502 });
+        modelUsed = 'llama-3.1-8b-instant';
+      } catch (e2: any) {
+        console.error('All AI providers failed:', e2);
+        return NextResponse.json({ error: 'AI Analysis currently unavailable. ' + e2.message, price, change }, { status: 502 });
       }
     }
 
-    return NextResponse.json({ signal, model, price, change, generatedAt: Date.now() });
-  } catch (e) {
+    // NEW: SEND TELEGRAM ALERT IF CHAT ID PROVIDED
+    if (body.chatId && process.env.TELEGRAM_BOT_TOKEN) {
+      const msg = `🚀 <b>NEW AI SIGNAL</b>\n\n` +
+                  `Asset: <b>${body.token.toUpperCase()}/USDT</b>\n` +
+                  `Action: ${signal.signal === 'BUY' ? '🟢 <b>BUY</b>' : signal.signal === 'SELL' ? '🔴 <b>SELL</b>' : '🟡 <b>HOLD</b>'}\n` +
+                  `Confidence: <b>${signal.confidence}%</b>\n` +
+                  `Target: <b>${signal.target}</b>\n` +
+                  `Stop Loss: <b>${signal.stopLoss}</b>\n\n` +
+                  `<i>Reasoning: ${signal.reasoning}</i>\n\n` +
+                  `<a href="http://localhost:3000/ai-analysis">Open Terminal →</a>`;
+      
+      try {
+        await fetch(`https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/sendMessage`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ chat_id: body.chatId, text: msg, parse_mode: 'HTML' })
+        });
+      } catch (e) {
+        console.error('Telegram Signal Send Error:', e);
+      }
+    }
+
+    return NextResponse.json({ signal, model: modelUsed, price, change, generatedAt: Date.now() });
+  } catch (e: any) {
     return NextResponse.json({ error: e instanceof Error ? e.message : 'Unknown error' }, { status: 500 });
   }
 }

@@ -1,0 +1,21 @@
+{
+  "name": "SoSo SMRE - AI Trading",
+  "short_name": "SoSo",
+  "description": "Smart Money Research Engine - AI Powered Trading Intelligence",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#000000",
+  "theme_color": "#f97316",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

@@ -4,39 +4,34 @@ SoSo SMRE is a premium, AI-driven crypto intelligence and paper trading platform
 
 ## 🌟 Key Features
 
-### 1. 🤖 SOSO AI-Trader (Autonomous Agent)
+### 1. 🤖 Global Background AI-Trader (Autonomous Agent)
+*   **True Background Execution:** The "Genius" AI engine runs persistently across all pages. You can start the trader, navigate to other pages, and it will continue analyzing and executing trades silently in the background.
 *   **Autonomous Execution:** An AI agent that analyzes risk, selects strategies (Momentum, Mean Reversion, Macro-Trend), and executes paper trades automatically.
 *   **Risk Profiles:** Customizable risk tolerance (Low, Medium, High) that dictates trade allocation (25% to 100% of balance).
 *   **Live Terminal:** Real-time animated console showing the AI's "thought process" and execution logs.
-*   **Auto-Fill Integration:** Seamlessly populates manual trade setup forms with AI-calculated values.
 
-### 2. 🧠 Smart AI Analysis
+### 2. 🐕 Cybonk Dog Assistant & Voice Podcast
+*   **3D Cyberpunk Dog:** An interactive, animated Shiba Inu hacker assistant ("SoDoggy") featuring CSS 3D floating, speaking animations, and holographic glitch effects.
+*   **Real Dog Audio & Emotions:** SoDoggy barks and pants dynamically with real audio while displaying floating emotional emojis (🔥, 🚀, ⚡) based on market context.
+*   **Persistent Market Podcast:** A daily AI-generated "Quick Market Podcast" that plays continuously in the background. It summarizes live news, BTC/ETH prices, and market sentiment. The audio seamlessly persists across all route changes.
+
+### 3. 📊 Perfect Sync Portfolio & Futures Trading
+*   **Zero-Latency Sync:** A hybrid Dual-Sync architecture (localStorage + Firestore) ensures that any trade executed by the AI instantly updates your Portfolio PnL and Holdings without a single page refresh.
+*   **Spot & Futures Paper Trading:** A dedicated manual trading terminal supporting both SPOT and FUTURES execution with custom leverage multipliers up to 100x.
+*   **Real-Time PnL:** Continuous polling for live price shifts.
+*   **Offline-First Resilience:** Ensures that trading features are always instantly available, syncing to the cloud securely in the background.
+
+### 4. 🧠 Smart AI Analysis & News Engine
 *   **Dual-Model Validation:** Uses both **Google Gemini 2.5 Flash** and **Groq (Llama 3)** to cross-validate trading signals.
 *   **Precision Targets:** Generates exact numerical Buy Zones, Sell Zones, and Stop-Loss targets based on the selected timeframe (15M to 1W).
-*   **One-Click Execution:** Directly bridge AI signals to the trading terminal with pre-populated parameters.
-
-### 3. 📰 Intelligent News Engine
-*   **SoSoValue Integration:** Real-time hot news feed with exact timestamps.
-*   **Smart Filtering:** 
-    *   **Major News:** Critical updates (SEC, Fed, ETF) are pinned for 24 hours.
-    *   **Breaking News:** Standard news rotates every 4 hours to keep the dashboard fresh.
-*   **Sentiment Tracking:** AI-powered sentiment scoring (Bullish/Bearish) for each asset.
-
-### 4. 📊 Live Portfolio Simulation
-*   **Real-Time PnL:** Continuous polling (every 15s) for live price shifts from CoinGecko.
-*   **USDC Paper Trading:** Starting balance of **$10,000 USDC** for every new user.
-*   **Firestore Persistence:** All trades, holdings, and SoPoints are securely saved to Firebase and retained across logins.
-*   **SOSO Token Sync:** Dedicated pricing layer for the SOSO token, pulling live data from CoinGecko.
-
-### 5. 📉 SoDEX Integration
-*   Live spot and perpetual market tickers.
-*   Funding rates and mark prices for professional perp analysis.
+*   **SoSoValue Integration:** Real-time hot news feed with smart filtering, separating breaking news from long-term institutional shifts.
 
 ---
 
 ## 🛠 Technology Stack
 
 *   **Frontend:** Next.js 15 (App Router), TypeScript, Tailwind CSS.
+*   **State Management:** Context API (GlobalStateProvider) + Dual-Sync localStorage.
 *   **Backend:** Next.js API Routes (Serverless).
 *   **Database/Auth:** Firebase (Firestore & Authentication).
 *   **AI Engines:** Google Generative AI (Gemini), Groq SDK.
@@ -68,19 +63,15 @@ SoSo SMRE is a premium, AI-driven crypto intelligence and paper trading platform
     Create a `.env.local` file in the root and populate it with your keys:
     ```env
     # Gemini AI (Deep Reasoning)
-    # Get your key at: https://aistudio.google.com/app/apikey
     GEMINI_API_KEY=your_gemini_api_key_here
 
     # Groq AI (Fast Llama 3 Inference)
-    # Get your key at: https://console.groq.com/keys
     GROQ_API_KEY=your_groq_api_key_here
 
     # SoSoValue API (News & Market Intel)
-    # Get your key at: https://sosovalue.com/developer/dashboard
     SOSOVALUE_API_KEY=your_sosovalue_api_key_here
 
     # Firebase Configuration (Persistence & Auth)
-    # Find these in Firebase Console -> Project Settings -> Your Apps -> Web App
     NEXT_PUBLIC_FIREBASE_API_KEY=your_firebase_api_key
     NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=your_project_id.firebaseapp.com
     NEXT_PUBLIC_FIREBASE_PROJECT_ID=your_project_id
@@ -99,12 +90,12 @@ SoSo SMRE is a premium, AI-driven crypto intelligence and paper trading platform
 ## 💡 How to Use
 
 1.  **Login:** Securely sign in using the premium login interface.
-2.  **Analyze:** Head to the **AI Analysis** tab, select an asset (e.g., BTC/USDC), and run a dual-model scan.
-3.  **Trade:** 
-    *   Click "Execute Trade" from the analysis result to auto-fill the trading form.
-    *   Alternatively, turn on the **SOSO AI-Trader** for autonomous hands-free execution based on your risk profile.
-4.  **Monitor:** Track your live PnL and total value in the **Portfolio** tab. Watch as the "Live Portfolio Simulation" ticks in real-time.
-5.  **Stay Updated:** Check the sidebar or **News** page for major market shifts pinned by our retention algorithm.
+2.  **Talk to SoDoggy:** Open the bottom right Cyberpunk Dog widget to get instant voice-enabled market analysis.
+3.  **Listen to Alpha:** Start the "Quick Market Podcast" to listen to background market briefings while you browse.
+4.  **Trade:** 
+    *   Turn on the **SOSO AI-Trader** for background, autonomous hands-free execution.
+    *   Manually execute SPOT or FUTURES trades in the Terminal.
+5.  **Monitor:** Track your perfectly synced live PnL and total value in the **Portfolio** tab.
 
 ---
 

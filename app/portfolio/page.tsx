@@ -1,9 +1,12 @@
 'use client';
 import { useEffect, useState, useCallback } from 'react';
-import { Wallet, TrendingUp, TrendingDown, RotateCcw } from 'lucide-react';
+import { Wallet, TrendingUp, TrendingDown, RotateCcw, Mic } from 'lucide-react';
 import { doc, getDoc, serverTimestamp, setDoc } from 'firebase/firestore';
 import { useAuth } from '@/components/FirebaseProvider';
 import { db } from '@/lib/firebase';
+import PerformanceChart from '@/components/PerformanceChart';
+import Achievements from '@/components/Achievements';
+import VoiceBriefing from '@/components/VoiceBriefing';
 
 interface Holding { symbol: string; amount: number; avgBuyPrice: number; }
 interface Trade  { id: string; symbol: string; type: 'BUY'|'SELL'; amount: number; price: number; total: number; timestamp: number; }
@@ -37,33 +40,63 @@ export default function PortfolioPage() {
 
   useEffect(() => {
     const load = async () => {
-      if (!user || !db) return;
-
-      setLoading(true);
-      const ref = doc(db, 'users', user.uid, 'private', 'portfolio');
-      const snap = await getDoc(ref);
-      const nextPortfolio = snap.exists() ? { ...DEFAULT, ...snap.data() } as Portfolio : { ...DEFAULT };
-
-      if (!snap.exists()) {
-        await setDoc(ref, { ...nextPortfolio, updatedAt: serverTimestamp() });
+      // 1. Instant Local Sync
+      const localData = localStorage.getItem('soso_paper_portfolio');
+      if (localData) {
+        try {
+          const parsed = JSON.parse(localData);
+          setPortfolio(parsed);
+          fetchAnalytics(parsed);
+        } catch (e) {}
       }
 
-      setPortfolio(nextPortfolio);
-      fetchAnalytics(nextPortfolio);
+      if (!user || !db) {
+        setLoading(false);
+        return;
+      }
+
+      setLoading(true);
+      try {
+        const ref = doc(db, 'users', user.uid, 'private', 'portfolio');
+        const snap = await getDoc(ref);
+        
+        if (snap.exists()) {
+          const cloudData = { ...DEFAULT, ...snap.data() } as Portfolio;
+          // Prefer cloud data if it exists, but save to local
+          setPortfolio(cloudData);
+          fetchAnalytics(cloudData);
+          localStorage.setItem('soso_paper_portfolio', JSON.stringify(cloudData));
+        } else {
+          // Initialize
+          const nextPortfolio = localData ? JSON.parse(localData) : { ...DEFAULT };
+          await setDoc(ref, { ...nextPortfolio, updatedAt: serverTimestamp() });
+          setPortfolio(nextPortfolio);
+          fetchAnalytics(nextPortfolio);
+        }
+      } catch (err) {
+        console.error("Portfolio sync error:", err);
+      }
+      setLoading(false);
     };
 
-    load().catch(err => {
-      console.error("Portfolio sync error:", err);
-      setLoading(false);
-    });
+    load();
   }, [fetchAnalytics, user]);
 
-  // Live PnL Polling
+  // Live PnL Polling & Local Sync
   useEffect(() => {
     if (loading || !user) return;
     const interval = setInterval(() => {
+      const localData = localStorage.getItem('soso_paper_portfolio');
+      if (localData) {
+        try {
+          const parsed = JSON.parse(localData);
+          setPortfolio(parsed);
+          fetchAnalytics(parsed);
+          return;
+        } catch(e) {}
+      }
       fetchAnalytics(portfolio);
-    }, 15000);
+    }, 5000);
     return () => clearInterval(interval);
   }, [loading, portfolio, user, fetchAnalytics]);
 
@@ -82,122 +115,139 @@ export default function PortfolioPage() {
     <div style={{ padding: 24 }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <Wallet size={20} color="#f97316" />
+          <Wallet size={20} color="var(--accent-orange)" />
           <div>
-            <h1 style={{ fontSize: 22, fontWeight: 700, color: '#fff' }}>Portfolio</h1>
-            <p style={{ fontSize: 13, color: '#444', marginTop: 2 }}>Paper trading tracker — starting balance $10,000 USDC</p>
+            <h1 style={{ fontSize: 22, fontWeight: 900, color: 'var(--text-primary)', textTransform: 'uppercase', letterSpacing: '-0.02em' }}>Portfolio</h1>
+            <p style={{ fontSize: 13, color: 'var(--text-dim)', marginTop: 2 }}>Paper trading tracker — starting balance $10,000 USDC</p>
           </div>
         </div>
-        <button onClick={() => setConfirmReset(true)} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', background: 'rgba(244,63,94,0.08)', border: '1px solid rgba(244,63,94,0.2)', borderRadius: 8, color: '#f43f5e', fontSize: 12, cursor: 'pointer', fontWeight: 600 }}>
-          <RotateCcw size={13} />Reset Portfolio
-        </button>
+        <div style={{ display: 'flex', gap: 10 }}>
+          <button style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', background: 'rgba(59,130,246,0.08)', border: '1px solid rgba(59,130,246,0.2)', borderRadius: 8, color: '#3b82f6', fontSize: 12, cursor: 'pointer', fontWeight: 600 }}>
+            <Mic size={13} /> Voice Briefing
+          </button>
+          <button onClick={() => setConfirmReset(true)} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', background: 'rgba(244,63,94,0.08)', border: '1px solid rgba(244,63,94,0.2)', borderRadius: 8, color: '#f43f5e', fontSize: 12, cursor: 'pointer', fontWeight: 600 }}>
+            <RotateCcw size={13} />Reset Portfolio
+          </button>
+        </div>
       </div>
 
       {/* Reset confirm modal */}
       {confirmReset && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
-          <div style={{ background: '#111', border: '1px solid #2a2a2a', borderRadius: 16, padding: 28, maxWidth: 360, width: '100%' }}>
-            <h3 style={{ fontSize: 16, fontWeight: 700, color: '#fff', marginBottom: 10 }}>Reset Portfolio?</h3>
-            <p style={{ fontSize: 13, color: '#666', lineHeight: 1.6, marginBottom: 24 }}>This will clear all trades and reset your USDC balance to $10,000. This cannot be undone.</p>
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(8px)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+          <div className="neon-border glass" style={{ borderRadius: 24, padding: 32, maxWidth: 400, width: '100%' }}>
+            <h3 style={{ fontSize: 18, fontWeight: 900, color: 'var(--text-primary)', marginBottom: 12 }}>RESET PORTFOLIO?</h3>
+            <p style={{ fontSize: 14, color: 'var(--text-secondary)', lineHeight: 1.6, marginBottom: 32 }}>This will clear all trades and reset your USDC balance to $10,000. This action is irreversible.</p>
             <div style={{ display: 'flex', gap: 12 }}>
-              <button onClick={() => setConfirmReset(false)} style={{ flex: 1, padding: '10px', borderRadius: 8, border: '1px solid #2a2a2a', background: 'transparent', color: '#888', fontSize: 13, cursor: 'pointer' }}>Cancel</button>
-              <button onClick={reset} style={{ flex: 1, padding: '10px', borderRadius: 8, border: 'none', background: '#f43f5e', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>Reset</button>
+              <button onClick={() => setConfirmReset(false)} style={{ flex: 1, padding: '12px', borderRadius: 12, border: '1px solid var(--border-bold)', background: 'transparent', color: 'var(--text-dim)', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>CANCEL</button>
+              <button onClick={reset} style={{ flex: 1, padding: '12px', borderRadius: 12, border: 'none', background: 'var(--accent-red)', color: '#fff', fontSize: 13, fontWeight: 900, cursor: 'pointer' }}>RESET NOW</button>
             </div>
           </div>
         </div>
       )}
 
+      {/* NEW: AI Voice Briefing */}
+      <div style={{ marginBottom: 24 }}>
+        <VoiceBriefing data={{ ...portfolio, ...analytics }} />
+      </div>
+
+      {/* Equity Chart */}
+      <PerformanceChart initialBalance={portfolio.initialBalance} currentValue={analytics?.totalValue ?? portfolio.usdc} />
+
       {/* Stats */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 14, marginBottom: 24 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 16, marginBottom: 32 }}>
         {[
-          { label: 'TOTAL VALUE',   value: `$${(analytics?.totalValue ?? portfolio.usdc).toLocaleString('en-US',{maximumFractionDigits:2})}`, color: '#fff' },
-          { label: 'TOTAL PNL',     value: `${pnlPos?'+':''}$${(analytics?.totalPnl ?? 0).toFixed(2)}`,  color: pnlPos ? '#00e676' : '#f43f5e' },
-          { label: 'USDC BALANCE',  value: `$${portfolio.usdc.toLocaleString('en-US',{maximumFractionDigits:2})}`, color: '#fff' },
-          { label: 'SOPOINTS',      value: String(portfolio.soPoints ?? 0), color: '#f97316' },
+          { label: 'TOTAL VALUE',   value: `$${(analytics?.totalValue ?? portfolio.usdc).toLocaleString('en-US',{maximumFractionDigits:2})}`, color: 'var(--text-primary)' },
+          { label: 'TOTAL PNL',     value: `${pnlPos?'+':''}$${(analytics?.totalPnl ?? 0).toFixed(2)}`,  color: pnlPos ? 'var(--accent-green)' : 'var(--accent-red)' },
+          { label: 'USDC BALANCE',  value: `$${portfolio.usdc.toLocaleString('en-US',{maximumFractionDigits:2})}`, color: 'var(--text-primary)' },
         ].map(c => (
-          <div key={c.label} style={{ background: '#111', border: '1px solid #1e1e1e', borderRadius: 12, padding: 18 }}>
-            <div style={{ fontSize: 10, color: '#444', fontWeight: 700, letterSpacing: '.1em', marginBottom: 8 }}>{c.label}</div>
-            <div style={{ fontSize: 20, fontWeight: 800, color: c.color, fontFamily: 'monospace' }}>{c.value}</div>
+          <div key={c.label} className="neon-border glass" style={{ borderRadius: 16, padding: 20 }}>
+            <div style={{ fontSize: 9, color: 'var(--text-dim)', fontWeight: 800, letterSpacing: '.12em', marginBottom: 8 }}>{c.label}</div>
+            <div style={{ fontSize: 22, fontWeight: 900, color: c.color, fontFamily: 'monospace' }}>{c.value}</div>
           </div>
         ))}
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: 20 }}>
-        {/* Holdings table */}
-        <div style={{ background: '#111', border: '1px solid #1e1e1e', borderRadius: 16, overflow: 'hidden' }}>
-          <div style={{ padding: '16px 20px', borderBottom: '1px solid #1a1a1a' }}>
-            <span style={{ fontSize: 14, fontWeight: 700, color: '#fff' }}>Holdings</span>
-          </div>
-          {loading ? (
-            <div style={{ padding: 24 }}>
-              {[1,2,3].map(i => <div key={i} className="shimmer" style={{ height: 44, marginBottom: 8 }} />)}
+        {/* Left column: Holdings + Achievements */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+          {/* Holdings table */}
+          <div className="neon-border glass" style={{ borderRadius: 20, overflow: 'hidden' }}>
+            <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--border-subtle)' }}>
+              <span style={{ fontSize: 14, fontWeight: 900, color: 'var(--text-primary)', textTransform: 'uppercase', letterSpacing: '.05em' }}>Holdings</span>
             </div>
-          ) : (analytics?.holdings ?? []).length === 0 ? (
-            <div style={{ padding: '40px 24px', textAlign: 'center', color: '#333', fontSize: 13 }}>
-              No holdings yet.{' '}
-              <a href="/ai-trade-agent" style={{ color: '#f97316' }}>Go trade →</a>
-            </div>
-          ) : (
-            <div style={{ overflowX: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                <thead>
-                  <tr style={{ borderBottom: '1px solid #1a1a1a' }}>
-                    {['Asset','Amount','Avg Price','Current','Value','PnL'].map(h => (
-                      <th key={h} style={{ padding: '10px 20px', textAlign: 'left', fontSize: 10, color: '#444', fontWeight: 700, letterSpacing: '.1em' }}>{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {analytics?.holdings.map(h => (
-                    <tr key={h.symbol} style={{ borderBottom: '1px solid #111' }}>
-                      <td style={{ padding: '14px 20px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                          <div style={{ width: 22, height: 22, borderRadius: '50%', background: '#f7931a', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 900, color: '#000' }}>{h.symbol[0]}</div>
-                          <span style={{ fontSize: 13, fontWeight: 600, color: '#fff' }}>{h.symbol}</span>
-                        </div>
-                      </td>
-                      <td style={{ padding: '14px 20px', fontSize: 12, color: '#888', fontFamily: 'monospace' }}>{h.amount.toFixed(6)}</td>
-                      <td style={{ padding: '14px 20px', fontSize: 12, color: '#666', fontFamily: 'monospace' }}>${h.avgBuyPrice.toFixed(2)}</td>
-                      <td style={{ padding: '14px 20px', fontSize: 12, color: '#fff', fontFamily: 'monospace' }}>${h.currentPrice.toFixed(2)}</td>
-                      <td style={{ padding: '14px 20px', fontSize: 12, color: '#fff', fontFamily: 'monospace' }}>${h.currentValue.toFixed(2)}</td>
-                      <td style={{ padding: '14px 20px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                          {h.pnl >= 0 ? <TrendingUp size={12} color="#00e676" /> : <TrendingDown size={12} color="#f43f5e" />}
-                          <span style={{ fontSize: 12, fontWeight: 700, color: h.pnl >= 0 ? '#00e676' : '#f43f5e', fontFamily: 'monospace' }}>
-                            {h.pnl >= 0 ? '+' : ''}${h.pnl.toFixed(2)} ({h.pnlPct.toFixed(2)}%)
-                          </span>
-                        </div>
-                      </td>
+            {loading ? (
+              <div style={{ padding: 24 }}>
+                {[1,2,3].map(i => <div key={i} className="shimmer" style={{ height: 44, marginBottom: 8 }} />)}
+              </div>
+            ) : (analytics?.holdings ?? []).length === 0 ? (
+              <div style={{ padding: '40px 24px', textAlign: 'center', color: '#333', fontSize: 13 }}>
+                No holdings yet.{' '}
+                <a href="/ai-trade-agent" style={{ color: '#f97316' }}>Go trade →</a>
+              </div>
+            ) : (
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                  <thead>
+                    <tr style={{ borderBottom: '1px solid var(--border-subtle)' }}>
+                      {['Asset','Amount','Avg Price','Current','Value','PnL'].map(h => (
+                        <th key={h} style={{ padding: '12px 24px', textAlign: 'left', fontSize: 9, color: 'var(--text-dim)', fontWeight: 800, letterSpacing: '.12em' }}>{h}</th>
+                      ))}
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
+                  </thead>
+                  <tbody>
+                    {analytics?.holdings.map(h => (
+                      <tr key={h.symbol} style={{ borderBottom: '1px solid var(--border-subtle)' }}>
+                        <td style={{ padding: '16px 24px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                            <div style={{ width: 24, height: 24, borderRadius: '50%', background: 'var(--accent-orange)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 900, color: '#fff' }}>{h.symbol[0]}</div>
+                            <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>{h.symbol}</span>
+                          </div>
+                        </td>
+                        <td style={{ padding: '16px 24px', fontSize: 12, color: 'var(--text-secondary)', fontFamily: 'monospace' }}>{h.amount.toFixed(6)}</td>
+                        <td style={{ padding: '16px 24px', fontSize: 12, color: 'var(--text-dim)', fontFamily: 'monospace' }}>${h.avgBuyPrice.toFixed(2)}</td>
+                        <td style={{ padding: '16px 24px', fontSize: 12, color: 'var(--text-primary)', fontFamily: 'monospace', fontWeight: 700 }}>${h.currentPrice.toFixed(2)}</td>
+                        <td style={{ padding: '16px 24px', fontSize: 12, color: 'var(--text-primary)', fontFamily: 'monospace', fontWeight: 700 }}>${h.currentValue.toFixed(2)}</td>
+                        <td style={{ padding: '16px 24px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                            {h.pnl >= 0 ? <TrendingUp size={14} color="var(--accent-green)" /> : <TrendingDown size={14} color="var(--accent-red)" />}
+                            <span style={{ fontSize: 12, fontWeight: 900, color: h.pnl >= 0 ? 'var(--accent-green)' : 'var(--accent-red)', fontFamily: 'monospace' }}>
+                              {h.pnl >= 0 ? '+' : ''}${h.pnl.toFixed(2)} ({h.pnlPct.toFixed(2)}%)
+                            </span>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
+          <Achievements soPoints={portfolio.soPoints} tradeCount={portfolio.trades.length} />
         </div>
 
-        {/* Trade history */}
-        <div style={{ background: '#111', border: '1px solid #1e1e1e', borderRadius: 16, overflow: 'hidden' }}>
-          <div style={{ padding: '16px 20px', borderBottom: '1px solid #1a1a1a' }}>
-            <span style={{ fontSize: 14, fontWeight: 700, color: '#fff' }}>Trade History</span>
+        {/* Trade history (Right Sidebar) */}
+        <div className="neon-border glass" style={{ borderRadius: 20, overflow: 'hidden' }}>
+          <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--border-subtle)' }}>
+            <span style={{ fontSize: 14, fontWeight: 900, color: 'var(--text-primary)', textTransform: 'uppercase', letterSpacing: '.05em' }}>Trade History</span>
           </div>
-          <div style={{ maxHeight: 400, overflowY: 'auto', padding: '8px 12px' }}>
+          <div style={{ maxHeight: 600, overflowY: 'auto', padding: '8px 16px' }}>
             {portfolio.trades.length === 0 ? (
-              <div style={{ padding: '40px 12px', textAlign: 'center', color: '#333', fontSize: 13 }}>No trades yet</div>
+              <div style={{ padding: '40px 12px', textAlign: 'center', color: 'var(--text-dim)', fontSize: 13 }}>No trades yet</div>
             ) : portfolio.trades.slice(0, 50).map(t => (
-              <div key={t.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 8px', borderBottom: '1px solid #1a1a1a' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <div style={{ width: 24, height: 24, borderRadius: 6, background: t.type === 'BUY' ? 'rgba(0,230,118,0.15)' : 'rgba(244,63,94,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    {t.type === 'BUY' ? <TrendingUp size={12} color="#00e676" /> : <TrendingDown size={12} color="#f43f5e" />}
+              <div key={t.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 0', borderBottom: '1px solid var(--border-subtle)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <div style={{ width: 28, height: 28, borderRadius: 8, background: t.type === 'BUY' ? 'rgba(0,230,118,0.1)' : 'rgba(244,63,94,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    {t.type === 'BUY' ? <TrendingUp size={14} color="var(--accent-green)" /> : <TrendingDown size={14} color="var(--accent-red)" />}
                   </div>
                   <div>
-                    <div style={{ fontSize: 12, fontWeight: 600, color: '#ccc' }}>{t.type} {t.symbol}</div>
-                    <div style={{ fontSize: 10, color: '#444' }}>{new Date(t.timestamp).toLocaleDateString()}</div>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)' }}>{t.type} {t.symbol}</div>
+                    <div style={{ fontSize: 10, color: 'var(--text-dim)', fontWeight: 600 }}>{new Date(t.timestamp).toLocaleDateString()}</div>
                   </div>
                 </div>
                 <div style={{ textAlign: 'right' }}>
-                  <div style={{ fontSize: 12, fontWeight: 600, color: '#fff', fontFamily: 'monospace' }}>${t.total.toFixed(2)}</div>
-                  <div style={{ fontSize: 10, color: '#555', fontFamily: 'monospace' }}>@${t.price.toFixed(2)}</div>
+                  <div style={{ fontSize: 12, fontWeight: 800, color: 'var(--text-primary)', fontFamily: 'monospace' }}>${t.total.toFixed(2)}</div>
+                  <div style={{ fontSize: 10, color: 'var(--text-dim)', fontFamily: 'monospace', fontWeight: 600 }}>@${t.price.toFixed(2)}</div>
                 </div>
               </div>
             ))}

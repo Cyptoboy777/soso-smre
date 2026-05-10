@@ -1,12 +1,44 @@
 'use client';
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import MarketSentiment from '@/components/MarketSentiment';
+import TopMovers from '@/components/TopMovers';
+import VoiceBriefing from '@/components/VoiceBriefing';
+import TradingViewChart from '@/components/TradingViewChart';
 
-interface Prices { btc: number; eth: number; sol: number; bnb: number; }
+interface Prices { btc: number; eth: number; sol: number; bnb: number; globalMarketCap: string; }
 
 export default function DashboardPage() {
   const [prices, setPrices] = useState<Prices | null>(null);
   const [error, setError] = useState('');
+  const [sending, setSending] = useState(false);
+
+  const sendAlpha = async () => {
+    const chatId = localStorage.getItem('tg_chat_id');
+    if (!chatId) {
+      alert('Please connect Telegram in Settings first!');
+      return;
+    }
+    setSending(true);
+    try {
+      const msg = `🔥 <b>TODAY'S INSTANT ALPHA</b>\n\n` +
+                  `1. <b>BTC/USDT</b>: $${prices?.btc.toLocaleString()} (Neutral-Bullish)\n` +
+                  `2. <b>ETH/USDT</b>: $${prices?.eth.toLocaleString()} (Strong Support)\n` +
+                  `3. <b>SOL/USDT</b>: $${prices?.sol.toLocaleString()} (High Volatility)\n\n` +
+                  `<i>AI Prediction: Market is consolidating. Look for breakout above $${((prices?.btc || 0) * 1.02).toFixed(0)}.</i>\n\n` +
+                  `<a href="http://localhost:3000/ai-analysis">Execute Full Analysis →</a>`;
+      
+      await fetch('/api/telegram-alert', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ chatId, message: msg })
+      });
+      alert('Alpha alerts sent to your Telegram!');
+    } catch (e) {
+      alert('Failed to send alerts.');
+    }
+    setSending(false);
+  };
 
   useEffect(() => {
     fetch('/api/prices')
@@ -21,51 +53,141 @@ export default function DashboardPage() {
   const fmt = (n: number, d = 2) => n.toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d });
 
   const cards = [
-    { label: 'BTC/USDT', value: prices ? `$${fmt(prices.btc, 0)}` : '--', sub: 'Live', pos: true },
-    { label: 'ETH/USDT', value: prices ? `$${fmt(prices.eth, 0)}` : '--', sub: 'Live', pos: true },
-    { label: 'SOL/USDT', value: prices ? `$${fmt(prices.sol, 2)}` : '--', sub: 'Live', pos: true },
-    { label: 'BNB/USDT', value: prices ? `$${fmt(prices.bnb, 0)}` : '--', sub: 'Live', pos: true },
+    { label: 'BTC/USDT', value: prices ? `$${fmt(prices.btc, 0)}` : '--', sub: 'Bitcoin', color: '#f7931a' },
+    { label: 'ETH/USDT', value: prices ? `$${fmt(prices.eth, 0)}` : '--', sub: 'Ethereum', color: '#627eea' },
+    { label: 'SOL/USDT', value: prices ? `$${fmt(prices.sol, 2)}` : '--', sub: 'Solana', color: '#14f195' },
   ];
 
   return (
-    <div style={{ padding: 24 }}>
-      <h1 style={{ fontSize: 22, fontWeight: 700, color: '#fff', marginBottom: 4 }}>Dashboard</h1>
-      <p style={{ fontSize: 13, color: '#444', marginBottom: 24 }}>Smart Money Research Engine — Live Overview</p>
+    <div className="fade-up" style={{ padding: '32px 24px', maxWidth: 1200, margin: '0 auto', minHeight: '100%' }}>
+      {/* Header Section */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 32 }}>
+        <div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+            <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--accent-orange)', boxShadow: '0 0 10px var(--accent-orange)' }} />
+            <h1 style={{ fontSize: 28, fontWeight: 900, color: 'var(--text-primary)', letterSpacing: '-0.04em', textTransform: 'uppercase' }}>Intelligence Terminal</h1>
+          </div>
+          <p style={{ fontSize: 13, color: 'var(--text-secondary)', fontWeight: 500 }}>
+            Global Market Cap: <span style={{ color: 'var(--accent-green)', fontWeight: 700 }}>{prices?.globalMarketCap ?? '--'}</span> 
+            <span style={{ margin: '0 10px', opacity: 0.2 }}>|</span>
+            Status: <span style={{ color: 'var(--text-primary)' }}>AI-AGENT ACTIVE</span>
+          </p>
+        </div>
+        <div style={{ display: 'flex', gap: 12 }}>
+           <button 
+             onClick={sendAlpha}
+             disabled={sending}
+             style={{ 
+               background: 'var(--accent-orange)', 
+               color: '#fff', 
+               border: 'none', 
+               padding: '8px 16px', 
+               borderRadius: 12, 
+               fontSize: 11, 
+               fontWeight: 900, 
+               cursor: sending ? 'not-allowed' : 'pointer',
+               display: 'flex',
+               alignItems: 'center',
+               gap: 8,
+               boxShadow: '0 4px 12px rgba(249,115,22,0.3)'
+             }}
+           >
+             {sending ? 'SENDING...' : '🚀 SEND TODAY\'S ALPHA'}
+           </button>
+           <div className="glass" style={{ fontSize: 10, color: 'var(--accent-green)', padding: '6px 12px', borderRadius: 20, fontWeight: 800, border: '1px solid rgba(0,230,118,0.2)', letterSpacing: '.1em', display: 'flex', alignItems: 'center' }}>LIVE SYNC</div>
+        </div>
+      </div>
 
-      {error && <div style={{ marginBottom: 18, color: '#f43f5e', fontSize: 13 }}>{error}</div>}
+      {error && <div style={{ marginBottom: 24, color: 'var(--accent-red)', fontSize: 13, background: 'rgba(244,63,94,0.05)', padding: '12px 16px', borderRadius: 12, border: '1px solid rgba(244,63,94,0.1)' }}>{error}</div>}
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 14, marginBottom: 28 }}>
+      {/* NEW: AI Voice Briefing */}
+      <div style={{ marginBottom: 32 }}>
+        <VoiceBriefing data={prices} />
+      </div>
+
+      {/* TOP ROW: Price Cards */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 20, marginBottom: 32 }}>
         {cards.map(c => (
-          <div key={c.label} style={{ background: '#111', border: '1px solid #1e1e1e', borderRadius: 12, padding: 18 }}>
-            <div style={{ fontSize: 10, color: '#444', fontWeight: 700, letterSpacing: '.1em', marginBottom: 8 }}>{c.label}</div>
-            <div style={{ fontSize: 20, fontWeight: 800, color: '#fff', fontFamily: 'monospace' }}>{c.value}</div>
-            <div style={{ fontSize: 11, color: '#555', marginTop: 6, fontWeight: 600 }}>
-              {c.pos ? '▲' : '▼'} {c.sub}
-            </div>
+          <div key={c.label} className="neon-border glass" style={{ borderRadius: 20, padding: '24px', position: 'relative', overflow: 'hidden' }}>
+            <div style={{ position: 'absolute', top: -20, right: -20, width: 80, height: 80, background: c.color, filter: 'blur(50px)', opacity: 0.1 }} />
+            <div style={{ fontSize: 10, color: 'var(--text-secondary)', fontWeight: 800, letterSpacing: '.15em', marginBottom: 16 }}>{c.label}</div>
+            <div style={{ fontSize: 28, fontWeight: 900, color: 'var(--text-primary)', fontFamily: 'monospace', marginBottom: 4, letterSpacing: '-0.02em' }}>{c.value}</div>
+            <div style={{ fontSize: 12, color: c.color, fontWeight: 700, letterSpacing: '.05em', opacity: 0.8 }}>{c.sub.toUpperCase()}</div>
           </div>
         ))}
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 12 }}>
-        {[
-          { href: '/breaking-news',  label: 'Breaking News',  color: '#3b82f6', icon: '📰', desc: 'Real-time market alpha' },
-          { href: '/ai-analysis',    label: 'AI Analysis',    color: '#f97316', icon: '🤖', desc: 'Gemini + Groq signals' },
-          { href: '/ai-trade-agent', label: 'Trade Agent',    color: '#00e676', icon: '💱', desc: 'Execute paper trades' },
-          { href: '/etf-dashboard',  label: 'ETF Dashboard',  color: '#a855f7', icon: '📊', desc: 'US Spot ETF flows' },
-          { href: '/portfolio',      label: 'Portfolio',      color: '#f59e0b', icon: '💼', desc: 'PnL & holdings tracker' },
-          { href: '/guidelines',     label: 'Guidelines',     color: '#6b7280', icon: '📋', desc: 'Platform rules' },
-        ].map(item => (
-          <Link key={item.href} href={item.href} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 18px', background: `${item.color}10`, border: `1px solid ${item.color}25`, borderRadius: 12, textDecoration: 'none', transition: 'border-color 0.15s' }}
-            onMouseEnter={e => (e.currentTarget as HTMLElement).style.borderColor = `${item.color}55`}
-            onMouseLeave={e => (e.currentTarget as HTMLElement).style.borderColor = `${item.color}25`}>
-            <span style={{ fontSize: 22 }}>{item.icon}</span>
-            <div>
-              <div style={{ fontSize: 13, fontWeight: 600, color: item.color }}>{item.label}</div>
-              <div style={{ fontSize: 11, color: '#444', marginTop: 2 }}>{item.desc}</div>
-            </div>
-          </Link>
-        ))}
+      {/* NEW: TradingView Charts */}
+      <div className="neon-border glass" style={{ borderRadius: 24, height: 480, marginBottom: 40, overflow: 'hidden' }}>
+        <div style={{ padding: '16px 24px', borderBottom: '1px solid var(--border-subtle)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+           <div style={{ fontSize: 11, fontWeight: 900, color: 'var(--text-primary)', letterSpacing: '.12em' }}>ADVANCED ANALYTICS ENGINE</div>
+           <div style={{ fontSize: 9, color: 'var(--accent-orange)', fontWeight: 800 }}>LIVE BINANCE FEED</div>
+        </div>
+        <TradingViewChart symbol="BINANCE:BTCUSDT" />
+      </div>
+
+      {/* MAIN CONTENT GRID */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr 1fr', gap: 20, marginBottom: 40 }}>
+        
+        {/* Market Sentiment */}
+        <div className="neon-border glass" style={{ borderRadius: 20, overflow: 'hidden' }}>
+          <MarketSentiment />
+        </div>
+
+        {/* Top Movers */}
+        <div className="neon-border glass" style={{ borderRadius: 20, overflow: 'hidden' }}>
+          <TopMovers />
+        </div>
+
+        {/* Quick Links / Status */}
+        <div className="neon-border glass" style={{ borderRadius: 20, padding: 24, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+           <div>
+             <div style={{ fontSize: 10, color: 'var(--text-secondary)', fontWeight: 800, letterSpacing: '.15em', marginBottom: 24 }}>SYSTEM INFRASTRUCTURE</div>
+             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                {[
+                  { label: 'Gemini 2.5 Flash', status: 'OPERATIONAL', color: 'var(--accent-blue)' },
+                  { label: 'SoSoValue News', status: 'REAL-TIME', color: 'var(--accent-green)' },
+                  { label: 'SoDEX Gateway', status: 'SECURE', color: 'var(--accent-orange)' },
+                ].map(s => (
+                  <div key={s.label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontSize: 12, color: 'var(--text-secondary)', fontWeight: 500 }}>{s.label}</span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <div style={{ width: 4, height: 4, borderRadius: '50%', background: s.color }} />
+                      <span style={{ fontSize: 9, fontWeight: 900, color: s.color, letterSpacing: '.05em' }}>{s.status}</span>
+                    </div>
+                  </div>
+                ))}
+             </div>
+           </div>
+           <Link href="/portfolio" style={{ background: 'var(--text-primary)', color: 'var(--bg-main)', padding: '12px', borderRadius: 12, textAlign: 'center', fontSize: 12, fontWeight: 900, textDecoration: 'none', marginTop: 32, transition: 'transform 0.2s', letterSpacing: '.05em' }}>
+             EXECUTE ANALYTICS
+           </Link>
+        </div>
+      </div>
+
+      {/* COMMAND CENTER SECTION */}
+      <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: 40 }}>
+        <div style={{ fontSize: 10, color: 'var(--text-secondary)', fontWeight: 800, letterSpacing: '.15em', marginBottom: 24 }}>NEURAL COMMAND CENTER</div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16 }}>
+          {[
+            { href: '/breaking-news',  label: 'BREAKING NEWS',  color: 'var(--accent-blue)', icon: '📰', desc: 'Real-time market alpha' },
+            { href: '/ai-analysis',    label: 'AI ANALYSIS',    color: 'var(--accent-orange)', icon: '🤖', desc: 'Gemini + Groq signals' },
+            { href: '/ai-trade-agent', label: 'TRADE AGENT',    color: 'var(--accent-green)', icon: '💱', desc: 'Execute paper trades' },
+            { href: '/etf-dashboard',  label: 'ETF FLOWS',      color: '#a855f7', icon: '📊', desc: 'US Spot ETF dynamics' },
+            { href: '/portfolio',      label: 'PORTFOLIO',      color: '#f59e0b', icon: '💼', desc: 'PnL & holdings tracker' },
+            { href: '/guidelines',     label: 'GUIDELINES',     color: 'var(--text-secondary)', icon: '📋', desc: 'Platform protocol' },
+          ].map(item => (
+            <Link key={item.href} href={item.href} className="neon-border glass" style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '20px', borderRadius: 20, textDecoration: 'none', transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)' }}>
+              <div style={{ fontSize: 24, width: 48, height: 48, background: 'rgba(255,255,255,0.03)', borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{item.icon}</div>
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 900, color: 'var(--text-primary)', letterSpacing: '.02em' }}>{item.label}</div>
+                <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 2, fontWeight: 500 }}>{item.desc}</div>
+              </div>
+            </Link>
+          ))}
+        </div>
       </div>
     </div>
   );
 }
+
