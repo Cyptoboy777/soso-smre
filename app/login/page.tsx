@@ -44,7 +44,7 @@ export default function LoginPage() {
         <div style={{ background: 'rgba(10,10,11,0.86)', border: '1px solid #262626', borderRadius: 28, padding: '20px 22px 24px', minHeight: 442, boxShadow: '0 24px 80px rgba(0,0,0,0.55)', backdropFilter: 'blur(18px)', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
           <div style={{ textAlign: 'center', marginBottom: 42 }}>
             <div style={{ width: 98, height: 98, background: 'rgba(255,255,255,0.06)', borderRadius: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 28px', border: '1px solid rgba(255,255,255,0.12)', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.08)' }}>
-              <Logo variant="opposite" style={{ width: 56, height: 56 }} />
+              <Logo style={{ width: 56, height: 56 }} />
             </div>
             <h1 style={{ color: '#fff', fontSize: 38, fontWeight: 800, fontFamily: 'Georgia,serif', fontStyle: 'italic', letterSpacing: '-0.07em', lineHeight: 1 }}>SoSo Smre</h1>
             <p style={{ color: '#9ca3af', fontSize: 16, marginTop: 22 }}>[Smart Money Research Engine] - Elite Multi-Agent Intelligence.</p>

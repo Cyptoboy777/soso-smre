@@ -54,7 +54,7 @@ export default function TopBar() {
     <header style={S}>
       {/* Logo */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 228, paddingRight: 18 }}>
-        <Logo style={{ width: 38, height: 38 }} variant="opposite" />
+        <Logo style={{ width: 38, height: 38 }} />
         <div>
           <div style={{ fontWeight: 700, fontSize: 15, color: '#fff', lineHeight: 1.2, letterSpacing: '.01em' }}>SoSo Smre</div>
           <div style={{ fontSize: 9, color: '#f97316', fontWeight: 700, letterSpacing: '.12em', marginTop: 2 }}>[SMART MONEY RESEARCH ENGINE]</div>

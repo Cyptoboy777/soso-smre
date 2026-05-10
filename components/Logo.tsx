@@ -1,8 +1,8 @@
 import type React from 'react';
 
 export function Logo({ className = '', style, variant = 'default' }: { className?: string; style?: React.CSSProperties; variant?: 'default' | 'opposite' }) {
-  const fill = variant === 'opposite' ? '#ffffff' : '#f97316';
-  const glyph = variant === 'opposite' ? '#070707' : '#ffffff';
+  const fill = variant === 'opposite' ? '#070707' : '#ffffff';
+  const glyph = variant === 'opposite' ? '#ffffff' : '#000000';
 
   return (
     <svg
@@ -14,10 +14,17 @@ export function Logo({ className = '', style, variant = 'default' }: { className
         ...style,
       }}
     >
+      {/* Hexagon Background */}
       <path d="M32 4 56 18v28L32 60 8 46V18L32 4Z" fill={fill} />
-      <path d="M22 19h21v8H30v5h12v8H22V19Z" fill={glyph} />
-      <path d="M22 37h21v8H22v-8Z" fill={glyph} />
-      <path d="M39 31h8v8h-8v-8Z" fill="#16d9ff" />
+      
+      {/* Blocky 'S' Glyph */}
+      <path 
+        d="M20 18h24v6H20v-6zm0 6h6v6h-6v-6zm0 6h24v6H20v-6zm18 6h6v6h-6v-6zm-18 6h24v6H20v-6z" 
+        fill={glyph} 
+      />
+
+      {/* Cyan Accent Box */}
+      <rect x="38" y="32" width="10" height="10" fill="#00e5ff" rx="1" />
     </svg>
   );
 }
