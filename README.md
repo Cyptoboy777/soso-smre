@@ -1,6 +1,6 @@
 # SoSo SMRE (Smart Money Research Engine) 🚀
 
-SoSo SMRE is a premium, AI-driven crypto intelligence and paper trading platform. It combines real-time market data from **SoSoValue**, **Binance**, and **CoinGecko** with advanced LLM analysis (Gemini & Groq) to provide institutional-grade insights and autonomous trading simulations.
+SoSo SMRE is a premium, AI-driven crypto intelligence and paper trading platform. It combines real-time market data from **SoSoValue** and **CoinGecko** with advanced LLM analysis (Gemini & Groq) to provide institutional-grade insights and autonomous trading simulations.
 
 ## 🌟 Key Features
 
@@ -23,7 +23,7 @@ SoSo SMRE is a premium, AI-driven crypto intelligence and paper trading platform
 *   **Sentiment Tracking:** AI-powered sentiment scoring (Bullish/Bearish) for each asset.
 
 ### 4. 📊 Live Portfolio Simulation
-*   **Real-Time PnL:** Continuous polling (every 15s) for live price shifts from Binance and CoinGecko.
+*   **Real-Time PnL:** Continuous polling (every 15s) for live price shifts from CoinGecko.
 *   **USDC Paper Trading:** Starting balance of **$10,000 USDC** for every new user.
 *   **Firestore Persistence:** All trades, holdings, and SoPoints are securely saved to Firebase and retained across logins.
 *   **SOSO Token Sync:** Dedicated pricing layer for the SOSO token, pulling live data from CoinGecko.
@@ -40,7 +40,7 @@ SoSo SMRE is a premium, AI-driven crypto intelligence and paper trading platform
 *   **Backend:** Next.js API Routes (Serverless).
 *   **Database/Auth:** Firebase (Firestore & Authentication).
 *   **AI Engines:** Google Generative AI (Gemini), Groq SDK.
-*   **Data Sources:** SoSoValue API, Binance API, CoinGecko API.
+*   **Data Sources:** SoSoValue API, CoinGecko API.
 
 ---
 
