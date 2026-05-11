@@ -1,52 +1,39 @@
 # SoSo SMRE (Smart Money Research Engine) 🚀
 
-SoSo SMRE is a premium, AI-driven crypto intelligence and paper trading platform. It combines real-time market data from **SoSoValue** and **CoinGecko** with advanced LLM analysis (Gemini & Groq) to provide institutional-grade insights and autonomous trading simulations.
+**SoSoValue Buildathon Submission - The Ultimate One-Person Agentic Finance Business**
 
-## 🌟 Key Features
-
-### 1. 🤖 Global Background AI-Trader (Autonomous Agent)
-*   **True Background Execution:** The "Genius" AI engine runs persistently across all pages. You can start the trader, navigate to other pages, and it will continue analyzing and executing trades silently in the background.
-*   **Autonomous Execution:** An AI agent that analyzes risk, selects strategies (Momentum, Mean Reversion, Macro-Trend), and executes paper trades automatically.
-*   **Risk Profiles:** Customizable risk tolerance (Low, Medium, High) that dictates trade allocation (25% to 100% of balance).
-*   **Live Terminal:** Real-time animated console showing the AI's "thought process" and execution logs.
-
-### 2. 🐕 Cybonk Dog Assistant & Voice Podcast
-*   **3D Cyberpunk Dog:** An interactive, animated Shiba Inu hacker assistant ("SoDoggy") featuring CSS 3D floating, speaking animations, and holographic glitch effects.
-*   **Real Dog Audio & Emotions:** SoDoggy barks and pants dynamically with real audio while displaying floating emotional emojis (🔥, 🚀, ⚡) based on market context.
-*   **Persistent Market Podcast:** A daily AI-generated "Quick Market Podcast" that plays continuously in the background. It summarizes live news, BTC/ETH prices, and market sentiment. The audio seamlessly persists across all route changes.
-
-### 3. 📊 Perfect Sync Portfolio & Futures Trading
-*   **Zero-Latency Sync:** A hybrid Dual-Sync architecture (localStorage + Firestore) ensures that any trade executed by the AI instantly updates your Portfolio PnL and Holdings without a single page refresh.
-*   **Spot & Futures Paper Trading:** A dedicated manual trading terminal supporting both SPOT and FUTURES execution with custom leverage multipliers up to 100x.
-*   **Real-Time PnL:** Continuous polling for live price shifts.
-*   **Offline-First Resilience:** Ensures that trading features are always instantly available, syncing to the cloud securely in the background.
-
-### 4. 🧠 Smart AI Analysis & News Engine
-*   **Dual-Model Validation:** Uses both **Google Gemini 2.5 Flash** and **Groq (Llama 3)** to cross-validate trading signals.
-*   **Precision Targets:** Generates exact numerical Buy Zones, Sell Zones, and Stop-Loss targets based on the selected timeframe (15M to 1W).
-*   **SoSoValue Integration:** Real-time hot news feed with smart filtering, separating breaking news from long-term institutional shifts.
+SoSo SMRE is a premium, AI-driven crypto intelligence and automated execution platform. Built explicitly for the SoSoValue Buildathon, it leverages the **SoSoValue API, SoDEX infrastructure, and dual-LLM (Gemini & Groq) analysis** to transform a single user into a complete financial news agency, opportunity discovery engine, and quantitative fund manager.
 
 ---
 
-## 🛠 Technology Stack
+## 1. Project Overview
 
-*   **Frontend:** Next.js 15 (App Router), TypeScript, Tailwind CSS.
-*   **State Management:** Context API (GlobalStateProvider) + Dual-Sync localStorage.
-*   **Backend:** Next.js API Routes (Serverless).
-*   **Database/Auth:** Firebase (Firestore & Authentication).
-*   **AI Engines:** Google Generative AI (Gemini), Groq SDK.
-*   **Data Sources:** SoSoValue API, CoinGecko API.
+*   **Project Name:** SoSo SMRE (Smart Money Research Engine)
+*   **Short Description:** An all-in-one "Signal-to-Execution Agent" and "Opportunity Discovery Engine" that integrates live SoSoValue market intelligence with an autonomous, background-running AI Trader. It features Freqtrade-inspired advanced execution, multi-exchange routing (via SoDEX API), and a deeply immersive cyberpunk UI.
+*   **Target Users:** Retail traders, quantitative researchers, and solo-founders looking to build agentic finance applications on-chain without needing a large team.
+*   **Core Logic:**
+    *   **Data Aggregation:** Pulls real-time financial news, institutional shifts, and spot market tickers.
+    *   **AI Signal Generation:** Routes market data through dual LLMs (Gemini 2.5 Flash + Groq Llama 3) to validate Momentum & Sentiment signals.
+    *   **Execution & Risk Control:** A Freqtrade-inspired autonomous execution module handles Multi-Exchange routing (SoDEX default), Max Open Trades limits, and Dynamic Trailing Stop-Losses.
+    *   **State Persistence:** Hybrid Dual-Sync architecture (localStorage + Firestore) ensures zero-latency PnL tracking while maintaining cloud permanence.
+*   **APIs and Data Sources:**
+    *   **SoSoValue API:** Core structured financial news, market intelligence, and ETF flow data.
+    *   **SoDEX API (`api.sodex.xyz`):** High-performance spot market data, orderbook routing, and ticker integrations.
+    *   **CoinGecko API:** Supplemental real-time pricing for the top 50 global crypto assets.
+    *   **Google Gemini & Groq APIs:** Powering the AI "Genius" trading engine and the SoDoggy voice assistant.
 
 ---
 
-## 🚀 Getting Started
+## 2. Public GitHub Repository & Setup
+
+**Repository Link:** [https://github.com/Cyptoboy777/soso-smre](https://github.com/Cyptoboy777/soso-smre)
 
 ### Prerequisites
 *   Node.js 18+
 *   Firebase Project
 *   API Keys: SoSoValue, Gemini, Groq.
 
-### Installation
+### Installation & Setup Instructions
 
 1.  **Clone the repository:**
     ```bash
@@ -62,16 +49,14 @@ SoSo SMRE is a premium, AI-driven crypto intelligence and paper trading platform
 3.  **Configure Environment Variables:**
     Create a `.env.local` file in the root and populate it with your keys:
     ```env
-    # Gemini AI (Deep Reasoning)
+    # AI Engines
     GEMINI_API_KEY=your_gemini_api_key_here
-
-    # Groq AI (Fast Llama 3 Inference)
     GROQ_API_KEY=your_groq_api_key_here
 
-    # SoSoValue API (News & Market Intel)
+    # Core Infrastructure
     SOSOVALUE_API_KEY=your_sosovalue_api_key_here
 
-    # Firebase Configuration (Persistence & Auth)
+    # Firebase Configuration (Persistence)
     NEXT_PUBLIC_FIREBASE_API_KEY=your_firebase_api_key
     NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=your_project_id.firebaseapp.com
     NEXT_PUBLIC_FIREBASE_PROJECT_ID=your_project_id
@@ -87,17 +72,62 @@ SoSo SMRE is a premium, AI-driven crypto intelligence and paper trading platform
 
 ---
 
-## 💡 How to Use
+## 3. Demo
 
-1.  **Login:** Securely sign in using the premium login interface.
-2.  **Talk to SoDoggy:** Open the bottom right Cyberpunk Dog widget to get instant voice-enabled market analysis.
-3.  **Listen to Alpha:** Start the "Quick Market Podcast" to listen to background market briefings while you browse.
-4.  **Trade:** 
-    *   Turn on the **SOSO AI-Trader** for background, autonomous hands-free execution.
-    *   Manually execute SPOT or FUTURES trades in the Terminal.
-5.  **Monitor:** Track your perfectly synced live PnL and total value in the **Portfolio** tab.
+*   **Public Live Demo Link:** [Insert Vercel/Netlify Deployment Link Here]
+
+*(Our interactive demo allows users to start the SoDoggy assistant, view live SoDEX markets, and activate the background AI Trader to watch real-time simulated PnL.)*
 
 ---
 
-## ⚠️ Disclaimer
-SoSo SMRE is a **paper trading simulation platform**. All trades are simulated and do not involve real capital. Trading signals provided by AI are for educational and research purposes only. **Always Do Your Own Research (DYOR).**
+## 4. Video Introduction
+
+*   **YouTube/Loom Video Link:** [Insert Video Demo Link Here]
+
+*(The video demonstrates the core workflow: Discovery via SoSoValue news -> AI Signal Validation -> SoDEX Market selection -> Autonomous Execution -> Live PnL tracking.)*
+
+---
+
+## 5. Team Information
+
+*   **Team Name:** Cyber Syndicate
+*   **Team Members:** 
+    *   Prashanthi (Lead Architect / Solo Founder)
+*   **Contact Info:** [Insert Email / Discord Handle Here]
+
+---
+
+## 6. Wave Progress Update (Changelog)
+
+### Wave 1 – Concept & Early Prototype
+*   **Use Case Defined:** Designed the architecture for a single-person quantitative trading firm.
+*   **Workflow Design:** Mapped out the "Insight to Action" pipeline (News -> Signal -> Trade -> Portfolio).
+*   **Core UI:** Built the cyberpunk-themed Next.js dashboard featuring a persistent Global State Provider for zero-latency interactions.
+
+### Wave 2 – Build Phase I (Current Focus)
+*   **SoSoValue API Integration:** Successfully connected and mapped structured news and market data into the platform.
+*   **SoDEX API Integration:** Built a dedicated `SoDEX Markets` dashboard pulling real-time, high-performance spot market tickers directly from `api.sodex.xyz`.
+*   **AI Agent Upgrade:** Upgraded the AI Trader with Freqtrade-inspired advanced settings:
+    *   Target Exchange routing (SoDEX / Binance / Bybit).
+    *   Dynamic Target Syncing (Take-Profit auto-adjusts to +3% and Stop-Loss to -2% when switching tokens).
+    *   Max Open Trades & Dynamic Trailing Stop-Loss features.
+*   **Data Integrity Fixes:** Solved hydration and race-condition bugs with Firestore, ensuring seamless offline/online Portfolio tracking.
+
+### Wave 3 – Build Phase II (Upcoming Goals)
+*   **Social Alpha (Telegram & X Integration):** Real-time alert system pushing AI trade executions, signals, and SoSoValue breaking news directly to a customized Telegram Bot and X (Twitter) feed.
+*   **Custom AI Personas:** Allow users to build and train their own AI agents with unique trading styles and risk appetites.
+*   **Mainnet SoDEX Execution:** Transition from paper trading to live on-chain execution via SoDEX Mainnet API.
+---
+
+## 🏆 How We Address the Judging Criteria
+
+*   **User Value (30%):** Empowers a single user to run a full-scale AI trading desk. The platform automatically digests news, discovers opportunities, and executes risk-managed trades.
+*   **Functionality (25%):** Fully functional paper-trading simulator, background AI execution loop, and real-time PnL syncing.
+*   **Logic & Workflow (20%):** A strict "Research-to-Execution" pipeline. Users read SoSoValue news -> Verify with AI -> Execute via Terminal.
+*   **Data Integration (15%):** Deep integrations with SoSoValue News, SoDEX Tickers, and CoinGecko top 50 asset APIs.
+*   **UX (10%):** World-class, immersive "hacker-style" UI with glassmorphism, glowing micro-animations, and persistent background features (like the AI Audio Podcast).
+
+---
+
+### ⚠️ Disclaimer
+SoSo SMRE is currently a **trading simulation and research platform**. All executed trades are simulated for the Buildathon context. Trading signals provided by the AI are for educational purposes. **Always Do Your Own Research (DYOR).**

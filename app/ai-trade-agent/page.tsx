@@ -12,7 +12,16 @@ interface HoldingAnalytic extends Holding { currentPrice: number; currentValue: 
 interface Analytics { totalValue: number; holdingsValue: number; totalPnl: number; totalPnlPct: number; holdings: HoldingAnalytic[]; }
 
 const DEFAULT_PORTFOLIO: Portfolio = { usdc: 10000, holdings: {}, trades: [], initialBalance: 10000, soPoints: 0 };
-const ASSETS = ['BTC / USDC','ETH / USDC','SOL / USDC','BNB / USDC','XRP / USDC','AVAX / USDC','SOSO / USDC'];
+const ASSETS = [
+  'BTC / USDC', 'ETH / USDC', 'SOL / USDC', 'BNB / USDC', 'XRP / USDC', 'DOGE / USDC', 'ADA / USDC', 
+  'AVAX / USDC', 'SHIB / USDC', 'DOT / USDC', 'LINK / USDC', 'TRX / USDC', 'MATIC / USDC', 'NEAR / USDC', 
+  'BCH / USDC', 'LTC / USDC', 'ICP / USDC', 'UNI / USDC', 'PEPE / USDC', 'APT / USDC', 'ATOM / USDC', 
+  'XLM / USDC', 'XMR / USDC', 'ETC / USDC', 'ARB / USDC', 'FIL / USDC', 'RNDR / USDC', 'INJ / USDC', 
+  'MKR / USDC', 'SUI / USDC', 'OP / USDC', 'VET / USDC', 'GRT / USDC', 'FTM / USDC', 'THETA / USDC', 
+  'ALGO / USDC', 'SEI / USDC', 'TIA / USDC', 'FLOKI / USDC', 'GALA / USDC', 'EOS / USDC', 'AXS / USDC', 
+  'SAND / USDC', 'MANA / USDC', 'AAVE / USDC', 'QNT / USDC', 'NEO / USDC', 'CHZ / USDC', 'XTZ / USDC', 
+  'SOSO / USDC'
+];
 
 function Toast({ msg, onClose }: { msg: string; onClose: () => void }) {
   useEffect(() => { const id = setTimeout(onClose, 4500); return () => clearTimeout(id); }, [onClose]);
@@ -41,12 +50,17 @@ export default function AITradeAgentPage() {
   const [tradeMode, setTradeMode] = useState<'SPOT' | 'FUTURES'>('SPOT');
   const [leverage, setLeverage] = useState(10);
   const [side, setSide] = useState<'LONG' | 'SHORT'>('LONG');
-
-  // AI Agent State
+  const [spotSide, setSpotSide] = useState<'BUY' | 'SELL'>('BUY');
   const [aiActive, setAiActive] = useState(false);
   const [aiLogs, setAiLogs] = useState<string[]>(['SOSO AI-Trader initialized. Engine ready.']);
   const [strategy, setStrategy] = useState('Momentum + Sentiment');
   const [risk, setRisk] = useState('Medium');
+  
+  // Freqtrade Advanced State
+  const [advancedMode, setAdvancedMode] = useState(false);
+  const [exchange, setExchange] = useState('SoDEX');
+  const [maxTrades, setMaxTrades] = useState('3');
+  const [trailingStop, setTrailingStop] = useState(true);
 
   const baseCoin = asset.split(' / ')[0];
 
@@ -171,8 +185,17 @@ export default function AITradeAgentPage() {
         const d = await r.json() as { prices: Array<{ symbol: string; price: string }> };
         const found = d.prices?.find(p => p.symbol === baseCoin + 'USDT');
         if (found) {
-          setLimitPrice(parseFloat(found.price).toString());
-          setLivePrice(parseFloat(found.price));
+          const p = parseFloat(found.price);
+          setLimitPrice(p.toString());
+          setLivePrice(p);
+          
+          // Auto-calculate +3% Take Profit and -2% Stop Loss based on selected token
+          const tp = p * 1.03;
+          const sl = p * 0.98;
+          const decimals = p < 1 ? 4 : (p < 100 ? 2 : 1);
+          
+          setTakeProfit(tp.toFixed(decimals));
+          setStopLoss(sl.toFixed(decimals));
         }
       } catch {}
     };
@@ -196,8 +219,15 @@ export default function AITradeAgentPage() {
   }, []);
 
   const setPct = (pct: number) => {
-    const maxUsdc = portfolio.usdc * pct / 100;
-    setAmount(maxUsdc.toFixed(0));
+    if (tradeMode === 'SPOT' && spotSide === 'SELL') {
+      const holdingAmt = portfolio.holdings[baseCoin]?.amount || 0;
+      const currentPrice = parseFloat(limitPrice) || livePrice || 1;
+      const val = holdingAmt * currentPrice;
+      setAmount((val * pct / 100).toFixed(2));
+    } else {
+      const maxUsdc = portfolio.usdc * pct / 100;
+      setAmount(maxUsdc.toFixed(2));
+    }
   };
 
   const confirmBuy = useCallback(async (overrideAmount?: string | React.MouseEvent) => {
@@ -207,24 +237,38 @@ export default function AITradeAgentPage() {
     
     if (!tradeAmount || tradeAmount <= 0) { setToast('Enter a valid amount'); return; }
     
-    // In Futures, margin is tradeAmount / leverage
+    // Logic for amount tokens and validation
+    const currentHolding = portfolio.holdings[baseCoin]?.amount || 0;
+    const isSell = tradeMode === 'SPOT' && spotSide === 'SELL';
+    let amountTokens = (tradeAmount * (tradeMode === 'FUTURES' ? leverage : 1)) / price;
     const marginRequired = tradeMode === 'FUTURES' ? tradeAmount / leverage : tradeAmount;
-    if (marginRequired > portfolio.usdc) { setToast(`Insufficient USDC. Required Margin: $${marginRequired.toFixed(2)}`); return; }
+
+    // Prevent floating point rounding errors from breaking "MAX" sell
+    if (isSell && Math.abs(amountTokens - currentHolding) < (currentHolding * 0.01)) {
+        amountTokens = currentHolding; 
+    }
+
+    if (isSell) {
+      if (amountTokens > currentHolding) { setToast(`Insufficient ${baseCoin}. Available: ${currentHolding.toFixed(4)}`); return; }
+    } else {
+      if (marginRequired > portfolio.usdc) { setToast(`Insufficient USDC. Required Margin: $${marginRequired.toFixed(2)}`); return; }
+    }
 
     setTradeStatus('SUBMITTING');
-    console.log("[TRADE] Initiating...", { baseCoin, tradeAmount, tradeMode, side, leverage });
+    console.log("[TRADE] Initiating...", { baseCoin, tradeAmount, tradeMode, side, spotSide, leverage });
 
     try {
-      const type = tradeMode === 'SPOT' ? 'BUY' : side;
+      const type = tradeMode === 'SPOT' ? spotSide : side;
       const r = await fetch('/api/trade', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           symbol: baseCoin, 
           type, 
-          amount: (tradeAmount * (tradeMode === 'FUTURES' ? leverage : 1)) / price, 
+          amount: amountTokens, 
           price, 
           availableUsdc: portfolio.usdc,
+          currentHolding,
           tradeMode,
           leverage: tradeMode === 'FUTURES' ? leverage : 1
         }),
@@ -245,7 +289,7 @@ export default function AITradeAgentPage() {
         setPortfolio(prev => {
           const next = { 
             ...prev, 
-            usdc: Math.max(0, prev.usdc - marginRequired),
+            usdc: isSell ? prev.usdc + d.trade!.total : Math.max(0, prev.usdc - marginRequired),
             holdings: { ...prev.holdings },
             trades: [d.trade!, ...(prev.trades ?? [])],
             soPoints: (prev.soPoints ?? 0) + (d.soPointsEarned ?? 0)
@@ -253,9 +297,15 @@ export default function AITradeAgentPage() {
 
           if (tradeMode === 'SPOT') {
             const h = next.holdings[baseCoin] ? { ...next.holdings[baseCoin] } : { symbol: baseCoin, amount: 0, avgBuyPrice: price };
-            const newTotal = h.amount + d.trade!.amount;
-            h.avgBuyPrice = (h.amount * h.avgBuyPrice + d.trade!.total) / newTotal;
-            h.amount = newTotal;
+            
+            if (isSell) {
+              h.amount = h.amount - d.trade!.amount;
+              if (h.amount <= 0.000001) { h.amount = 0; h.avgBuyPrice = 0; }
+            } else {
+              const newTotal = h.amount + d.trade!.amount;
+              h.avgBuyPrice = (h.amount * h.avgBuyPrice + d.trade!.total) / newTotal;
+              h.amount = newTotal;
+            }
             next.holdings[baseCoin] = h;
           }
 
@@ -272,7 +322,7 @@ export default function AITradeAgentPage() {
           return next;
         });
 
-        const tradeMsg = tradeMode === 'SPOT' ? `BUY ${baseCoin}` : `${side} ${baseCoin} ${leverage}x`;
+        const tradeMsg = tradeMode === 'SPOT' ? `${spotSide} ${baseCoin}` : `${side} ${baseCoin} ${leverage}x`;
         setToast(`Order filled: ${tradeMsg} for $${tradeAmount.toLocaleString()}`);
         setAmount('0.00');
         setTimeout(() => setTradeStatus('IDLE'), 2000);
@@ -282,7 +332,7 @@ export default function AITradeAgentPage() {
       setToast('Network Error: Unable to reach trade engine.'); 
       setTradeStatus('IDLE'); 
     }
-  }, [amount, limitPrice, livePrice, portfolio.usdc, baseCoin, user, fetchAnalytics, tradeMode, leverage, side]);
+  }, [amount, limitPrice, livePrice, portfolio, baseCoin, user, fetchAnalytics, tradeMode, leverage, side, spotSide]);
 
   const displayHoldings = analytics?.holdings ?? Object.values(portfolio.holdings ?? {}).map(h => ({ ...h, currentPrice: h.avgBuyPrice, currentValue: h.amount * h.avgBuyPrice, pnl: 0, pnlPct: 0 }));
   const totalValue = analytics?.totalValue ?? (portfolio.usdc + displayHoldings.reduce((s, h) => s + h.amount * h.avgBuyPrice, 0));
@@ -322,7 +372,12 @@ export default function AITradeAgentPage() {
             <div>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
                 <label style={{ fontSize: 10, color: '#444', fontWeight: 700, letterSpacing: '.1em' }}>TRADE AMOUNT (USDC)</label>
-                <span style={{ fontSize: 11, color: '#f97316', fontWeight: 600 }}>Balance: ${portfolio.usdc.toLocaleString('en-US', { maximumFractionDigits: 0 })}</span>
+                <span style={{ fontSize: 11, color: '#f97316', fontWeight: 600 }}>
+                  Balance: ${(tradeMode === 'SPOT' && spotSide === 'SELL' 
+                    ? ((portfolio.holdings[baseCoin]?.amount || 0) * (parseFloat(limitPrice) || livePrice || 1)) 
+                    : portfolio.usdc).toLocaleString('en-US', { maximumFractionDigits: 2 })}
+                  {tradeMode === 'SPOT' && spotSide === 'SELL' && ` (${(portfolio.holdings[baseCoin]?.amount || 0).toFixed(4)} ${baseCoin})`}
+                </span>
               </div>
               <div style={{ display: 'flex', gap: 8 }}>
                 <input value={amount} onChange={e => setAmount(e.target.value)} style={{ flex: 1, padding: '10px 12px', borderRadius: 8, background: '#111', border: '1px solid #2a2a2a', color: '#fff', fontSize: 14, outline: 'none' }} />
@@ -351,6 +406,14 @@ export default function AITradeAgentPage() {
             ))}
           </div>
 
+          {/* SPOT SPECIFIC: BUY / SELL */}
+          {tradeMode === 'SPOT' && (
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 20 }}>
+               <button onClick={() => setSpotSide('BUY')} style={{ padding: '10px', borderRadius: 10, border: '1px solid', borderColor: spotSide === 'BUY' ? 'var(--accent-green)' : 'var(--border-subtle)', background: spotSide === 'BUY' ? 'rgba(0,230,118,0.1)' : 'transparent', color: spotSide === 'BUY' ? 'var(--accent-green)' : 'var(--text-dim)', fontSize: 11, fontWeight: 900, cursor: 'pointer', transition: '0.2s' }}>BUY {baseCoin}</button>
+               <button onClick={() => setSpotSide('SELL')} style={{ padding: '10px', borderRadius: 10, border: '1px solid', borderColor: spotSide === 'SELL' ? 'var(--accent-red)' : 'var(--border-subtle)', background: spotSide === 'SELL' ? 'rgba(244,63,94,0.1)' : 'transparent', color: spotSide === 'SELL' ? 'var(--accent-red)' : 'var(--text-dim)', fontSize: 11, fontWeight: 900, cursor: 'pointer', transition: '0.2s' }}>SELL {baseCoin}</button>
+            </div>
+          )}
+
           {/* FUTURES SPECIFIC: Leverage & Side */}
           {tradeMode === 'FUTURES' && (
             <div style={{ background: 'var(--bg-main)', border: '1px solid var(--border-subtle)', borderRadius: 14, padding: 16, marginBottom: 20 }}>
@@ -375,7 +438,7 @@ export default function AITradeAgentPage() {
             <p style={{ fontSize: 12, color: '#666', lineHeight: 1.55 }}>Orders are executed as Market Orders on the SoSo Smre Testnet. Stop-Loss and Take-Profit orders will be triggered automatically when the terminal price crosses the target.</p>
           </div>
 
-          {/* Confirm Buy */}
+          {/* Confirm Trade */}
           <button 
             onClick={confirmBuy} 
             disabled={tradeStatus !== 'IDLE'} 
@@ -383,7 +446,7 @@ export default function AITradeAgentPage() {
               width: '100%', 
               padding: 16, 
               borderRadius: 12, 
-              background: tradeStatus === 'SUBMITTING' ? 'var(--bg-main)' : tradeStatus === 'SUCCESS' ? 'var(--accent-green)' : (tradeMode === 'FUTURES' ? (side === 'LONG' ? 'var(--accent-green)' : 'var(--accent-red)') : 'var(--accent-orange)'), 
+              background: tradeStatus === 'SUBMITTING' ? 'var(--bg-main)' : tradeStatus === 'SUCCESS' ? 'var(--accent-green)' : (tradeMode === 'FUTURES' ? (side === 'LONG' ? 'var(--accent-green)' : 'var(--accent-red)') : (spotSide === 'BUY' ? 'var(--accent-green)' : 'var(--accent-red)')), 
               color: tradeStatus === 'SUBMITTING' ? 'var(--text-primary)' : '#000', 
               border: tradeStatus === 'SUBMITTING' ? '1px solid var(--border-bold)' : 'none', 
               fontSize: 15, 
@@ -391,7 +454,7 @@ export default function AITradeAgentPage() {
               letterSpacing: '.06em', 
               cursor: tradeStatus !== 'IDLE' ? 'not-allowed' : 'pointer', 
               opacity: portfolioLoaded ? 1 : 0.6, 
-              boxShadow: tradeStatus !== 'IDLE' ? 'none' : `0 0 28px ${tradeMode === 'FUTURES' ? (side === 'LONG' ? 'rgba(0,230,118,0.3)' : 'rgba(244,63,94,0.3)') : 'rgba(249,115,22,0.3)'}`,
+              boxShadow: tradeStatus !== 'IDLE' ? 'none' : `0 0 28px ${tradeMode === 'FUTURES' ? (side === 'LONG' ? 'rgba(0,230,118,0.3)' : 'rgba(244,63,94,0.3)') : (spotSide === 'BUY' ? 'rgba(0,230,118,0.3)' : 'rgba(244,63,94,0.3)')}`,
               display: 'flex', 
               alignItems: 'center', 
               justifyContent: 'center', 
@@ -401,7 +464,7 @@ export default function AITradeAgentPage() {
           >
             {tradeStatus === 'SUBMITTING' ? <span className="spin" style={{ display: 'inline-block', fontSize: 18 }}>⟳</span> : null}
             {tradeStatus === 'SUCCESS' ? <CheckCircle size={18} color="#000" /> : null}
-            {tradeStatus === 'SUCCESS' ? 'ORDER FILLED' : (tradeMode === 'SPOT' ? `CONFIRM BUY ${baseCoin}` : `OPEN ${side} ${baseCoin} ${leverage}x`)}
+            {tradeStatus === 'SUCCESS' ? 'ORDER FILLED' : (tradeMode === 'SPOT' ? `CONFIRM ${spotSide} ${baseCoin}` : `OPEN ${side} ${baseCoin} ${leverage}x`)}
           </button>
           </div>
 
@@ -435,6 +498,39 @@ export default function AITradeAgentPage() {
               </div>
             </div>
 
+            {/* Advanced Freqtrade Mode */}
+            <div style={{ marginBottom: 20 }}>
+               <button onClick={() => setAdvancedMode(!advancedMode)} style={{ width: '100%', background: 'transparent', border: '1px dashed #1e293b', borderRadius: 8, padding: '8px', color: '#64748b', fontSize: 11, fontWeight: 700, cursor: 'pointer', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 6 }}>
+                 {advancedMode ? 'HIDE ADVANCED SETTINGS (FREQTRADE)' : 'SHOW ADVANCED SETTINGS (FREQTRADE)'}
+               </button>
+
+               {advancedMode && (
+                 <div style={{ marginTop: 12, padding: 14, background: '#0f172a', borderRadius: 10, border: '1px solid #1e293b', display: 'flex', flexDirection: 'column', gap: 12 }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                       <div>
+                          <label style={{ fontSize: 9, color: '#94a3b8', fontWeight: 700, display: 'block', marginBottom: 6 }}>TARGET EXCHANGE</label>
+                          <select value={exchange} onChange={e => setExchange(e.target.value)} disabled={aiActive} style={{ width: '100%', padding: '8px', borderRadius: 6, background: '#020617', border: '1px solid #1e293b', color: '#38bdf8', fontSize: 12, outline: 'none' }}>
+                            <option>SoDEX</option>
+                            <option>Binance</option>
+                            <option>Bybit</option>
+                            <option>OKX</option>
+                          </select>
+                       </div>
+                       <div>
+                          <label style={{ fontSize: 9, color: '#94a3b8', fontWeight: 700, display: 'block', marginBottom: 6 }}>MAX OPEN TRADES</label>
+                          <input type="number" value={maxTrades} onChange={e => setMaxTrades(e.target.value)} disabled={aiActive} style={{ width: '100%', padding: '8px', borderRadius: 6, background: '#020617', border: '1px solid #1e293b', color: '#38bdf8', fontSize: 12, outline: 'none' }} />
+                       </div>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#020617', padding: '8px 12px', borderRadius: 6, border: '1px solid #1e293b' }}>
+                       <span style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600 }}>DYNAMIC TRAILING STOP-LOSS</span>
+                       <button onClick={() => !aiActive && setTrailingStop(!trailingStop)} style={{ width: 36, height: 20, borderRadius: 10, background: trailingStop ? '#00e676' : '#333', border: 'none', position: 'relative', cursor: aiActive ? 'not-allowed' : 'pointer', transition: '0.2s' }}>
+                          <div style={{ width: 16, height: 16, borderRadius: '50%', background: '#fff', position: 'absolute', top: 2, left: trailingStop ? 18 : 2, transition: '0.2s' }} />
+                       </button>
+                    </div>
+                 </div>
+               )}
+            </div>
+
             {/* Terminal / Logs */}
             <div style={{ background: '#020617', border: '1px solid #0f172a', borderRadius: 10, padding: 14, height: 210, overflowY: 'auto', marginBottom: 20, fontFamily: 'monospace', fontSize: 11, color: '#38bdf8', display: 'flex', flexDirection: 'column', gap: 8, boxShadow: 'inset 0 0 20px rgba(0,0,0,0.5)' }}>
               {aiLogs.map((log, i) => (
@@ -447,16 +543,19 @@ export default function AITradeAgentPage() {
             </div>
 
             <button onClick={() => {
-              if (aiActive) { 
-                setAiActive(false); 
-                setAiLogs(prev => [...prev.slice(-15), `[SYSTEM] Autonomous Agent halted by user.`]);
-                return; 
-              }
-              setAiActive(true);
-              setAiLogs(prev => [...prev.slice(-15), `[SYSTEM] Genius Mode Active. Monitoring market for ${baseCoin}...`]);
-            }} style={{ width: '100%', padding: 16, borderRadius: 12, background: aiActive ? 'transparent' : 'var(--accent-blue)', color: aiActive ? 'var(--accent-red)' : '#fff', border: aiActive ? '1px solid var(--accent-red)' : 'none', fontSize: 14, fontWeight: 900, letterSpacing: '.06em', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, transition: 'all 0.2s', boxShadow: aiActive ? 'none' : '0 0 20px rgba(59,130,246,0.4)' }}>
-              {aiActive ? 'STOP GENIUS AGENT' : 'START GENIUS AUTO-TRADER'}
-            </button>
+                if (aiActive) { 
+                  setAiActive(false); 
+                  setAiLogs(prev => [...prev.slice(-15), `[SYSTEM] Autonomous Agent halted by user.`]);
+                  return; 
+                }
+                setAiActive(true);
+                setAiLogs(prev => [...prev.slice(-15), `[FREQTRADE] Initializing... Target: ${exchange} | Max Trades: ${maxTrades} | Trailing Stop: ${trailingStop ? 'ON' : 'OFF'}`]);
+                setTimeout(() => {
+                  setAiLogs(prev => [...prev.slice(-15), `[SYSTEM] Genius Mode Active. Monitoring market for ${baseCoin}...`]);
+                }, 1000);
+              }} style={{ width: '100%', padding: 16, borderRadius: 12, background: aiActive ? 'transparent' : 'var(--accent-blue)', color: aiActive ? 'var(--accent-red)' : '#fff', border: aiActive ? '1px solid var(--accent-red)' : 'none', fontSize: 14, fontWeight: 900, letterSpacing: '.06em', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, transition: 'all 0.2s', boxShadow: aiActive ? 'none' : '0 0 20px rgba(59,130,246,0.4)' }}>
+                {aiActive ? 'STOP GENIUS AGENT' : 'START FREQTRADE AI AGENT'}
+              </button>
           </div>
 
         </div>

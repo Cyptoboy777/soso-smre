@@ -1,7 +1,7 @@
 'use client';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, Newspaper, Brain, Bot, BarChart2, Wallet, BookOpen, History, Sun, Moon } from 'lucide-react';
+import { LayoutDashboard, Newspaper, Brain, Bot, BarChart2, Wallet, BookOpen, History, Sun, Moon, Activity } from 'lucide-react';
 import { useAuth } from '@/components/FirebaseProvider';
 
 const NAV = [
@@ -11,6 +11,7 @@ const NAV = [
   { href: '/ai-trade-agent',  label: 'AI Trade Agent', Icon: Bot },
   { href: '/backtest',        label: 'Backtest AI',    Icon: History },
   { href: '/etf-dashboard',   label: 'ETF Dashboard',  Icon: BarChart2 },
+  { href: '/sodex-markets',   label: 'SoDEX Markets',  Icon: Activity },
   { href: '/portfolio',       label: 'Portfolio',      Icon: Wallet },
   { href: '/settings',        label: 'Settings',       Icon: Bot },
   { href: '/guidelines',      label: 'Guidelines',     Icon: BookOpen },

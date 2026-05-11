@@ -171,6 +171,7 @@ export default function DashboardPage() {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16 }}>
           {[
             { href: '/breaking-news',  label: 'BREAKING NEWS',  color: 'var(--accent-blue)', icon: '📰', desc: 'Real-time market alpha' },
+            { href: '/sodex-markets',  label: 'SODEX MARKETS',  color: 'var(--accent-orange)', icon: '📈', desc: 'Live spot market tickers' },
             { href: '/ai-analysis',    label: 'AI ANALYSIS',    color: 'var(--accent-orange)', icon: '🤖', desc: 'Gemini + Groq signals' },
             { href: '/ai-trade-agent', label: 'TRADE AGENT',    color: 'var(--accent-green)', icon: '💱', desc: 'Execute paper trades' },
             { href: '/etf-dashboard',  label: 'ETF FLOWS',      color: '#a855f7', icon: '📊', desc: 'US Spot ETF dynamics' },
