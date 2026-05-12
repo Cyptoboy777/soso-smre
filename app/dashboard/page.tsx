@@ -7,38 +7,50 @@ import VoiceBriefing from '@/components/VoiceBriefing';
 import TradingViewChart from '@/components/TradingViewChart';
 
 interface Prices { btc: number; eth: number; sol: number; bnb: number; globalMarketCap: string; }
+type AlphaStatus = 'idle' | 'analyzing' | 'sending' | 'done' | 'error';
 
 export default function DashboardPage() {
   const [prices, setPrices] = useState<Prices | null>(null);
   const [error, setError] = useState('');
-  const [sending, setSending] = useState(false);
+  const [alphaStatus, setAlphaStatus] = useState<AlphaStatus>('idle');
+  const [alphaMsg, setAlphaMsg] = useState('');
 
   const sendAlpha = async () => {
     const chatId = localStorage.getItem('tg_chat_id');
     if (!chatId) {
-      alert('Please connect Telegram in Settings first!');
+      alert('📱 Please go to Settings and connect your Telegram Chat ID first!');
       return;
     }
-    setSending(true);
+    setAlphaStatus('analyzing');
+    setAlphaMsg('Analyzing live markets + news with Gemini AI...');
     try {
-      const msg = `🔥 <b>TODAY'S INSTANT ALPHA</b>\n\n` +
-                  `1. <b>BTC/USDT</b>: $${prices?.btc.toLocaleString()} (Neutral-Bullish)\n` +
-                  `2. <b>ETH/USDT</b>: $${prices?.eth.toLocaleString()} (Strong Support)\n` +
-                  `3. <b>SOL/USDT</b>: $${prices?.sol.toLocaleString()} (High Volatility)\n\n` +
-                  `<i>AI Prediction: Market is consolidating. Look for breakout above $${((prices?.btc || 0) * 1.02).toFixed(0)}.</i>\n\n` +
-                  `<a href="http://localhost:3000/ai-analysis">Execute Full Analysis →</a>`;
-      
-      await fetch('/api/telegram-alert', {
+      // Step 1: Generate AI-powered alpha
+      const alphaRes = await fetch('/api/daily-alpha', { method: 'POST' });
+      const alphaData = await alphaRes.json();
+      if (!alphaRes.ok) throw new Error(alphaData.error ?? 'Alpha generation failed');
+
+      setAlphaStatus('sending');
+      setAlphaMsg('Sending to your Telegram...');
+
+      // Step 2: Send to Telegram
+      const tgRes = await fetch('/api/telegram-alert', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ chatId, message: msg })
+        body: JSON.stringify({ chatId, message: alphaData.message }),
       });
-      alert('Alpha alerts sent to your Telegram!');
+      const tgData = await tgRes.json();
+      if (!tgRes.ok) throw new Error(tgData.error ?? 'Telegram send failed');
+
+      setAlphaStatus('done');
+      setAlphaMsg('✅ Today\'s Alpha sent to your Telegram!');
     } catch (e) {
-      alert('Failed to send alerts.');
+      setAlphaStatus('error');
+      setAlphaMsg(`❌ ${e instanceof Error ? e.message : 'Failed'}`);
     }
-    setSending(false);
+    setTimeout(() => { setAlphaStatus('idle'); setAlphaMsg(''); }, 5000);
   };
+
+
 
   useEffect(() => {
     fetch('/api/prices')
@@ -73,29 +85,37 @@ export default function DashboardPage() {
             Status: <span style={{ color: 'var(--text-primary)' }}>AI-AGENT ACTIVE</span>
           </p>
         </div>
-        <div style={{ display: 'flex', gap: 12 }}>
-           <button 
-             onClick={sendAlpha}
-             disabled={sending}
-             style={{ 
-               background: 'var(--accent-orange)', 
-               color: '#fff', 
-               border: 'none', 
-               padding: '8px 16px', 
-               borderRadius: 12, 
-               fontSize: 11, 
-               fontWeight: 900, 
-               cursor: sending ? 'not-allowed' : 'pointer',
-               display: 'flex',
-               alignItems: 'center',
-               gap: 8,
-               boxShadow: '0 4px 12px rgba(249,115,22,0.3)'
-             }}
-           >
-             {sending ? 'SENDING...' : '🚀 SEND TODAY\'S ALPHA'}
-           </button>
-           <div className="glass" style={{ fontSize: 10, color: 'var(--accent-green)', padding: '6px 12px', borderRadius: 20, fontWeight: 800, border: '1px solid rgba(0,230,118,0.2)', letterSpacing: '.1em', display: 'flex', alignItems: 'center' }}>LIVE SYNC</div>
+        <div style={{ display: 'flex', gap: 12, flexDirection: 'column', alignItems: 'flex-end' }}>
+           <div style={{ display: 'flex', gap: 12 }}>
+             <button
+               onClick={sendAlpha}
+               disabled={alphaStatus !== 'idle'}
+               style={{
+                 background: alphaStatus === 'done' ? 'var(--accent-green)' : alphaStatus === 'error' ? '#f43f5e' : alphaStatus !== 'idle' ? '#333' : 'var(--accent-orange)',
+                 color: '#fff', border: 'none', padding: '10px 20px', borderRadius: 12,
+                 fontSize: 12, fontWeight: 900, cursor: alphaStatus !== 'idle' ? 'not-allowed' : 'pointer',
+                 display: 'flex', alignItems: 'center', gap: 8,
+                 boxShadow: alphaStatus === 'idle' ? '0 4px 20px rgba(249,115,22,0.35)' : 'none',
+                 transition: 'all 0.3s',
+               }}
+             >
+               {alphaStatus === 'analyzing' && <div className="spin" style={{ width: 12, height: 12, border: '2px solid #fff', borderTopColor: 'transparent', borderRadius: '50%' }} />}
+               {alphaStatus === 'sending'   && <div className="spin" style={{ width: 12, height: 12, border: '2px solid #fff', borderTopColor: 'transparent', borderRadius: '50%' }} />}
+               {alphaStatus === 'analyzing' ? '🧠 AI Analyzing Markets...' :
+                alphaStatus === 'sending'   ? '📡 Sending to Telegram...' :
+                alphaStatus === 'done'      ? '✅ Alpha Sent!' :
+                alphaStatus === 'error'     ? '❌ Failed' :
+                '🚀 SEND TODAY\'S ALPHA'}
+             </button>
+             <div className="glass" style={{ fontSize: 10, color: 'var(--accent-green)', padding: '6px 12px', borderRadius: 20, fontWeight: 800, border: '1px solid rgba(0,230,118,0.2)', letterSpacing: '.1em', display: 'flex', alignItems: 'center' }}>LIVE SYNC</div>
+           </div>
+           {alphaMsg && (
+             <div style={{ fontSize: 11, color: alphaStatus === 'error' ? '#f43f5e' : '#94a3b8', fontWeight: 600, textAlign: 'right' }}>
+               {alphaMsg}
+             </div>
+           )}
         </div>
+
       </div>
 
       {error && <div style={{ marginBottom: 24, color: 'var(--accent-red)', fontSize: 13, background: 'rgba(244,63,94,0.05)', padding: '12px 16px', borderRadius: 12, border: '1px solid rgba(244,63,94,0.1)' }}>{error}</div>}
@@ -171,7 +191,6 @@ export default function DashboardPage() {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16 }}>
           {[
             { href: '/breaking-news',  label: 'BREAKING NEWS',  color: 'var(--accent-blue)', icon: '📰', desc: 'Real-time market alpha' },
-            { href: '/sodex-markets',  label: 'SODEX MARKETS',  color: 'var(--accent-orange)', icon: '📈', desc: 'Live spot market tickers' },
             { href: '/ai-analysis',    label: 'AI ANALYSIS',    color: 'var(--accent-orange)', icon: '🤖', desc: 'Gemini + Groq signals' },
             { href: '/ai-trade-agent', label: 'TRADE AGENT',    color: 'var(--accent-green)', icon: '💱', desc: 'Execute paper trades' },
             { href: '/etf-dashboard',  label: 'ETF FLOWS',      color: '#a855f7', icon: '📊', desc: 'US Spot ETF dynamics' },

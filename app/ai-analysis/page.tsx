@@ -244,26 +244,42 @@ export default function AIAnalysisPage() {
             <p style={{ fontSize: 11, color: 'var(--text-dim)', marginBottom: 18 }}>Real-time news for {asset}</p>
             {error && <div style={{ background: 'rgba(244,63,94,0.08)', border: '1px solid rgba(244,63,94,0.25)', borderRadius: 10, padding: 12, color: '#fda4af', fontSize: 12, lineHeight: 1.5, marginBottom: 12 }}>{error}</div>}
 
-            {/* Sentiment Score */}
-            {signal && <div className="neon-border glass" style={{ borderRadius: 16, padding: 20, marginBottom: 16 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-                <span style={{ fontSize: 10, color: 'var(--text-dim)', fontWeight: 800, letterSpacing: '.12em' }}>AI SENTIMENT SCORE</span>
-                <span style={{ fontSize: 10, color: sigColor(signal.signal), background: 'rgba(255,255,255,0.03)', border: `1px solid var(--border-bold)`, borderRadius: 6, padding: '3px 10px', fontWeight: 900 }}>{signal.signal}</span>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'flex-end', gap: 6, marginBottom: 18 }}>
-                <span style={{ fontSize: 56, fontWeight: 950, color: sigColor(signal.signal), lineHeight: 1, letterSpacing: '-0.04em' }}>{signal.confidence}</span>
-                <span style={{ fontSize: 16, color: 'var(--text-dim)', marginBottom: 8, fontWeight: 800 }}>/ 100</span>
-              </div>
-              <div style={{ position: 'relative', height: 10, borderRadius: 5, overflow: 'hidden', background: 'var(--bg-main)', marginBottom: 12, border: '1px solid var(--border-subtle)' }}>
-                <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(90deg,var(--accent-red) 0%,var(--text-dim) 40%,var(--text-dim) 60%,var(--accent-green) 100%)', opacity: 0.8 }} />
-                <div style={{ position: 'absolute', top: '50%', left: `${signal.confidence}%`, transform: 'translate(-50%,-50%)', width: 16, height: 16, borderRadius: '50%', background: sigColor(signal.signal), border: '3px solid var(--bg-main)', boxShadow: `0 0 10px ${sigColor(signal.signal)}` }} />
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ fontSize: 9, color: 'var(--accent-red)', fontWeight: 900, letterSpacing: '.12em' }}>BEARISH</span>
-                <span style={{ fontSize: 9, color: 'var(--text-dim)', fontWeight: 900, letterSpacing: '.12em' }}>NEUTRAL</span>
-                <span style={{ fontSize: 9, color: 'var(--accent-green)', fontWeight: 900, letterSpacing: '.12em' }}>BULLISH</span>
-              </div>
-            </div>}
+            {/* Sentiment Score — genuine signal-aware */}
+            {signal && (() => {
+              // For SELL → bearish score. For BUY → bullish score. HOLD → neutral.
+              const isSell = signal.signal === 'SELL';
+              const isHold = signal.signal === 'HOLD';
+              // sentimentScore: 0=fully bearish, 50=neutral, 100=fully bullish
+              const sentimentScore = isHold ? 50 : isSell ? Math.round(50 - (signal.confidence - 50) * 0.8) : Math.round(50 + (signal.confidence - 50) * 0.8);
+              const clampedScore = Math.max(5, Math.min(95, sentimentScore));
+              const sentimentLabel = clampedScore >= 65 ? 'BULLISH' : clampedScore <= 35 ? 'BEARISH' : 'NEUTRAL';
+              const sentimentColor = clampedScore >= 65 ? 'var(--accent-green)' : clampedScore <= 35 ? 'var(--accent-red)' : '#f59e0b';
+              return (
+                <div className="neon-border glass" style={{ borderRadius: 16, padding: 20, marginBottom: 16 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                    <span style={{ fontSize: 10, color: 'var(--text-dim)', fontWeight: 800, letterSpacing: '.12em' }}>AI SENTIMENT SCORE</span>
+                    <span style={{ fontSize: 10, color: sentimentColor, background: 'rgba(255,255,255,0.03)', border: '1px solid var(--border-bold)', borderRadius: 6, padding: '3px 10px', fontWeight: 900 }}>{sentimentLabel}</span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'flex-end', gap: 6, marginBottom: 18 }}>
+                    <span style={{ fontSize: 56, fontWeight: 950, color: sentimentColor, lineHeight: 1, letterSpacing: '-0.04em' }}>{clampedScore}</span>
+                    <span style={{ fontSize: 16, color: 'var(--text-dim)', marginBottom: 8, fontWeight: 800 }}>/ 100</span>
+                  </div>
+                  <div style={{ position: 'relative', height: 10, borderRadius: 5, overflow: 'hidden', background: 'var(--bg-main)', marginBottom: 12, border: '1px solid var(--border-subtle)' }}>
+                    <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(90deg,var(--accent-red) 0%,var(--text-dim) 40%,var(--text-dim) 60%,var(--accent-green) 100%)', opacity: 0.8 }} />
+                    <div style={{ position: 'absolute', top: '50%', left: `${clampedScore}%`, transform: 'translate(-50%,-50%)', width: 16, height: 16, borderRadius: '50%', background: sentimentColor, border: '3px solid var(--bg-main)', boxShadow: `0 0 10px ${sentimentColor}` }} />
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ fontSize: 9, color: 'var(--accent-red)', fontWeight: 900, letterSpacing: '.12em' }}>BEARISH</span>
+                    <span style={{ fontSize: 9, color: 'var(--text-dim)', fontWeight: 900, letterSpacing: '.12em' }}>NEUTRAL</span>
+                    <span style={{ fontSize: 9, color: 'var(--accent-green)', fontWeight: 900, letterSpacing: '.12em' }}>BULLISH</span>
+                  </div>
+                  <div style={{ marginTop: 12, padding: '8px 12px', background: 'rgba(255,255,255,0.02)', borderRadius: 8, border: '1px solid var(--border-subtle)' }}>
+                    <span style={{ fontSize: 10, color: 'var(--text-dim)', fontWeight: 700 }}>AI Confidence: </span>
+                    <span style={{ fontSize: 10, color: sigColor(signal.signal), fontWeight: 900 }}>{signal.confidence}% {signal.signal} signal</span>
+                  </div>
+                </div>
+              );
+            })()}
 
             {/* News cards */}
             {news.map((n, i) => (
