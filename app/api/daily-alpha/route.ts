@@ -1,14 +1,19 @@
 import { NextResponse } from 'next/server';
 import { GoogleGenAI } from '@google/genai';
+import Groq from 'groq-sdk';
 
-export async function POST() {
+export async function POST(req: Request) {
   try {
+    const host = req.headers.get('host') || 'localhost:3000';
+    const protocol = host.includes('localhost') ? 'http' : 'https';
+    const baseUrl = `${protocol}://${host}`;
+
     // 1. Fetch real prices
-    const priceRes = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/prices`);
+    const priceRes = await fetch(`${baseUrl}/api/prices`);
     const priceData = await priceRes.json() as { prices?: Array<{ symbol: string; price: string; change: string; rawPrice: number }> };
     const prices = priceData.prices ?? [];
 
-    // 2. Find top gainers (sorted by 24h change desc)
+    // 2. Find top gainers
     const gainers = [...prices]
       .filter(p => p.symbol !== 'SOSOUSDT')
       .sort((a, b) => parseFloat(b.change) - parseFloat(a.change))
@@ -17,57 +22,56 @@ export async function POST() {
     // 3. Fetch news headlines
     let newsHeadlines = '';
     try {
-      const newsRes = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/news`);
+      const newsRes = await fetch(`${baseUrl}/api/news`);
       const newsData = await newsRes.json() as { news?: Array<{ title: string }> };
       newsHeadlines = (newsData.news ?? []).slice(0, 5).map((n, i) => `${i + 1}. ${n.title}`).join('\n');
     } catch {}
 
-    // 4. Ask Gemini to pick best tokens with reasoning
-    const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY ?? '' });
     const now = new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' });
-
     const prompt = `You are an elite institutional crypto research analyst for SoSo SMRE platform.
-
 Today's Date/Time (IST): ${now}
-
-TOP 5 GAINERS RIGHT NOW (Live 24H Data):
+TOP 5 GAINERS RIGHT NOW:
 ${gainers.map(g => `- ${g.symbol.replace('USDT','')}: $${g.price} (${parseFloat(g.change) >= 0 ? '+' : ''}${g.change}%)`).join('\n')}
-
 LATEST CRYPTO NEWS:
 ${newsHeadlines || 'No news available'}
-
-TASK: Based on the live price momentum AND the news context above, select the TOP 3 tokens that are the BEST BUY opportunities RIGHT NOW for today.
-
-For each token provide:
-1. Why to buy it (specific technical + news reason)
-2. Entry price range
-3. Target price
-4. Stop-loss
-5. Risk level (LOW/MEDIUM/HIGH)
-
-Also provide 1 token to AVOID with reason.
-
-Respond in this EXACT JSON format (no markdown, no backticks):
+TASK: Based on momentum and news, select TOP 3 best buy opportunities for today.
+Respond in this EXACT JSON format:
 {
   "marketMood": "Bullish|Bearish|Neutral",
-  "summary": "One line market summary",
-  "buys": [
-    {"symbol":"BTC","entryRange":"$X - $Y","target":"$Z","stopLoss":"$W","riskLevel":"MEDIUM","reason":"..."},
-    {"symbol":"ETH","entryRange":"$X - $Y","target":"$Z","stopLoss":"$W","riskLevel":"LOW","reason":"..."},
-    {"symbol":"SOL","entryRange":"$X - $Y","target":"$Z","stopLoss":"$W","riskLevel":"MEDIUM","reason":"..."}
-  ],
+  "summary": "One line summary",
+  "buys": [{"symbol":"BTC","entryRange":"$X","target":"$Z","stopLoss":"$W","riskLevel":"MEDIUM","reason":"..."}],
   "avoid": {"symbol":"TOKEN","reason":"..."},
-  "dyor": "This is AI research, not financial advice. Always DYOR."
+  "dyor": "DYOR."
 }`;
 
-    const result = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: [{ role: 'user', parts: [{ text: prompt }] }],
-    });
+    let analysis;
+    let usedAI = 'Gemini';
 
-    const raw = result.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
-    const clean = raw.replace(/```json|```/g, '').trim();
-    const analysis = JSON.parse(clean);
+    try {
+      // 4a. Primary: Gemini
+      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY ?? '' });
+      const result = await ai.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: [{ role: 'user', parts: [{ text: prompt }] }],
+      });
+      const raw = result.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
+      const clean = raw.replace(/```json|```/g, '').trim();
+      analysis = JSON.parse(clean);
+    } catch (geminiError) {
+      console.warn("Gemini failed, switching to Groq fallback:", geminiError);
+      // 4b. Fallback: Groq (LLaMA 3.1)
+      const groq = new Groq({ apiKey: process.env.GROQ_API_KEY ?? '' });
+      const completion = await groq.chat.completions.create({
+        messages: [{ role: 'user', content: prompt }],
+        model: 'llama-3.1-8b-instant',
+        temperature: 0.1,
+        max_tokens: 1000,
+      });
+      const raw = completion.choices[0]?.message?.content ?? '';
+      const clean = raw.replace(/```json|```/g, '').trim();
+      analysis = JSON.parse(clean);
+      usedAI = 'Groq (Fallback)';
+    }
 
     // 5. Format Telegram message
     const moodEmoji = analysis.marketMood === 'Bullish' ? '🟢' : analysis.marketMood === 'Bearish' ? '🔴' : '🟡';
