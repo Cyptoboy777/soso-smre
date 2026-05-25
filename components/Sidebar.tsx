@@ -326,7 +326,7 @@ export default function Sidebar({ theme, setTheme, collapsed, setCollapsed, onCm
                 LOGIN
               </button>
               <button
-                onClick={connectWallet}
+                onClick={() => connectWallet()}
                 style={{
                   width: '100%', padding: '9px', borderRadius: 10,
                   background: 'linear-gradient(135deg, var(--accent-orange), var(--accent-purple))',
