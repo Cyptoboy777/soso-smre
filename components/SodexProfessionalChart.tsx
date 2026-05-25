@@ -43,7 +43,7 @@ function formatPrice(p: number): string {
   return p.toFixed(6);
 }
 
-function drawChart(canvas: HTMLCanvasElement, candles: Candle[], chartType: 'candle' | 'line', intervalKey: string, latestPrice?: number) {
+function drawChart(canvas: HTMLCanvasElement, candles: Candle[], chartType: 'candle' | 'line', intervalKey: string, latestPrice?: number, windowInfo?: { startOffset: number, viewCount: number }) {
   const ctx = canvas.getContext('2d');
   if (!ctx || candles.length === 0) return;
   const dpr = window.devicePixelRatio || 1;
@@ -57,7 +57,13 @@ function drawChart(canvas: HTMLCanvasElement, candles: Candle[], chartType: 'can
   const prices = candles.flatMap(c => [c.high, c.low]);
   const minP = Math.min(...prices), maxP = Math.max(...prices), pRange = maxP - minP || 1;
   const maxVol = Math.max(...candles.map(c => c.volume)) || 1;
-  const toX = (i: number) => PL + (i / (candles.length - 1)) * cW;
+  const toX = (i: number) => {
+    if (windowInfo) {
+      const pos = windowInfo.startOffset + i;
+      return PL + (pos / Math.max(1, windowInfo.viewCount - 1)) * cW;
+    }
+    return PL + (i / Math.max(1, candles.length - 1)) * cW;
+  };
   const toY = (p: number) => PT + ((maxP - p) / pRange) * cH;
   const toVY = (v: number) => H - PB - (v / maxVol) * VOL_H;
 
@@ -89,7 +95,8 @@ function drawChart(canvas: HTMLCanvasElement, candles: Candle[], chartType: 'can
   ctx.beginPath(); ctx.moveTo(PL, H - PB - VOL_H); ctx.lineTo(W - PR, H - PB - VOL_H); ctx.stroke();
 
   // Volume bars
-  const barW = Math.max(1, cW / candles.length - 0.5);
+  const displayCount = windowInfo ? windowInfo.viewCount : candles.length;
+  const barW = Math.max(1, cW / Math.max(1, displayCount) - 0.5);
   candles.forEach((c, i) => {
     ctx.fillStyle = c.close >= c.open ? 'rgba(0,230,118,0.25)' : 'rgba(244,63,94,0.25)';
     const vy = toVY(c.volume);
@@ -297,35 +304,35 @@ export default function SodexProfessionalChart({ initialSymbol = 'BTC', onSymbol
   }, [iv]);
 
   // ── Compute visible slice (pan window) ───────────────────────────────────
-  const visibleCandles = (() => {
-    if (candles.length === 0) return candles;
-    const end   = Math.max(1, candles.length - viewOffset);
-    const start = Math.max(0, end - viewCount);
-    return candles.slice(start, end);
-  })();
+  const logicalEnd = candles.length > 0 ? candles.length - viewOffset : 0;
+  const logicalStart = logicalEnd - viewCount;
+  const sliceStart = Math.max(0, logicalStart);
+  const sliceEnd = Math.min(candles.length, Math.max(0, logicalEnd));
+  const visibleCandles = candles.slice(sliceStart, sliceEnd);
+  const startOffset = sliceStart - logicalStart;
 
   // Redraw on visible slice / chartType change — pass latest price for live overlay
   useEffect(() => {
     if (canvasRef.current && visibleCandles.length > 0) {
       const c = canvasRef.current;
-      candleWidth.current = (c.offsetWidth - 80) / visibleCandles.length;
+      candleWidth.current = (c.offsetWidth - 80) / viewCount;
       // When panned: pass latest candle price as overlay so it's always visible
       const latestP = candles.length > 0 ? candles[candles.length - 1].close : undefined;
-      drawChart(c, visibleCandles, chartType, iv, latestP);
+      drawChart(c, visibleCandles, chartType, iv, latestP, { startOffset, viewCount });
     }
-  }, [visibleCandles, chartType, iv, candles]);
+  }, [visibleCandles, chartType, iv, candles, startOffset, viewCount]);
 
   // Resize observer
   useEffect(() => {
     const obs = new ResizeObserver(() => {
       if (canvasRef.current && visibleCandles.length > 0) {
         const latestP = candles.length > 0 ? candles[candles.length - 1].close : undefined;
-        drawChart(canvasRef.current, visibleCandles, chartType, iv, latestP);
+        drawChart(canvasRef.current, visibleCandles, chartType, iv, latestP, { startOffset, viewCount });
       }
     });
     if (canvasRef.current) obs.observe(canvasRef.current);
     return () => obs.disconnect();
-  }, [visibleCandles, chartType, iv, candles]);
+  }, [visibleCandles, chartType, iv, candles, startOffset, viewCount]);
 
   // Interval change → regenerate candles with right timeframe
   const changeInterval = (newIv: string) => {
@@ -336,10 +343,10 @@ export default function SodexProfessionalChart({ initialSymbol = 'BTC', onSymbol
 
   // ── Pan helpers ──────────────────────────────────────────────────────────
   const panBy = (delta: number) => {
-    setViewOffset(prev => Math.max(0, Math.min(candles.length - 10, prev + delta)));
+    setViewOffset(prev => Math.max(-30, Math.min(candles.length - 10, prev + delta)));
   };
   const zoomBy = (delta: number) => {
-    setViewCount(prev => Math.max(20, Math.min(candles.length, prev + delta)));
+    setViewCount(prev => Math.max(20, Math.min(candles.length + 30, prev + delta)));
   };
   const resetView = () => { setViewOffset(0); setViewCount(80); };
 
@@ -353,7 +360,7 @@ export default function SodexProfessionalChart({ initialSymbol = 'BTC', onSymbol
     const dx = dragStartX.current - e.clientX;
     const cw = candleWidth.current || 8;
     const delta = Math.round(dx / cw);
-    setViewOffset(Math.max(0, Math.min(candles.length - 10, dragOffset.current + delta)));
+    setViewOffset(Math.max(-30, Math.min(candles.length - 10, dragOffset.current + delta)));
   };
   const onMouseUp = () => { isDragging.current = false; };
   const onWheel = (e: React.WheelEvent) => {
@@ -517,35 +524,35 @@ export default function SodexProfessionalChart({ initialSymbol = 'BTC', onSymbol
             ‹‹ BACK
           </button>
 
-          {/* › Forward — go toward present (disabled at live edge) */}
+          {/* › Forward — go toward present (disabled at max forward 30) */}
           <button
             onClick={() => panBy(-20)}
-            disabled={viewOffset === 0}
+            disabled={viewOffset <= -30}
             title="Newer candles"
-            style={{ background: viewOffset>0?'rgba(255,255,255,0.04)':'transparent', border:`1px solid ${viewOffset>0?'#2a2a2a':'#1a1a1a'}`, borderRadius:6, padding:'3px 9px', cursor:viewOffset===0?'not-allowed':'pointer', color:viewOffset===0?'#2a2a2a':'#666', fontSize:11, fontWeight:900, display:'flex', alignItems:'center', gap:3, opacity:viewOffset===0?0.3:1 }}>
+            style={{ background: viewOffset > -30 ? 'rgba(255,255,255,0.04)' : 'transparent', border: `1px solid ${viewOffset > -30 ? '#2a2a2a' : '#1a1a1a'}`, borderRadius: 6, padding: '3px 9px', cursor: viewOffset <= -30 ? 'not-allowed' : 'pointer', color: viewOffset <= -30 ? '#2a2a2a' : '#666', fontSize: 11, fontWeight: 900, display: 'flex', alignItems: 'center', gap: 3, opacity: viewOffset <= -30 ? 0.3 : 1 }}>
             FWD ›
           </button>
 
           {/* LIVE — jump to latest instantly */}
-          {viewOffset > 0 && (
+          {viewOffset !== 0 && (
             <button
               onClick={() => { setViewOffset(0); }}
               title="Jump to latest live price"
-              style={{ background:'rgba(0,230,118,0.1)', border:'1px solid rgba(0,230,118,0.35)', borderRadius:6, padding:'3px 10px', cursor:'pointer', color:'#00e676', fontSize:10, fontWeight:900, letterSpacing:'.06em', display:'flex', alignItems:'center', gap:5 }}>
-              <span style={{ width:6, height:6, borderRadius:'50%', background:'#00e676', display:'inline-block', boxShadow:'0 0 6px #00e676' }}/>
+              style={{ background: 'rgba(0,230,118,0.1)', border: '1px solid rgba(0,230,118,0.35)', borderRadius: 6, padding: '3px 10px', cursor: 'pointer', color: '#00e676', fontSize: 10, fontWeight: 900, letterSpacing: '.06em', display: 'flex', alignItems: 'center', gap: 5 }}>
+              <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#00e676', display: 'inline-block', boxShadow: '0 0 6px #00e676' }} />
               LIVE
             </button>
           )}
 
           {/* Zoom + / − */}
           <button onClick={() => zoomBy(-10)} title="Zoom in (+)"
-            style={{ background:'rgba(255,255,255,0.04)', border:'1px solid #2a2a2a', borderRadius:6, width:24, height:24, cursor:'pointer', color:'#666', fontSize:14, display:'flex', alignItems:'center', justifyContent:'center' }}>+</button>
+            style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid #2a2a2a', borderRadius: 6, width: 24, height: 24, cursor: 'pointer', color: '#666', fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>+</button>
           <button onClick={() => zoomBy(10)} title="Zoom out (−)"
-            style={{ background:'rgba(255,255,255,0.04)', border:'1px solid #2a2a2a', borderRadius:6, width:24, height:24, cursor:'pointer', color:'#666', fontSize:14, display:'flex', alignItems:'center', justifyContent:'center' }}>−</button>
+            style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid #2a2a2a', borderRadius: 6, width: 24, height: 24, cursor: 'pointer', color: '#666', fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>−</button>
 
           {/* Candle counter */}
-          <span style={{ fontSize:9, color:'#333', fontWeight:700 }}>
-            {viewOffset > 0 ? `← ${viewOffset} behind live` : `${visibleCandles.length} candles`}
+          <span style={{ fontSize: 9, color: '#333', fontWeight: 700 }}>
+            {viewOffset > 0 ? `← ${viewOffset} behind live` : viewOffset < 0 ? `→ ${-viewOffset} ahead of live` : `${visibleCandles.length} candles`}
           </span>
         </div>
       </div>
