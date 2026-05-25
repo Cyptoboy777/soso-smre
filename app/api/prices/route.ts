@@ -11,6 +11,77 @@ interface PriceItem {
 }
 
 export async function GET() {
+  // ── Global Market Cap Fetch (SoSoValue primary, CoinGecko fallback) ──────
+  let globalMarketCap = '—';
+  try {
+    const [sosoRes, cgGlobalRes] = await Promise.all([
+      fetch('https://openapi.sosovalue.com/api/v1/market/global', {
+        headers: { 'x-soso-api-key': process.env.SOSOVALUE_API_KEY || '' },
+        next: { revalidate: 300 }
+      }).catch(() => null),
+      fetch('https://api.coingecko.com/api/v3/global', { 
+        next: { revalidate: 600 } 
+      }).catch(() => null)
+    ]);
+
+    // Try SoSoValue first
+    if (sosoRes?.ok) {
+      const sosoData = await sosoRes.json();
+      // Check for both camelCase and snake_case as API versions vary
+      const mcap = sosoData?.data?.totalMarketCap || sosoData?.data?.total_market_cap;
+      if (mcap && mcap > 0) {
+        globalMarketCap = (mcap / 1e12).toFixed(2) + 'T';
+      }
+    }
+
+    // Fallback to CoinGecko if SoSoValue failed
+    if (globalMarketCap === '—' && cgGlobalRes?.ok) {
+      const cgGlobal = await cgGlobalRes.json();
+      const mcap = cgGlobal?.data?.total_market_cap?.usd;
+      if (mcap) {
+        globalMarketCap = (mcap / 1e12).toFixed(2) + 'T';
+      }
+    }
+  } catch (e) {
+    console.error("Global Cap Sync Error:", e);
+  }
+
+  // ── SoDEX Cache: if bridge has pushed live data, serve it first ───────────
+  const sodexCache = (globalThis as any).__sodexTickerCache as
+    { tickers: Array<any>; updatedAt: number } | undefined;
+
+  if (sodexCache && sodexCache.tickers.length > 0) {
+    // Cache is fresh enough (< 30s old)
+    const age = Date.now() - sodexCache.updatedAt;
+    if (age < 30_000) {
+      const prices = sodexCache.tickers.map(t => ({
+        symbol:   `${t.base}USDT`,
+        price:    t.lastPrice.toFixed(t.lastPrice >= 100 ? 2 : t.lastPrice >= 1 ? 4 : 6),
+        change:   t.priceChangePct.toFixed(2),
+        volume:   Math.round(t.quoteVolume).toLocaleString('en-US'),
+        high:     t.high.toFixed(2),
+        low:      t.low.toFixed(2),
+        rawPrice: t.lastPrice,
+      }));
+      // Flexible find: tries exact symbol, then base-only prefix match (handles WSOSO→SOSO etc.)
+      const find = (s: string) => {
+        const exact = prices.find(p => p.symbol === s);
+        if (exact) return exact.rawPrice;
+        const base = s.replace('USDT', '').replace('USDC', '');
+        return prices.find(p => p.symbol.replace('USDT','').includes(base))?.rawPrice || 0;
+      };
+      const sosoPrice = find('SOSOUSDT') || find('WSOSOUSDT') || 0.395;
+      return NextResponse.json({
+        btc: find('BTCUSDT'), eth: find('ETHUSDT'),
+        sol: find('SOLUSDT'), bnb: find('BNBUSDT'), soso: sosoPrice,
+        globalMarketCap,
+        prices,
+        updatedAt: sodexCache.updatedAt,
+        source: 'sodex',
+      });
+    }
+  }
+  // ── Fallback: CoinGecko (when SoDEX bridge not yet connected) ─────────────
   try {
     const CG_IDS = {
       'bitcoin': 'BTCUSDT',

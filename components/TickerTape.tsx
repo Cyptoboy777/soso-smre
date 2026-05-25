@@ -1,50 +1,38 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
 
-const TICKERS = [
-  { symbol: 'BTC', id: 'bitcoin' },
-  { symbol: 'ETH', id: 'ethereum' },
-  { symbol: 'SOL', id: 'solana' },
-  { symbol: 'BNB', id: 'binancecoin' },
-  { symbol: 'XRP', id: 'ripple' },
-  { symbol: 'DOGE', id: 'dogecoin' },
-  { symbol: 'ADA', id: 'cardano' },
-  { symbol: 'AVAX', id: 'avalanche-2' },
-  { symbol: 'LINK', id: 'chainlink' },
-  { symbol: 'DOT', id: 'polkadot' },
-];
-
-interface Price { usd: number; usd_24h_change: number; }
+interface PriceItem {
+  symbol: string;
+  price: string;
+  change: string;
+  rawPrice: number;
+}
 
 export default function TickerTape() {
-  const [prices, setPrices] = useState<Record<string, Price>>({});
-  const ref = useRef<HTMLDivElement>(null);
+  const [prices, setPrices] = useState<PriceItem[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const load = async () => {
       try {
-        const ids = TICKERS.map(t => t.id).join(',');
-        const res = await fetch(
-          `https://api.coingecko.com/api/v3/simple/price?ids=${ids}&vs_currencies=usd&include_24hr_change=true`
-        );
-        if (res.ok) setPrices(await res.json());
+        const res = await fetch('/api/prices');
+        if (!res.ok) return;
+        const data = await res.json();
+        const items: PriceItem[] = (data.prices ?? [])
+          .filter((p: PriceItem) => p.rawPrice > 0) // skip zero prices
+          .slice(0, 15);
+        if (items.length > 0) {
+          setPrices(items);
+          setLoading(false);
+        }
       } catch {}
     };
     load();
-    const iv = setInterval(load, 30000);
+    const iv = setInterval(load, 20_000);
     return () => clearInterval(iv);
   }, []);
 
-  const items = TICKERS.map(t => {
-    const p = prices[t.id];
-    const price = p ? `$${p.usd.toLocaleString('en-US', { maximumFractionDigits: p.usd > 100 ? 0 : 4 })}` : '---';
-    const change = p ? p.usd_24h_change : 0;
-    const up = change >= 0;
-    return { ...t, price, change, up };
-  });
-
-  // Duplicate for seamless loop
-  const display = [...items, ...items];
+  const display = [...prices, ...prices]; // duplicate for seamless loop
 
   return (
     <div style={{
@@ -65,7 +53,7 @@ export default function TickerTape() {
           align-items: center;
           height: 100%;
           width: max-content;
-          animation: tickerScroll 40s linear infinite;
+          animation: tickerScroll 50s linear infinite;
           will-change: transform;
         }
         .ticker-track:hover { animation-play-state: paused; }
@@ -82,17 +70,44 @@ export default function TickerTape() {
           font-family: 'Inter', monospace;
         }
       `}} />
-      <div className="ticker-track" ref={ref}>
-        {display.map((item, i) => (
-          <div className="ticker-item" key={`${item.symbol}-${i}`}>
-            <span style={{ color: '#94a3b8' }}>{item.symbol}</span>
-            <span style={{ color: '#fff' }}>{item.price}</span>
-            <span style={{ color: item.up ? '#00e676' : '#f43f5e' }}>
-              {item.up ? '▲' : '▼'} {Math.abs(item.change).toFixed(2)}%
-            </span>
-          </div>
-        ))}
-      </div>
+
+      {loading ? (
+        // Loading skeleton
+        <div style={{ display: 'flex', alignItems: 'center', height: '100%', paddingLeft: 20, gap: 30 }}>
+          {Array.from({ length: 8 }).map((_, i) => (
+            <div key={i} style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+              <div style={{ width: 28, height: 8, background: 'rgba(255,255,255,0.06)', borderRadius: 4 }} />
+              <div style={{ width: 50, height: 8, background: 'rgba(255,255,255,0.04)', borderRadius: 4 }} />
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="ticker-track">
+          {display.map((item, i) => {
+            const change = parseFloat(item.change);
+            const up = change >= 0;
+            // Format price properly
+            const rawP = item.rawPrice;
+            const priceStr = rawP >= 1000
+              ? `$${rawP.toLocaleString('en-US', { maximumFractionDigits: 0 })}`
+              : rawP >= 1
+              ? `$${rawP.toFixed(2)}`
+              : `$${rawP.toFixed(4)}`;
+
+            const sym = item.symbol.replace('USDT', '');
+
+            return (
+              <div className="ticker-item" key={`${item.symbol}-${i}`}>
+                <span style={{ color: '#94a3b8' }}>{sym}</span>
+                <span style={{ color: '#fff' }}>{priceStr}</span>
+                <span style={{ color: up ? '#00e676' : '#f43f5e' }}>
+                  {up ? '▲' : '▼'} {Math.abs(change).toFixed(2)}%
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

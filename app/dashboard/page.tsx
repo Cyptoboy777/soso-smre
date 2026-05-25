@@ -3,8 +3,9 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import MarketSentiment from '@/components/MarketSentiment';
 import TopMovers from '@/components/TopMovers';
-import VoiceBriefing from '@/components/VoiceBriefing';
+import SoEva from '@/components/SoEva';
 import TradingViewChart from '@/components/TradingViewChart';
+import MarketFlowChart from '@/components/MarketFlowChart';
 
 interface Prices { btc: number; eth: number; sol: number; bnb: number; globalMarketCap: string; }
 type AlphaStatus = 'idle' | 'analyzing' | 'sending' | 'done' | 'error';
@@ -53,21 +54,36 @@ export default function DashboardPage() {
 
 
   useEffect(() => {
-    fetch('/api/prices')
-      .then(async r => {
+    let attempts = 0;
+    const load = async () => {
+      try {
+        const r = await fetch('/api/prices');
         if (!r.ok) throw new Error('Live market data unavailable');
-        return r.json() as Promise<Prices>;
-      })
-      .then(d => { setPrices(d); setError(''); })
-      .catch(e => setError(e instanceof Error ? e.message : 'Live market data unavailable'));
+        const d = await r.json() as Prices;
+        // Only update if we get real data (not zeros)
+        if (d.btc > 0 || d.eth > 0) {
+          setPrices(d);
+          setError('');
+          return; // success — stop retrying
+        }
+        throw new Error('Prices not yet available');
+      } catch (e) {
+        setError(e instanceof Error ? e.message : 'Live market data unavailable');
+        // Retry up to 5 times with 3s delay while waiting for SoDEX/CoinGecko
+        if (attempts++ < 5) setTimeout(load, 3_000);
+      }
+    };
+    load();
+    const iv = setInterval(load, 30_000);
+    return () => clearInterval(iv);
   }, []);
 
   const fmt = (n: number, d = 2) => n.toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d });
 
   const cards = [
-    { label: 'BTC/USDT', value: prices ? `$${fmt(prices.btc, 0)}` : '--', sub: 'Bitcoin', color: '#f7931a' },
-    { label: 'ETH/USDT', value: prices ? `$${fmt(prices.eth, 0)}` : '--', sub: 'Ethereum', color: '#627eea' },
-    { label: 'SOL/USDT', value: prices ? `$${fmt(prices.sol, 2)}` : '--', sub: 'Solana', color: '#14f195' },
+    { label: 'BTC/USDT', value: (prices?.btc ?? 0) > 0 ? `$${fmt(prices!.btc, 0)}` : '--', sub: 'Bitcoin', color: '#f7931a' },
+    { label: 'ETH/USDT', value: (prices?.eth ?? 0) > 0 ? `$${fmt(prices!.eth, 0)}` : '--', sub: 'Ethereum', color: '#627eea' },
+    { label: 'SOL/USDT', value: (prices?.sol ?? 0) > 0 ? `$${fmt(prices!.sol, 2)}` : '--', sub: 'Solana', color: '#14f195' },
   ];
 
   return (
@@ -120,10 +136,6 @@ export default function DashboardPage() {
 
       {error && <div style={{ marginBottom: 24, color: 'var(--accent-red)', fontSize: 13, background: 'rgba(244,63,94,0.05)', padding: '12px 16px', borderRadius: 12, border: '1px solid rgba(244,63,94,0.1)' }}>{error}</div>}
 
-      {/* NEW: AI Voice Briefing */}
-      <div style={{ marginBottom: 32 }}>
-        <VoiceBriefing data={prices} />
-      </div>
 
       {/* TOP ROW: Price Cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 20, marginBottom: 32 }}>
@@ -137,13 +149,42 @@ export default function DashboardPage() {
         ))}
       </div>
 
-      {/* NEW: TradingView Charts */}
-      <div className="neon-border glass" style={{ borderRadius: 24, height: 480, marginBottom: 40, overflow: 'hidden' }}>
-        <div style={{ padding: '16px 24px', borderBottom: '1px solid var(--border-subtle)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-           <div style={{ fontSize: 11, fontWeight: 900, color: 'var(--text-primary)', letterSpacing: '.12em' }}>ADVANCED ANALYTICS ENGINE</div>
-           <div style={{ fontSize: 9, color: 'var(--accent-orange)', fontWeight: 800 }}>LIVE BINANCE FEED</div>
+      {/* NEW: CAPITAL FLOW + ETF SUMMARY */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: 20, marginBottom: 40 }}>
+        
+        {/* Advance Flow Chart */}
+        <div className="neon-border glass" style={{ borderRadius: 24, overflow: 'hidden' }}>
+          <MarketFlowChart />
         </div>
-        <TradingViewChart symbol="BINANCE:BTCUSDT" />
+
+        {/* ETF DASHBOARD SHIFTED HERE */}
+        <div className="neon-border glass" style={{ borderRadius: 24, padding: 24, background: 'linear-gradient(180deg, #0a0a0a 0%, #050505 100%)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+            <h2 style={{ fontSize: 12, fontWeight: 900, color: '#fff', margin: 0, letterSpacing: '.12em' }}>US SPOT BTC ETF FLOWS</h2>
+            <Link href="/etf-dashboard" style={{ fontSize: 10, color: 'var(--accent-orange)', fontWeight: 800, textDecoration: 'none' }}>VIEW ALL ↗</Link>
+          </div>
+          
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            {[
+              { ticker: 'IBIT', name: 'iShares Bitcoin Trust', inflow: '+$142.3M', pos: true },
+              { ticker: 'FBTC', name: 'Fidelity Wise Origin', inflow: '+$84.1M', pos: true },
+              { ticker: 'GBTC', name: 'Grayscale Bitcoin Trust', inflow: '-$12.5M', pos: false },
+            ].map(e => (
+              <div key={e.ticker} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', background: 'rgba(255,255,255,0.02)', borderRadius: 12, border: '1px solid rgba(255,255,255,0.05)' }}>
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 900, color: 'var(--accent-orange)' }}>{e.ticker}</div>
+                  <div style={{ fontSize: 10, color: 'var(--text-dim)' }}>{e.name}</div>
+                </div>
+                <div style={{ fontSize: 14, fontWeight: 900, color: e.pos ? 'var(--accent-green)' : 'var(--accent-red)', fontFamily: 'monospace' }}>{e.inflow}</div>
+              </div>
+            ))}
+          </div>
+
+          <div style={{ marginTop: 24, padding: 16, background: 'rgba(168, 85, 247, 0.05)', border: '1px solid rgba(168, 85, 247, 0.1)', borderRadius: 12 }}>
+             <div style={{ fontSize: 10, color: '#a855f7', fontWeight: 800, marginBottom: 4 }}>TOTAL NET FLOW (24H)</div>
+             <div style={{ fontSize: 24, fontWeight: 900, color: '#fff' }}>+$213.9M <span style={{ fontSize: 12, color: 'var(--accent-green)' }}>↗</span></div>
+          </div>
+        </div>
       </div>
 
       {/* MAIN CONTENT GRID */}

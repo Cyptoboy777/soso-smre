@@ -1,0 +1,24 @@
+@import "tailwindcss";
+
+/* Google Fonts Import */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+/* Apply base styles using standard CSS properties to resolve IDE unknown at-rule warnings */
+body {
+  font-family: "Inter", ui-sans-serif, system-ui, sans-serif;
+  background-color: #000000;
+  color: #ffffff;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Custom styles for the video background to ensure it fills correctly */
+video {
+  pointer-events: none;
+  object-fit: cover;
+}
+
+/* Custom selection color */
+::selection {
+  background-color: rgba(255, 255, 255, 0.3);
+}

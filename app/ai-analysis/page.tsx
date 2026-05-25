@@ -7,12 +7,12 @@ interface HistoryItem { asset: string; tf: string; signal: string; confidence: n
 interface NewsItem { title: string; source: string; time: string; url: string; }
 
 const TF = ['1M','5M','15M','30M','1H','4H','8H','12H','1D','1W'];
-const ASSETS = ['BTC','ETH','SOL','BNB','XRP','AVAX','SOSO'];
 const sigColor = (s: string) => s === 'BUY' ? '#00e676' : s === 'SELL' ? '#f43f5e' : '#f59e0b';
 const riskColor = (r: string) => r === 'LOW' ? '#00e676' : r === 'HIGH' ? '#f43f5e' : '#f59e0b';
 
 export default function AIAnalysisPage() {
   const [asset, setAsset] = useState('BTC');
+  const [assets, setAssets] = useState(['BTC','ETH','SOL','BNB','XRP','AVAX','SOSO']);
   const [tf, setTf] = useState('1H');
   const [buyZone, setBuyZone] = useState('');
   const [sellZone, setSellZone] = useState('');
@@ -26,8 +26,24 @@ export default function AIAnalysisPage() {
   const [error, setError] = useState('');
 
   useEffect(() => {
+    // 1. Fetch News
     fetch('/api/news').then(r => r.json())
       .then((d: { news?: NewsItem[] }) => { if (d.news) setNews(d.news.slice(0, 3)); })
+      .catch(() => {});
+
+    // 2. Fetch All Available Assets from SoDEX/CG
+    fetch('/api/prices').then(r => r.json())
+      .then((d: { prices?: Array<{ symbol: string }>; source?: string }) => {
+        if (d.prices && d.prices.length > 0) {
+          const symbols = d.prices.map(p => {
+            // If SoDEX (vBTC_vUSDC), extract vBTC. If CG (BTCUSDT), extract BTC.
+            if (p.symbol.includes('_')) return p.symbol.split('_')[0];
+            return p.symbol.replace('USDT', '');
+          });
+          // Unique symbols only
+          setAssets(Array.from(new Set(symbols)));
+        }
+      })
       .catch(() => {});
   }, []);
 
@@ -100,7 +116,11 @@ export default function AIAnalysisPage() {
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--bg-card)', border: '1px solid var(--border-bold)', borderRadius: 10, padding: '8px 12px', marginBottom: 14 }}>
               <Search size={13} color="var(--text-dim)" />
               <select value={asset} onChange={e => setAsset(e.target.value)} style={{ background: 'transparent', border: 'none', outline: 'none', fontSize: 14, color: 'var(--text-primary)', fontWeight: 600, flex: 1, cursor: 'pointer', appearance: 'none' }}>
-                {ASSETS.map(a => <option key={a} value={a} style={{ background: 'var(--bg-card)', color: 'var(--text-primary)' }}>{a} / USDC</option>)}
+                {assets.map(a => (
+                  <option key={a} value={a} style={{ background: 'var(--bg-card)', color: 'var(--text-primary)' }}>
+                    {a} / {a.startsWith('v') || a === 'WSOSO' ? 'vUSDC' : 'USDC'}
+                  </option>
+                ))}
               </select>
             </div>
 

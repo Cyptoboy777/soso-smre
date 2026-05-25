@@ -45,13 +45,18 @@ export default function VoiceBriefing({ data }: VoiceBriefingProps) {
       const synth = window.speechSynthesis;
       const utterance = new SpeechSynthesisUtterance(script);
       
-      // Set premium voice if available
+      // Set BEST human-like voice for Podcast
       const voices = synth.getVoices();
-      const premiumVoice = voices.find(v => v.name.includes('Google') || v.name.includes('Premium')) || voices[0];
-      if (premiumVoice) utterance.voice = premiumVoice;
+      // Look for high-quality natural voices first
+      const professionalVoice = voices.find(v => v.name.includes('Google US English') || v.name.includes('Premium') || v.name.includes('Natural')) || voices[0];
       
-      utterance.pitch = 1;
-      utterance.rate = 1;
+      if (professionalVoice) {
+        utterance.voice = professionalVoice;
+        // Human-like settings
+        utterance.pitch = 1.0; 
+        utterance.rate = 0.95; // Slightly slower for clear understanding
+      }
+      
       utterance.volume = 1;
 
       utterance.onstart = () => {

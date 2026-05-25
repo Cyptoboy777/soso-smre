@@ -1,83 +1,162 @@
 'use client';
 import { useEffect, useState } from 'react';
+import { motion } from 'framer-motion';
+import { TrendingUp, TrendingDown, Minus } from 'lucide-react';
+
+type SentimentLabel = 'Extreme Greed' | 'Greed' | 'Neutral' | 'Fear' | 'Extreme Fear';
+
+const LABEL_CFG: Record<SentimentLabel, { color: string; bg: string; icon: any }> = {
+  'Extreme Greed': { color: '#00e676', bg: 'rgba(0,230,118,0.1)',  icon: TrendingUp   },
+  'Greed':         { color: '#69f0ae', bg: 'rgba(105,240,174,0.1)', icon: TrendingUp   },
+  'Neutral':       { color: '#ffd740', bg: 'rgba(255,215,64,0.1)', icon: Minus        },
+  'Fear':          { color: '#f97316', bg: 'rgba(249,115,22,0.1)', icon: TrendingDown },
+  'Extreme Fear':  { color: '#f43f5e', bg: 'rgba(244,63,94,0.1)',  icon: TrendingDown },
+};
+
+function getLabel(score: number): SentimentLabel {
+  if (score >= 75) return 'Extreme Greed';
+  if (score >= 55) return 'Greed';
+  if (score >= 45) return 'Neutral';
+  if (score >= 25) return 'Fear';
+  return 'Extreme Fear';
+}
 
 export default function MarketSentiment() {
-  const [sentiment, setSentiment] = useState(65); // Default to slightly bullish
-  const [label, setLabel] = useState('Bullish');
+  const [score,   setScore]   = useState<number | null>(null);
+  const [fgScore, setFgScore] = useState<number | null>(null); // Alternative.me Fear & Greed
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // In a real app, we would calculate this based on news sentiment or fear/greed index API
-    // For now, let's randomize it slightly to show it's "live"
-    const val = 60 + Math.floor(Math.random() * 15);
-    setSentiment(val);
-    if (val > 70) setLabel('Strong Bullish');
-    else if (val > 55) setLabel('Bullish');
-    else if (val > 45) setLabel('Neutral');
-    else setLabel('Bearish');
+    const run = async () => {
+      try {
+        // 1. Alternative.me Fear & Greed (most trusted)
+        const fgRes = await fetch('https://api.alternative.me/fng/?limit=1');
+        const fgData = await fgRes.json();
+        const fg = parseInt(fgData?.data?.[0]?.value ?? '50');
+        setFgScore(fg);
+
+        // 2. Internal signals: ETF + price
+        let derived = fg; // start from real F&G
+
+        try {
+          const [etfRes, priceRes] = await Promise.all([
+            fetch('/api/etf'),
+            fetch('/api/prices'),
+          ]);
+          const etf   = await etfRes.json();
+          const price = await priceRes.json();
+
+          // ETF inflow nudge (cap ±10 points)
+          if (etf.totalInflow) {
+            const flowNudge = Math.max(-10, Math.min(10, etf.totalInflow / 50_000_000));
+            derived += flowNudge;
+          }
+
+          // BTC price momentum nudge (cap ±5 points)
+          const btcChange = parseFloat(
+            price.prices?.find((p: any) => p.symbol === 'BTCUSDT')?.change ?? '0'
+          );
+          if (btcChange > 3)       derived += 5;
+          else if (btcChange > 1)  derived += 2;
+          else if (btcChange < -3) derived -= 5;
+          else if (btcChange < -1) derived -= 2;
+        } catch {}
+
+        setScore(Math.max(2, Math.min(98, Math.round(derived))));
+      } catch {
+        setScore(50);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    run();
+    const id = setInterval(run, 5 * 60 * 1000); // refresh every 5 min
+    return () => clearInterval(id);
   }, []);
 
-  const getColor = () => {
-    if (sentiment > 70) return '#00e676';
-    if (sentiment > 55) return '#a8ff00';
-    if (sentiment > 45) return '#ffeb3b';
-    return '#f43f5e';
-  };
+  if (loading) {
+    return (
+      <div className="skeleton" style={{ height: 160, borderRadius: 16 }} />
+    );
+  }
+
+  const displayScore = score ?? 50;
+  const label        = getLabel(displayScore);
+  const cfg          = LABEL_CFG[label];
+  const Icon         = cfg.icon;
+
+  // Arc sweep: 0-180° mapped to 0-100 score
+  const pct    = displayScore / 100;
+  const radius = 52;
+  const circ   = Math.PI * radius; // half-circle circumference
+  const dash   = pct * circ;
 
   return (
-    <div style={{ 
-      background: 'var(--bg-card)', 
-      border: '1px solid var(--border-subtle)', 
-      borderRadius: 16, 
-      padding: 20,
+    <div style={{
+      background: 'var(--bg-card)',
+      border: '1px solid var(--border-subtle)',
+      borderRadius: 16,
+      padding: '18px 20px',
       display: 'flex',
       flexDirection: 'column',
-      alignItems: 'center',
-      justifyContent: 'center',
-      minWidth: 200,
-      height: '100%'
+      gap: 12,
+      height: '100%',
     }}>
-      <div style={{ fontSize: 10, color: 'var(--text-dim)', fontWeight: 800, letterSpacing: '.12em', marginBottom: 12, width: '100%' }}>MARKET SENTIMENT</div>
-      
-      <div style={{ position: 'relative', width: 120, height: 60, overflow: 'hidden' }}>
-        {/* Semi-circle gauge background */}
-        <div style={{ 
-          width: 120, 
-          height: 120, 
-          borderRadius: '50%', 
-          border: '12px solid var(--border-subtle)',
-          position: 'absolute',
-          top: 0
-        }} />
-        
-        {/* Active gauge part */}
-        <div style={{ 
-          width: 120, 
-          height: 120, 
-          borderRadius: '50%', 
-          border: `12px solid transparent`,
-          borderTopColor: getColor(),
-          borderRightColor: sentiment > 50 ? getColor() : 'transparent',
-          position: 'absolute',
-          top: 0,
-          transform: `rotate(${ (sentiment / 100) * 180 - 90 }deg)`,
-          transition: 'all 1.5s cubic-bezier(0.4, 0, 0.2, 1)'
-        }} />
+      {/* Header */}
+      <div style={{ fontSize: 9, color: 'var(--text-dim)', fontWeight: 800, letterSpacing: '.14em', textTransform: 'uppercase' }}>
+        Market Sentiment
+      </div>
 
-        <div style={{ 
-          position: 'absolute', 
-          bottom: 0, 
-          width: '100%', 
-          textAlign: 'center',
-          fontSize: 18,
-          fontWeight: 900,
-          color: getColor()
-        }}>
-          {sentiment}%
+      {/* Gauge */}
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
+        <svg width={130} height={72} viewBox="0 0 130 72">
+          {/* Track */}
+          <path
+            d="M 10 65 A 52 52 0 0 1 120 65"
+            fill="none"
+            stroke="rgba(255,255,255,0.07)"
+            strokeWidth={10}
+            strokeLinecap="round"
+          />
+          {/* Active arc */}
+          <motion.path
+            d="M 10 65 A 52 52 0 0 1 120 65"
+            fill="none"
+            stroke={cfg.color}
+            strokeWidth={10}
+            strokeLinecap="round"
+            strokeDasharray={`${circ}`}
+            initial={{ strokeDashoffset: circ }}
+            animate={{ strokeDashoffset: circ - dash }}
+            transition={{ duration: 1.4, ease: 'easeOut' }}
+            style={{ filter: `drop-shadow(0 0 6px ${cfg.color})` }}
+          />
+          {/* Score text */}
+          <text x="65" y="62" textAnchor="middle" fill={cfg.color} fontSize="22" fontWeight="900" fontFamily="monospace">
+            {displayScore}
+          </text>
+        </svg>
+
+        {/* Label badge */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: cfg.bg, border: `1px solid ${cfg.color}40`, borderRadius: 99, padding: '4px 14px' }}>
+          <Icon size={11} color={cfg.color}/>
+          <span style={{ fontSize: 11, fontWeight: 900, color: cfg.color, letterSpacing: '.05em', textTransform: 'uppercase' }}>{label}</span>
         </div>
       </div>
-      
-      <div style={{ marginTop: 8, fontSize: 12, fontWeight: 900, color: 'var(--text-primary)', textTransform: 'uppercase' }}>{label}</div>
-      <div style={{ fontSize: 9, color: 'var(--text-dim)', marginTop: 4, fontWeight: 700 }}>SOSOVALUE AI FEED</div>
+
+      {/* Scale labels */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 8, color: 'var(--text-dim)', fontWeight: 700, letterSpacing: '.06em' }}>
+        <span style={{ color: '#f43f5e' }}>FEAR</span>
+        <span style={{ color: '#ffd740' }}>NEUTRAL</span>
+        <span style={{ color: '#00e676' }}>GREED</span>
+      </div>
+
+      {/* Source tag */}
+      <div style={{ fontSize: 8, color: 'var(--text-dim)', fontWeight: 700, textAlign: 'center', opacity: 0.6 }}>
+        Alt.me F&G + SoSo ETF Flow
+        {fgScore !== null && <span style={{ marginLeft: 6, color: 'rgba(255,255,255,0.3)' }}>Raw: {fgScore}</span>}
+      </div>
     </div>
   );
 }

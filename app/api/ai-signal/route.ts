@@ -22,36 +22,63 @@ interface AISignal {
   riskLevel: 'LOW' | 'MEDIUM' | 'HIGH';
 }
 
-function buildPrompt(token: string, tf: string, risk: string, price: string, change: string, buyZone: string, sellZone: string) {
-  return `You are an elite institutional crypto trading algorithm for SoSo SMRE.
+function buildPrompt(
+  token: string, tf: string, risk: string,
+  price: string, change: string,
+  buyZone: string, sellZone: string,
+  news: string,
+  marketSnapshot: string,
+  globalMcap: string
+) {
+  return `You are an elite institutional crypto trading research analyst for SoSo SMRE platform.
 
-Analyze ${token}/USDT strictly on the ${tf} timeframe.
-Risk Profile: ${risk}
-Current Live Price: $${price}
-24h Change: ${change}%
-${buyZone ? `User's requested Entry Zone: ${buyZone}` : ''}
-${sellZone ? `User's requested Target Zone: ${sellZone}` : ''}
+=== LIVE MARKET SNAPSHOT (SoDEX Real-Time Prices) ===
+${marketSnapshot}
+Global Market Cap: ${globalMcap}
 
-Task: Provide a highly professional, data-driven trading signal tailored EXACTLY to the ${tf} timeframe.
-- If the timeframe is 15M or 1H, calculate tight day-trading scalp targets and stop-losses.
-- If the timeframe is 4H, 1D or 1W, calculate wider macro swing-trading targets and stops.
-- CRITICAL RULE: NEVER output "$N/A". You MUST mathematically calculate realistic, exact numerical price targets based on the Current Price of $${price}.
-- Stop-loss and Target MUST be exact dollar amounts formatted like "$XXX.XX". Do not use vague terms.
+=== TARGET ASSET ===
+- Asset: ${token}/USDC (SoDEX)
+- Timeframe: ${tf}
+- Risk Tolerance: ${risk}
+- Current Spot Price: $${price}
+- 24h Change: ${change}%
+- User Entry Zone: ${buyZone || 'Market Price'}
+- User Target Zone: ${sellZone || 'Fibonacci Extension'}
 
-Respond with ONLY a valid JSON object — no markdown, no backticks, no extra text:
-{"signal":"BUY"|"SELL"|"HOLD","reasoning":"2-3 precise technical sentences referencing exact support/resistance levels and market context based on the current price.","confidence":55-95,"stopLoss":"$XX.XX","target":"$XX.XX","timeframe":"${tf}","riskLevel":"LOW"|"MEDIUM"|"HIGH"}`;
+=== LATEST MARKET INTELLIGENCE (SoSoValue News) ===
+${news || 'No high-impact news detected.'}
+
+=== TASK ===
+Generate a high-conviction institutional analysis report for ${token}.
+- Use RSI, MACD, order flow, and volume analysis based on price context.
+- Reference the market snapshot to assess overall risk-on/risk-off environment.
+- Incorporate the news context into reasoning.
+- CRITICAL: Provide EXACT numerical price targets. No placeholders like "X%" or "resistance".
+- Your stop loss and target MUST be real dollar amounts based on the spot price.
+- Response must be a clean JSON object ONLY. No markdown, no extra text.
+
+Output JSON:
+{"signal":"BUY"|"SELL"|"HOLD","reasoning":"4-5 sentences of deep technical + fundamental synthesis. Mention price levels, market structure, and news impact.","confidence":60-98,"stopLoss":"$XX.XX","target":"$XX.XX","timeframe":"${tf}","riskLevel":"LOW"|"MEDIUM"|"HIGH"}`;
 }
+
 
 async function fetchLivePrice(token: string) {
   try {
     const res = await getPrices();
-    const data = await res.json() as { prices?: Array<{ symbol: string; price: string; change: string }> };
-    const found = data.prices?.find(p => p.symbol === token.toUpperCase() + 'USDT');
+    const data = await res.json() as { prices?: Array<{ symbol: string; price: string; change: string }>, source?: string };
+    
+    // Check for SoDEX format (vBTC_vUSDC) or CoinGecko (BTCUSDT)
+    const isSodex = data.source === 'sodex';
+    const sym = isSodex ? `v${token.toUpperCase()}_vUSDC` : `${token.toUpperCase()}USDT`;
+    
+    const found = data.prices?.find(p => p.symbol === sym);
     if (found) {
       return { price: found.price, change: found.change };
     }
-    const sym = token.toUpperCase() + 'USDT';
-    const r = await fetch(`https://api.binance.com/api/v3/ticker/24hr?symbol=${sym}`);
+    
+    // Fallback to Binance
+    const bSym = token.toUpperCase() + 'USDT';
+    const r = await fetch(`https://api.binance.com/api/v3/ticker/24hr?symbol=${bSym}`);
     if (r.ok) {
       const d = await r.json() as { lastPrice: string; priceChangePercent: string };
       return { price: parseFloat(d.lastPrice).toFixed(4), change: parseFloat(d.priceChangePercent).toFixed(2) };
@@ -79,10 +106,13 @@ async function runGroq(prompt: string): Promise<AISignal> {
   if (!key) throw new Error('GROQ_API_KEY not set');
   const groq = new Groq({ apiKey: key });
   const c = await groq.chat.completions.create({
-    model: 'llama-3.1-8b-instant',
-    messages: [{ role: 'user', content: prompt }],
+    model: 'llama-3.3-70b-versatile',
+    messages: [
+      { role: 'system', content: 'You are an elite crypto trading analyst. Always respond with valid JSON only. No markdown.' },
+      { role: 'user', content: prompt },
+    ],
     temperature: 0.1,
-    max_tokens: 500,
+    max_tokens: 600,
   });
   const text = (c.choices[0]?.message?.content ?? '').replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
   return JSON.parse(text) as AISignal;
@@ -94,6 +124,46 @@ export async function POST(req: NextRequest) {
     if (!body.token) return NextResponse.json({ error: 'token required' }, { status: 400 });
 
     const { price, change } = await fetchLivePrice(body.token);
+
+    // ── Fetch ALL live SoDEX market prices for full market snapshot ──
+    let marketSnapshot = 'Market data unavailable.';
+    let globalMcap = 'N/A';
+    try {
+      const allPricesRes = await getPrices();
+      const allPricesData = await allPricesRes.json() as {
+        prices?: Array<{ symbol: string; price: string; change: string; volume: string }>;
+        globalMarketCap?: string;
+        source?: string;
+      };
+      if (allPricesData.prices && allPricesData.prices.length > 0) {
+        // Build a clean market table for the AI
+        const top = allPricesData.prices.slice(0, 15);
+        marketSnapshot = top.map(p => {
+          const sym = p.symbol.replace('USDT','').replace('_vUSDC','').replace('v','');
+          const ch = parseFloat(p.change) >= 0 ? `+${p.change}%` : `${p.change}%`;
+          return `${sym.padEnd(8)} $${p.price.padStart(12)}  ${ch.padStart(8)}  Vol:${p.volume}`;
+        }).join('\n');
+      }
+      if (allPricesData.globalMarketCap) globalMcap = allPricesData.globalMarketCap;
+    } catch (e) {
+      console.warn('Market snapshot fetch error:', e);
+    }
+
+    // Fetch latest news to inject into the prompt
+    let newsContext = '';
+    try {
+      const newsRes = await fetch(`${req.nextUrl.origin}/api/news`);
+      if (newsRes.ok) {
+        const newsData = await newsRes.json();
+        newsContext = (newsData.news || [])
+          .slice(0, 5)
+          .map((n: any) => `- ${n.title} [${n.source}]`)
+          .join('\n');
+      }
+    } catch (e) {
+      console.warn('Could not fetch news context for AI:', e);
+    }
+
     const prompt = buildPrompt(
       body.token.toUpperCase(),
       body.timeframe ?? '1H',
@@ -102,22 +172,32 @@ export async function POST(req: NextRequest) {
       change,
       body.buyZone ?? '',
       body.sellZone ?? '',
+      newsContext,
+      marketSnapshot,
+      globalMcap
     );
+
 
     let signal: AISignal;
     let modelUsed = 'gemini-2.5-flash';
 
+    // ── Dual-AI: run Gemini primary, Groq fallback ────────────────────────
     try {
       signal = await runGemini(prompt);
     } catch (e1) {
-      console.warn('Gemini failed, falling back to Groq:', e1);
+      console.warn('Gemini failed, falling back to Groq (llama-3.3-70b):', e1);
       try {
         signal = await runGroq(prompt);
-        modelUsed = 'llama-3.1-8b-instant';
+        modelUsed = 'llama-3.3-70b-versatile';
       } catch (e2: any) {
         console.error('All AI providers failed:', e2);
-        return NextResponse.json({ error: 'AI Analysis currently unavailable. ' + e2.message, price, change }, { status: 502 });
+        return NextResponse.json({ error: 'AI Analysis unavailable: ' + e2.message, price, change }, { status: 502 });
       }
+    }
+
+    // ── Confidence guard: if confidence < 60, flag as low-conviction ──────
+    if (signal.confidence < 60) {
+      signal.reasoning = `[Low Conviction — ${signal.confidence}%] ` + signal.reasoning;
     }
 
     // NEW: SEND TELEGRAM ALERT IF CHAT ID PROVIDED

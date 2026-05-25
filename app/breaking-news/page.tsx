@@ -13,6 +13,8 @@ function Skeleton() {
   return <div className="shimmer" style={{ height: 210, border: '1px solid #1e1e1e' }} />;
 }
 
+import SoEva from '@/components/SoEva';
+
 export default function BreakingNewsPage() {
   const [news, setNews] = useState<NewsItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -56,13 +58,9 @@ export default function BreakingNewsPage() {
       </div>
       <div style={{ textAlign: 'right', fontSize: 10, color: '#333', marginBottom: 20 }}>Powered by Gemini AI ✦</div>
 
-      {/* EXP Banner */}
-      <div style={{ background: 'linear-gradient(135deg,#12103a,#0e1a4a,#0b1535)', border: '1px solid #2a2060', borderRadius: 16, padding: '18px 24px', textAlign: 'center', marginBottom: 24 }}>
-        <p style={{ fontSize: 15, fontWeight: 700, color: '#fff', marginBottom: 6 }}>You got 30,000 SoSoValue EXP from your friend! 🎉</p>
-        <p style={{ fontSize: 12, color: '#7070bb', marginBottom: 16 }}>Sign up to SoSoValue now and unlock all the powerful features for free! 🚀</p>
-        <a href="https://sosovalue.com" target="_blank" rel="noopener noreferrer" style={{ display: 'inline-block', background: 'linear-gradient(90deg,#3b82f6,#6366f1)', color: '#fff', borderRadius: 10, padding: '10px 24px', fontSize: 13, fontWeight: 700, letterSpacing: '.06em', textDecoration: 'none', boxShadow: '0 0 20px rgba(99,102,241,0.4)' }}>
-          CLAIM ON SOSOVALUE #SOSOVALUE
-        </a>
+      {/* SoEva Angel Guide */}
+      <div style={{ marginBottom: 32 }}>
+        <SoEva />
       </div>
 
       {/* Grid */}

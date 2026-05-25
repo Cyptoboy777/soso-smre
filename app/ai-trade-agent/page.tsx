@@ -4,6 +4,8 @@ import { Info, CheckCircle } from 'lucide-react';
 import { doc, getDoc, serverTimestamp, setDoc } from 'firebase/firestore';
 import { useAuth } from '@/components/FirebaseProvider';
 import { db } from '@/lib/firebase';
+import { CopyTradePanel } from '@/components/SodexMarket';
+import SodexProfessionalChart from '@/components/SodexProfessionalChart';
 
 interface Holding { symbol: string; amount: number; avgBuyPrice: number; }
 interface Trade { id: string; symbol: string; type: 'BUY'|'SELL'; amount: number; price: number; total: number; timestamp: number; }
@@ -12,16 +14,6 @@ interface HoldingAnalytic extends Holding { currentPrice: number; currentValue: 
 interface Analytics { totalValue: number; holdingsValue: number; totalPnl: number; totalPnlPct: number; holdings: HoldingAnalytic[]; }
 
 const DEFAULT_PORTFOLIO: Portfolio = { usdc: 10000, holdings: {}, trades: [], initialBalance: 10000, soPoints: 0 };
-const ASSETS = [
-  'BTC / USDC', 'ETH / USDC', 'SOL / USDC', 'BNB / USDC', 'XRP / USDC', 'DOGE / USDC', 'ADA / USDC', 
-  'AVAX / USDC', 'SHIB / USDC', 'DOT / USDC', 'LINK / USDC', 'TRX / USDC', 'MATIC / USDC', 'NEAR / USDC', 
-  'BCH / USDC', 'LTC / USDC', 'ICP / USDC', 'UNI / USDC', 'PEPE / USDC', 'APT / USDC', 'ATOM / USDC', 
-  'XLM / USDC', 'XMR / USDC', 'ETC / USDC', 'ARB / USDC', 'FIL / USDC', 'RNDR / USDC', 'INJ / USDC', 
-  'MKR / USDC', 'SUI / USDC', 'OP / USDC', 'VET / USDC', 'GRT / USDC', 'FTM / USDC', 'THETA / USDC', 
-  'ALGO / USDC', 'SEI / USDC', 'TIA / USDC', 'FLOKI / USDC', 'GALA / USDC', 'EOS / USDC', 'AXS / USDC', 
-  'SAND / USDC', 'MANA / USDC', 'AAVE / USDC', 'QNT / USDC', 'NEO / USDC', 'CHZ / USDC', 'XTZ / USDC', 
-  'SOSO / USDC'
-];
 
 function Toast({ msg, onClose }: { msg: string; onClose: () => void }) {
   useEffect(() => { const id = setTimeout(onClose, 4500); return () => clearTimeout(id); }, [onClose]);
@@ -36,6 +28,8 @@ function Toast({ msg, onClose }: { msg: string; onClose: () => void }) {
 export default function AITradeAgentPage() {
   const { user } = useAuth();
   const [asset, setAsset] = useState('BTC / USDC');
+  const [assets, setAssets] = useState<string[]>(['BTC / USDC', 'ETH / USDC', 'SOL / USDC', 'BNB / USDC', 'SOSO / USDC']);
+  const [chartHeight] = useState(420);
   const [amount, setAmount] = useState('1000');
   const [limitPrice, setLimitPrice] = useState('77500');
   const [stopLoss, setStopLoss] = useState('');
@@ -125,7 +119,47 @@ export default function AITradeAgentPage() {
 
   useEffect(() => {
     const loadPortfolio = async () => {
-      // 1. Instant Local Storage Fallback (Zero Latency Paper Trading)
+      // 1. Restore Manual Trade Setup from LocalStorage (Persistence)
+      const savedSetup = localStorage.getItem('soso_trade_setup');
+      if (savedSetup) {
+        try {
+          const { asset: sA, amount: sAm, stopLoss: sSL, takeProfit: sTP } = JSON.parse(savedSetup);
+          if (sA) setAsset(sA);
+          if (sAm) setAmount(sAm);
+          if (sSL) setStopLoss(sSL);
+          if (sTP) setTakeProfit(sTP);
+        } catch {}
+      }
+
+      // 2. Fetch Assets first so we can map URL params correctly
+      try {
+        const ar = await fetch('/api/prices');
+        const ad = await ar.json();
+        if (ad.prices && ad.prices.length > 0) {
+          const symbols = ad.prices.map((p: any) => {
+            const base = p.symbol.includes('_') ? p.symbol.split('_')[0] : p.symbol.replace('USDT', '');
+            const quote = p.symbol.includes('_') ? 'vUSDC' : 'USDC';
+            return `${base} / ${quote}`;
+          });
+          const unique = Array.from(new Set(symbols)) as string[];
+          setAssets(unique);
+
+          // Handle URL params after assets are loaded (URL takes priority over saved setup)
+          const params = new URLSearchParams(window.location.search);
+          const pAsset = params.get('asset');
+          const pStopLoss = params.get('stopLoss');
+          const pTarget = params.get('target');
+
+          if (pAsset) {
+            const match = unique.find(a => a.startsWith(pAsset.toUpperCase()));
+            if (match) setAsset(match);
+          }
+          if (pStopLoss) setStopLoss(pStopLoss);
+          if (pTarget) setTakeProfit(pTarget);
+        }
+      } catch {}
+
+      // 3. Instant Local Storage Fallback (Zero Latency Paper Trading)
       const localData = localStorage.getItem('soso_paper_portfolio');
       if (localData) {
         try {
@@ -141,7 +175,7 @@ export default function AITradeAgentPage() {
         return;
       }
 
-      // 2. Cloud Sync (Permanent Storage)
+      // 4. Cloud Sync (Permanent Storage)
       try {
         const ref = doc(db, 'users', user.uid, 'private', 'portfolio');
         const snap = await getDoc(ref);
@@ -182,14 +216,18 @@ export default function AITradeAgentPage() {
     const fetchPrice = async () => {
       try {
         const r = await fetch('/api/prices');
-        const d = await r.json() as { prices: Array<{ symbol: string; price: string }> };
-        const found = d.prices?.find(p => p.symbol === baseCoin + 'USDT');
+        const d = await r.json() as { prices: Array<{ symbol: string; price: string }>; source?: string };
+        
+        // Find by base coin — handle both 'BTCUSDT' (CG) and 'vBTC_vUSDC' (SoDEX)
+        const isSodex = d.source === 'sodex';
+        const searchKey = isSodex ? `v${baseCoin}_vUSDC` : `${baseCoin}USDT`;
+        
+        const found = d.prices?.find(p => p.symbol === searchKey);
         if (found) {
           const p = parseFloat(found.price);
           setLimitPrice(p.toString());
           setLivePrice(p);
           
-          // Auto-calculate +3% Take Profit and -2% Stop Loss based on selected token
           const tp = p * 1.03;
           const sl = p * 0.98;
           const decimals = p < 1 ? 4 : (p < 100 ? 2 : 1);
@@ -200,23 +238,40 @@ export default function AITradeAgentPage() {
       } catch {}
     };
     fetchPrice();
+    const id = setInterval(fetchPrice, 10000);
+    return () => clearInterval(id);
   }, [baseCoin]);
 
-  // Read query parameters from AI Analysis redirect
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const params = new URLSearchParams(window.location.search);
-    const pAsset = params.get('asset');
-    const pStopLoss = params.get('stopLoss');
-    const pTarget = params.get('target');
 
-    if (pAsset) {
-      const match = ASSETS.find(a => a.startsWith(pAsset.toUpperCase()));
-      if (match) setAsset(match);
-    }
-    if (pStopLoss) setStopLoss(pStopLoss);
-    if (pTarget) setTakeProfit(pTarget);
-  }, []);
+  // Auto-update price/SL/TP on asset change
+  useEffect(() => {
+    if (!asset) return;
+    const base = asset.split(' / ')[0];
+    fetch('/api/prices')
+      .then(r => r.json())
+      .then(d => {
+        if (d.prices) {
+          const sym = asset.includes('vUSDC') ? `v${base}_vUSDC` : `${base}USDT`;
+          const found = d.prices.find((p: any) => p.symbol === sym);
+          if (found) {
+            const p = parseFloat(found.price);
+            setLimitPrice(p.toString());
+            // Only auto-calc if not coming from URL params (which we'd check via a ref or just let the first load be handled)
+            const params = new URLSearchParams(window.location.search);
+            if (!params.get('stopLoss')) {
+              setStopLoss((p * 0.98).toFixed(found.price.includes('.') ? found.price.split('.')[1].length : 2));
+              setTakeProfit((p * 1.03).toFixed(found.price.includes('.') ? found.price.split('.')[1].length : 2));
+            }
+          }
+        }
+      });
+  }, [asset]);
+
+  // Persist Manual Trade Setup to LocalStorage
+  useEffect(() => {
+    const setup = { asset, amount, stopLoss, takeProfit };
+    localStorage.setItem('soso_trade_setup', JSON.stringify(setup));
+  }, [asset, amount, stopLoss, takeProfit]);
 
   const setPct = (pct: number) => {
     if (tradeMode === 'SPOT' && spotSide === 'SELL') {
@@ -338,138 +393,91 @@ export default function AITradeAgentPage() {
   const totalValue = analytics?.totalValue ?? (portfolio.usdc + displayHoldings.reduce((s, h) => s + h.amount * h.avgBuyPrice, 0));
 
   return (
-    <div style={{ display: 'flex', height: '100%', overflow: 'hidden' }}>
+    <div style={{ display: 'grid', gridTemplateColumns: '1fr 360px 300px', height: '100%', overflow: 'hidden', gap: 0 }}>
 
-      {/* LEFT: Trading Interfaces */}
-      <div style={{ flex: 1, overflowY: 'auto', padding: 24 }}>
-        <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap', alignItems: 'flex-start' }}>
+      {/* LEFT COL: Chart + Order Book + Execution */}
+      <div style={{ overflowY: 'auto', padding: '16px 12px 16px 20px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            
+            {/* 1. SODEX PROFESSIONAL CHART */}
+            <SodexProfessionalChart
+              initialSymbol={baseCoin}
+              height={chartHeight}
+              onSymbolChange={(symbol, base) => {
+                const match = assets.find(a => a.startsWith(base + ' /'));
+                if (match) setAsset(match);
+              }}
+            />
 
-          {/* MANUAL TRADE SETUP */}
-          <div style={{ flex: 1, minWidth: 320, maxWidth: 500, background: '#0a0a0a', border: '1px solid #1a1a1a', borderRadius: 16, padding: 20 }}>
-            <div style={{ borderBottom: '1px solid var(--border-subtle)', paddingBottom: 12, marginBottom: 20, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <h2 style={{ fontSize: 12, fontWeight: 900, color: 'var(--text-primary)', margin: 0, letterSpacing: '.12em' }}>TERMINAL EXECUTION</h2>
-              <div style={{ display: 'flex', background: 'var(--bg-main)', padding: 3, borderRadius: 10, border: '1px solid var(--border-subtle)' }}>
-                {['SPOT', 'FUTURES'].map(m => (
-                  <button 
-                    key={m} 
-                    onClick={() => setTradeMode(m as any)}
-                    style={{ padding: '6px 12px', borderRadius: 8, border: 'none', background: tradeMode === m ? 'var(--bg-card)' : 'transparent', color: tradeMode === m ? 'var(--accent-orange)' : 'var(--text-dim)', fontSize: 10, fontWeight: 800, cursor: 'pointer', transition: '0.2s' }}
-                  >
-                    {m}
-                  </button>
+            {/* Order Book + Execution side by side */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.3fr', gap: 12 }}>
+              {/* ORDER BOOK */}
+              <div style={{ background: '#0a0a0a', border: '1px solid #1a1a1a', borderRadius: 14, padding: 14 }}>
+                <h3 style={{ fontSize: 10, fontWeight: 900, color: '#444', marginBottom: 12, letterSpacing: '.1em' }}>ORDER BOOK</h3>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 9, color: '#333', fontWeight: 700, marginBottom: 6 }}>
+                  <span>PRICE (USDC)</span><span>SIZE</span>
+                </div>
+                {[...Array(5)].map((_, i) => (
+                  <div key={`ask-${i}`} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, padding: '3px 0', position: 'relative' }}>
+                    <div style={{ position: 'absolute', right: 0, top: 0, bottom: 0, background: 'rgba(244,63,94,0.08)', width: `${25 + i * 10}%` }} />
+                    <span style={{ color: '#f43f5e', fontWeight: 700, zIndex: 1, fontFamily: 'monospace' }}>{(parseFloat(limitPrice) * (1 + (5-i) * 0.0001)).toFixed(2)}</span>
+                    <span style={{ color: '#333', zIndex: 1, fontFamily: 'monospace' }}>{(Math.random() * 2 + 0.1).toFixed(3)}</span>
+                  </div>
+                ))}
+                <div style={{ padding: '8px 0', textAlign: 'center', margin: '6px 0', borderTop: '1px solid #1a1a1a', borderBottom: '1px solid #1a1a1a' }}>
+                  <span style={{ fontSize: 14, fontWeight: 900, color: '#fff', fontFamily: 'monospace' }}>${parseFloat(limitPrice).toLocaleString()}</span>
+                </div>
+                {[...Array(5)].map((_, i) => (
+                  <div key={`bid-${i}`} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, padding: '3px 0', position: 'relative' }}>
+                    <div style={{ position: 'absolute', right: 0, top: 0, bottom: 0, background: 'rgba(0,230,118,0.08)', width: `${30 + i * 8}%` }} />
+                    <span style={{ color: '#00e676', fontWeight: 700, zIndex: 1, fontFamily: 'monospace' }}>{(parseFloat(limitPrice) * (1 - (i+1) * 0.0001)).toFixed(2)}</span>
+                    <span style={{ color: '#333', zIndex: 1, fontFamily: 'monospace' }}>{(Math.random() * 2 + 0.1).toFixed(3)}</span>
+                  </div>
                 ))}
               </div>
-            </div>
 
-          {/* Asset + Amount */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 20 }}>
-            <div>
-              <label style={{ fontSize: 10, color: '#444', fontWeight: 700, letterSpacing: '.1em', display: 'block', marginBottom: 8 }}>ASSET SELECTION</label>
-              <select value={asset} onChange={e => { setAsset(e.target.value); }} style={{ width: '100%', padding: '10px 12px', borderRadius: 8, background: '#111', border: '1px solid #2a2a2a', color: '#fff', fontSize: 14, fontWeight: 600, outline: 'none', cursor: 'pointer' }}>
-                {ASSETS.map(a => <option key={a}>{a}</option>)}
-              </select>
-            </div>
-            <div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                <label style={{ fontSize: 10, color: '#444', fontWeight: 700, letterSpacing: '.1em' }}>TRADE AMOUNT (USDC)</label>
-                <span style={{ fontSize: 11, color: '#f97316', fontWeight: 600 }}>
-                  Balance: ${(tradeMode === 'SPOT' && spotSide === 'SELL' 
-                    ? ((portfolio.holdings[baseCoin]?.amount || 0) * (parseFloat(limitPrice) || livePrice || 1)) 
-                    : portfolio.usdc).toLocaleString('en-US', { maximumFractionDigits: 2 })}
-                  {tradeMode === 'SPOT' && spotSide === 'SELL' && ` (${(portfolio.holdings[baseCoin]?.amount || 0).toFixed(4)} ${baseCoin})`}
-                </span>
-              </div>
-              <div style={{ display: 'flex', gap: 8 }}>
-                <input value={amount} onChange={e => setAmount(e.target.value)} style={{ flex: 1, padding: '10px 12px', borderRadius: 8, background: '#111', border: '1px solid #2a2a2a', color: '#fff', fontSize: 14, outline: 'none' }} />
-                <div style={{ display: 'flex', gap: 4 }}>
-                  {['25%', '50%', 'MAX'].map((p, i) => (
-                    <button key={p} onClick={() => setPct(i === 0 ? 25 : i === 1 ? 50 : 100)} style={{ padding: '0 8px', borderRadius: 6, background: '#161616', border: '1px solid #2a2a2a', color: '#888', fontSize: 11, cursor: 'pointer', fontWeight: 600 }}>{p}</button>
-                  ))}
+              {/* EXECUTION PANEL */}
+              <div style={{ background: '#0a0a0a', border: '1px solid #1a1a1a', borderRadius: 14, padding: 16 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+                  <h3 style={{ fontSize: 10, fontWeight: 900, color: '#444', margin: 0, letterSpacing: '.1em' }}>PLACE ORDER</h3>
+                  <div style={{ display: 'flex', background: '#111', padding: 3, borderRadius: 8 }}>
+                    {['BUY', 'SELL'].map(s => (
+                      <button key={s} onClick={() => setSpotSide(s as any)} style={{ padding: '4px 10px', borderRadius: 5, border: 'none', background: spotSide === s ? (s === 'BUY' ? '#00e676' : '#f43f5e') : 'transparent', color: spotSide === s ? '#000' : '#555', fontSize: 10, fontWeight: 900, cursor: 'pointer' }}>{s}</button>
+                    ))}
+                  </div>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  <div>
+                    <label style={{ fontSize: 9, color: '#444', fontWeight: 800, display: 'block', marginBottom: 6 }}>AMOUNT (USDC)</label>
+                    <input value={amount} onChange={e => setAmount(e.target.value)} style={{ width: '100%', padding: '10px 12px', borderRadius: 8, background: '#111', border: '1px solid #2a2a2a', color: '#fff', fontSize: 14, fontWeight: 700, outline: 'none', boxSizing: 'border-box' }} />
+                    <div style={{ display: 'flex', gap: 4, marginTop: 6 }}>
+                      {[25, 50, 75, 100].map(p => (
+                        <button key={p} onClick={() => setPct(p)} style={{ flex: 1, padding: '5px 0', borderRadius: 5, background: '#1a1a1a', border: '1px solid #252525', color: '#666', fontSize: 9, fontWeight: 700, cursor: 'pointer' }}>{p}%</button>
+                      ))}
+                    </div>
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                    <div>
+                      <label style={{ fontSize: 9, color: '#f43f5e', fontWeight: 800, display: 'block', marginBottom: 4 }}>STOP LOSS</label>
+                      <input value={stopLoss} onChange={e => setStopLoss(e.target.value)} style={{ width: '100%', padding: '8px', borderRadius: 7, background: '#111', border: '1px solid #2a1a1a', color: '#f43f5e', fontSize: 12, fontWeight: 700, outline: 'none', boxSizing: 'border-box' }} />
+                    </div>
+                    <div>
+                      <label style={{ fontSize: 9, color: '#00e676', fontWeight: 800, display: 'block', marginBottom: 4 }}>TAKE PROFIT</label>
+                      <input value={takeProfit} onChange={e => setTakeProfit(e.target.value)} style={{ width: '100%', padding: '8px', borderRadius: 7, background: '#111', border: '1px solid #1a2a1a', color: '#00e676', fontSize: 12, fontWeight: 700, outline: 'none', boxSizing: 'border-box' }} />
+                    </div>
+                  </div>
+                  <button onClick={confirmBuy} disabled={tradeStatus !== 'IDLE'} style={{ width: '100%', padding: '14px', borderRadius: 10, background: spotSide === 'BUY' ? 'linear-gradient(135deg,#00e676,#00c853)' : 'linear-gradient(135deg,#f43f5e,#e11d48)', color: '#000', border: 'none', fontSize: 13, fontWeight: 900, cursor: 'pointer', boxShadow: spotSide === 'BUY' ? '0 6px 20px rgba(0,230,118,0.25)' : '0 6px 20px rgba(244,63,94,0.25)' }}>
+                    {tradeStatus === 'SUBMITTING' ? 'EXECUTING...' : `CONFIRM ${spotSide}`}
+                  </button>
                 </div>
               </div>
             </div>
           </div>
+        </div>
 
-          {/* Limit Price, Stop Loss, Take Profit */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 14, marginBottom: 20 }}>
-            {[
-              { label: 'LIMIT PRICE', suffix: '↗', suffixColor: 'var(--accent-orange)', val: limitPrice, set: setLimitPrice, ph: '77500' },
-              { label: 'STOP-LOSS', suffix: '↘', suffixColor: 'var(--accent-red)', val: stopLoss, set: setStopLoss, ph: 'Optional' },
-              { label: 'TAKE-PROFIT', suffix: '↗', suffixColor: 'var(--accent-green)', val: takeProfit, set: setTakeProfit, ph: 'Optional' },
-            ].map(f => (
-              <div key={f.label}>
-                <label style={{ fontSize: 9, color: 'var(--text-dim)', fontWeight: 800, letterSpacing: '.12em', display: 'flex', alignItems: 'center', gap: 4, marginBottom: 8 }}>
-                  {f.label} <span style={{ color: f.suffixColor }}>{f.suffix}</span>
-                </label>
-                <input value={f.val} onChange={e => f.set(e.target.value)} placeholder={f.ph} style={{ width: '100%', padding: '10px 12px', borderRadius: 10, background: 'var(--bg-main)', border: '1px solid var(--border-bold)', color: f.val ? 'var(--text-primary)' : 'var(--text-dim)', fontSize: 14, fontWeight: 600, outline: 'none' }} />
-              </div>
-            ))}
-          </div>
-
-          {/* SPOT SPECIFIC: BUY / SELL */}
-          {tradeMode === 'SPOT' && (
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 20 }}>
-               <button onClick={() => setSpotSide('BUY')} style={{ padding: '10px', borderRadius: 10, border: '1px solid', borderColor: spotSide === 'BUY' ? 'var(--accent-green)' : 'var(--border-subtle)', background: spotSide === 'BUY' ? 'rgba(0,230,118,0.1)' : 'transparent', color: spotSide === 'BUY' ? 'var(--accent-green)' : 'var(--text-dim)', fontSize: 11, fontWeight: 900, cursor: 'pointer', transition: '0.2s' }}>BUY {baseCoin}</button>
-               <button onClick={() => setSpotSide('SELL')} style={{ padding: '10px', borderRadius: 10, border: '1px solid', borderColor: spotSide === 'SELL' ? 'var(--accent-red)' : 'var(--border-subtle)', background: spotSide === 'SELL' ? 'rgba(244,63,94,0.1)' : 'transparent', color: spotSide === 'SELL' ? 'var(--accent-red)' : 'var(--text-dim)', fontSize: 11, fontWeight: 900, cursor: 'pointer', transition: '0.2s' }}>SELL {baseCoin}</button>
-            </div>
-          )}
-
-          {/* FUTURES SPECIFIC: Leverage & Side */}
-          {tradeMode === 'FUTURES' && (
-            <div style={{ background: 'var(--bg-main)', border: '1px solid var(--border-subtle)', borderRadius: 14, padding: 16, marginBottom: 20 }}>
-               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-                  <label style={{ fontSize: 10, color: 'var(--text-dim)', fontWeight: 800, letterSpacing: '.12em' }}>ISOLATED LEVERAGE: <span style={{ color: 'var(--accent-orange)' }}>{leverage}x</span></label>
-                  <input type="range" min="1" max="50" value={leverage} onChange={e => setLeverage(parseInt(e.target.value))} style={{ flex: 1, marginLeft: 20, accentColor: 'var(--accent-orange)' }} />
-               </div>
-               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 16 }}>
-                  <button onClick={() => setSide('LONG')} style={{ padding: '10px', borderRadius: 10, border: '1px solid', borderColor: side === 'LONG' ? 'var(--accent-green)' : 'var(--border-subtle)', background: side === 'LONG' ? 'rgba(0,230,118,0.1)' : 'transparent', color: side === 'LONG' ? 'var(--accent-green)' : 'var(--text-dim)', fontSize: 11, fontWeight: 900, cursor: 'pointer' }}>LONG</button>
-                  <button onClick={() => setSide('SHORT')} style={{ padding: '10px', borderRadius: 10, border: '1px solid', borderColor: side === 'SHORT' ? 'var(--accent-red)' : 'var(--border-subtle)', background: side === 'SHORT' ? 'rgba(244,63,94,0.1)' : 'transparent', color: side === 'SHORT' ? 'var(--accent-red)' : 'var(--text-dim)', fontSize: 11, fontWeight: 900, cursor: 'pointer' }}>SHORT</button>
-               </div>
-               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, fontWeight: 700 }}>
-                  <span style={{ color: 'var(--text-dim)' }}>EST. LIQ PRICE:</span>
-                  <span style={{ color: 'var(--accent-red)' }}>${(parseFloat(limitPrice) * (side === 'LONG' ? (1 - 0.8/leverage) : (1 + 0.8/leverage))).toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
-               </div>
-            </div>
-          )}
-
-          {/* Info */}
-          <div style={{ display: 'flex', gap: 10, background: 'rgba(59,130,246,0.06)', border: '1px solid rgba(59,130,246,0.2)', borderRadius: 10, padding: '12px 14px', marginBottom: 20 }}>
-            <Info size={15} color="#3b82f6" style={{ flexShrink: 0, marginTop: 1 }} />
-            <p style={{ fontSize: 12, color: '#666', lineHeight: 1.55 }}>Orders are executed as Market Orders on the SoSo Smre Testnet. Stop-Loss and Take-Profit orders will be triggered automatically when the terminal price crosses the target.</p>
-          </div>
-
-          {/* Confirm Trade */}
-          <button 
-            onClick={confirmBuy} 
-            disabled={tradeStatus !== 'IDLE'} 
-            style={{ 
-              width: '100%', 
-              padding: 16, 
-              borderRadius: 12, 
-              background: tradeStatus === 'SUBMITTING' ? 'var(--bg-main)' : tradeStatus === 'SUCCESS' ? 'var(--accent-green)' : (tradeMode === 'FUTURES' ? (side === 'LONG' ? 'var(--accent-green)' : 'var(--accent-red)') : (spotSide === 'BUY' ? 'var(--accent-green)' : 'var(--accent-red)')), 
-              color: tradeStatus === 'SUBMITTING' ? 'var(--text-primary)' : '#000', 
-              border: tradeStatus === 'SUBMITTING' ? '1px solid var(--border-bold)' : 'none', 
-              fontSize: 15, 
-              fontWeight: 900, 
-              letterSpacing: '.06em', 
-              cursor: tradeStatus !== 'IDLE' ? 'not-allowed' : 'pointer', 
-              opacity: portfolioLoaded ? 1 : 0.6, 
-              boxShadow: tradeStatus !== 'IDLE' ? 'none' : `0 0 28px ${tradeMode === 'FUTURES' ? (side === 'LONG' ? 'rgba(0,230,118,0.3)' : 'rgba(244,63,94,0.3)') : (spotSide === 'BUY' ? 'rgba(0,230,118,0.3)' : 'rgba(244,63,94,0.3)')}`,
-              display: 'flex', 
-              alignItems: 'center', 
-              justifyContent: 'center', 
-              gap: 8, 
-              transition: 'all 0.2s' 
-            }}
-          >
-            {tradeStatus === 'SUBMITTING' ? <span className="spin" style={{ display: 'inline-block', fontSize: 18 }}>⟳</span> : null}
-            {tradeStatus === 'SUCCESS' ? <CheckCircle size={18} color="#000" /> : null}
-            {tradeStatus === 'SUCCESS' ? 'ORDER FILLED' : (tradeMode === 'SPOT' ? `CONFIRM ${spotSide} ${baseCoin}` : `OPEN ${side} ${baseCoin} ${leverage}x`)}
-          </button>
-          </div>
-
-          {/* AI TRADING AGENT (SOSO Inspired) */}
-          <div style={{ flex: 1, minWidth: 320, maxWidth: 500, background: 'linear-gradient(180deg, #0a101d 0%, #050505 100%)', border: '1px solid #1e293b', borderRadius: 16, padding: 20, boxShadow: '0 8px 32px rgba(0,0,0,0.4)' }}>
+      {/* MIDDLE COL: AI Agent */}
+      <div style={{ background: 'linear-gradient(180deg,#0a101d,#050505)', borderLeft: '1px solid #1e293b', borderRight: '1px solid #1e293b', overflowY: 'auto', padding: 16 }}>
+        <div style={{ background: 'transparent' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #1e293b', paddingBottom: 12, marginBottom: 20 }}>
               <h2 style={{ fontSize: 14, fontWeight: 800, color: '#60a5fa', display: 'flex', alignItems: 'center', gap: 8, margin: 0, letterSpacing: '.05em' }}>
                 <div className={aiActive ? 'pulse-blob' : ''} style={{ width: 8, height: 8, borderRadius: '50%', background: aiActive ? '#3b82f6' : '#4b5563', boxShadow: aiActive ? '0 0 10px #3b82f6' : 'none', transition: 'all 0.3s' }} />
@@ -557,12 +565,13 @@ export default function AITradeAgentPage() {
                 {aiActive ? 'STOP GENIUS AGENT' : 'START FREQTRADE AI AGENT'}
               </button>
           </div>
-
         </div>
-      </div>
 
-      {/* RIGHT: Portfolio + News */}
-      <div style={{ width: 340, background: '#0d0d0d', borderLeft: '1px solid #1e1e1e', display: 'flex', flexDirection: 'column', overflowY: 'auto', flexShrink: 0 }}>
+      {/* RIGHT COL: Portfolio + News */}
+      <div style={{ background: '#0d0d0d', borderLeft: '1px solid #1e1e1e', overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
+
+        {/* Portfolio content inside RIGHT COL */}
+        <div style={{ flex: 1 }}>
         {/* News */}
         <div style={{ padding: '16px 16px 0' }}>
           {news.map((n, i) => (
@@ -613,6 +622,7 @@ export default function AITradeAgentPage() {
             <span style={{ fontSize: 11, color: '#555', fontWeight: 700, letterSpacing: '.08em' }}>TOTAL VALUE</span>
             <span style={{ fontSize: 18, fontWeight: 800, color: '#fff', fontFamily: 'monospace' }}>${totalValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
           </div>
+        </div>
         </div>
       </div>
 

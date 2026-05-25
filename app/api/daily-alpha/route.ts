@@ -40,7 +40,8 @@ Respond in this EXACT JSON format:
   "marketMood": "Bullish|Bearish|Neutral",
   "summary": "One line summary",
   "buys": [{"symbol":"BTC","entryRange":"$X","target":"$Z","stopLoss":"$W","riskLevel":"MEDIUM","reason":"..."}],
-  "avoid": {"symbol":"TOKEN","reason":"..."},
+  "avoid": [{"symbol":"TOKEN","reason":"..."}],
+  "insight": "One macro insight for today.",
   "dyor": "DYOR."
 }`;
 
@@ -62,10 +63,13 @@ Respond in this EXACT JSON format:
       // 4b. Fallback: Groq (LLaMA 3.1)
       const groq = new Groq({ apiKey: process.env.GROQ_API_KEY ?? '' });
       const completion = await groq.chat.completions.create({
-        messages: [{ role: 'user', content: prompt }],
-        model: 'llama-3.1-8b-instant',
+        messages: [
+          { role: 'system', content: 'You are an elite crypto research analyst. Respond only with valid JSON, no markdown.' },
+          { role: 'user', content: prompt },
+        ],
+        model: 'llama-3.3-70b-versatile',
         temperature: 0.1,
-        max_tokens: 1000,
+        max_tokens: 1200,
       });
       const raw = completion.choices[0]?.message?.content ?? '';
       const clean = raw.replace(/```json|```/g, '').trim();

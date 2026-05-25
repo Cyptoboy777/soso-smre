@@ -1,0 +1,875 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>SoSo Smre — Elite AI Research Infrastructure</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet"/>
+<style>
+:root{
+  --bg-base:#050510;--bg-card:rgba(10,10,30,0.7);--bg-sidebar:rgba(6,6,20,0.95);
+  --border:rgba(120,80,255,0.15);--text-primary:#f0f0ff;--text-secondary:#8888aa;--text-dim:#44446a;
+  --accent:#7c3aed;--accent2:#06b6d4;--accent3:#f97316;--accent-green:#00e676;--accent-red:#f43f5e;
+  --glow:rgba(124,58,237,0.4);--card-shadow:0 8px 40px rgba(0,0,0,0.6);
+  --neon-purple:rgba(139,92,246,0.5);--neon-cyan:rgba(6,182,212,0.4);
+}
+[data-theme="light"]{
+  --bg-base:#f0f0fa;--bg-card:rgba(255,255,255,0.85);--bg-sidebar:rgba(240,240,250,0.98);
+  --border:rgba(124,58,237,0.2);--text-primary:#1a1a3a;--text-secondary:#555577;--text-dim:#9999bb;
+  --accent:#7c3aed;--accent2:#0891b2;--accent3:#ea580c;--glow:rgba(124,58,237,0.2);
+  --card-shadow:0 8px 40px rgba(100,80,200,0.12);
+}
+*{margin:0;padding:0;box-sizing:border-box;transition:background 0.35s,color 0.35s,border-color 0.35s;}
+body{font-family:'Inter',sans-serif;background:var(--bg-base);color:var(--text-primary);overflow-x:hidden;min-height:100vh;}
+::-webkit-scrollbar{width:4px;height:4px;}
+::-webkit-scrollbar-track{background:transparent;}
+::-webkit-scrollbar-thumb{background:var(--accent);border-radius:4px;}
+
+/* ─── BG Effects ─── */
+.bg-canvas{position:fixed;inset:0;pointer-events:none;z-index:0;overflow:hidden;}
+.orb{position:absolute;border-radius:50%;filter:blur(80px);animation:orbFloat 8s ease-in-out infinite alternate;}
+.orb1{width:500px;height:500px;background:radial-gradient(circle,rgba(124,58,237,0.18),transparent);top:-100px;left:-100px;animation-delay:0s;}
+.orb2{width:400px;height:400px;background:radial-gradient(circle,rgba(6,182,212,0.12),transparent);bottom:-80px;right:-80px;animation-delay:-4s;}
+.orb3{width:300px;height:300px;background:radial-gradient(circle,rgba(249,115,22,0.08),transparent);top:40%;right:25%;animation-delay:-2s;}
+@keyframes orbFloat{0%{transform:translate(0,0) scale(1);}100%{transform:translate(30px,20px) scale(1.1);}}
+
+.scanlines{position:fixed;inset:0;pointer-events:none;z-index:0;background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(120,80,255,0.015) 2px,rgba(120,80,255,0.015) 4px);}
+
+/* ─── Glass ─── */
+.glass{background:var(--bg-card);backdrop-filter:blur(20px) saturate(1.5);-webkit-backdrop-filter:blur(20px) saturate(1.5);border:1px solid var(--border);border-radius:16px;box-shadow:var(--card-shadow);}
+.glass-sm{background:var(--bg-card);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border:1px solid var(--border);border-radius:10px;}
+
+/* ─── Layout ─── */
+#app{display:flex;flex-direction:column;min-height:100vh;position:relative;z-index:1;}
+.main-layout{display:flex;flex:1;overflow:hidden;}
+#sidebar{width:240px;flex-shrink:0;background:var(--bg-sidebar);border-right:1px solid var(--border);display:flex;flex-direction:column;transition:width 0.3s,transform 0.3s;z-index:30;}
+#content{flex:1;overflow-y:auto;padding:24px;}
+#right-panel{width:320px;flex-shrink:0;background:var(--bg-sidebar);border-left:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden;}
+
+/* ─── Navbar ─── */
+#navbar{height:56px;background:var(--bg-sidebar);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 20px;gap:16px;position:sticky;top:0;z-index:50;flex-shrink:0;}
+.logo-text{font-weight:900;font-size:18px;background:linear-gradient(135deg,#a78bfa,#22d3ee,#f97316);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;letter-spacing:-0.04em;white-space:nowrap;}
+
+/* ─── Ticker ─── */
+.ticker-wrap{flex:1;overflow:hidden;position:relative;}
+.ticker-wrap::before,.ticker-wrap::after{content:'';position:absolute;top:0;bottom:0;width:40px;z-index:2;}
+.ticker-wrap::before{left:0;background:linear-gradient(to right,var(--bg-sidebar),transparent);}
+.ticker-wrap::after{right:0;background:linear-gradient(to left,var(--bg-sidebar),transparent);}
+.ticker{display:flex;gap:24px;animation:tickerScroll 35s linear infinite;white-space:nowrap;}
+.ticker:hover{animation-play-state:paused;}
+@keyframes tickerScroll{0%{transform:translateX(0);}100%{transform:translateX(-50%);}}
+.ticker-item{display:flex;align-items:center;gap:6px;font-size:11px;font-weight:700;font-family:'JetBrains Mono',monospace;}
+.ticker-up{color:var(--accent-green);}
+.ticker-down{color:var(--accent-red);}
+
+/* ─── Nav Items ─── */
+.nav-item{display:flex;align-items:center;gap:10px;padding:9px 14px;border-radius:10px;cursor:pointer;font-size:13px;font-weight:500;color:var(--text-secondary);transition:all 0.2s;margin:1px 8px;position:relative;border:1px solid transparent;}
+.nav-item:hover{color:var(--text-primary);background:rgba(124,58,237,0.08);border-color:rgba(124,58,237,0.12);}
+.nav-item.active{color:#a78bfa;background:linear-gradient(90deg,rgba(124,58,237,0.15),rgba(6,182,212,0.05));border-color:rgba(124,58,237,0.2);font-weight:700;}
+.nav-item.active::before{content:'';position:absolute;left:0;top:50%;transform:translateY(-50%);width:3px;height:20px;background:linear-gradient(to bottom,#a78bfa,#22d3ee);border-radius:0 3px 3px 0;}
+.nav-icon{width:18px;height:18px;flex-shrink:0;}
+
+/* ─── Cards ─── */
+.card{background:var(--bg-card);backdrop-filter:blur(20px);border:1px solid var(--border);border-radius:16px;padding:20px;box-shadow:var(--card-shadow);transition:all 0.3s cubic-bezier(0.34,1.56,0.64,1);transform-style:preserve-3d;cursor:default;}
+.card:hover{transform:translateY(-4px) scale(1.01);box-shadow:0 20px 60px rgba(0,0,0,0.5),0 0 0 1px rgba(124,58,237,0.2),0 0 40px rgba(124,58,237,0.1);border-color:rgba(124,58,237,0.3);}
+.card-tilt{transform-style:preserve-3d;}
+
+/* ─── Buttons ─── */
+.btn-primary{padding:9px 18px;border-radius:10px;border:none;cursor:pointer;font-weight:800;font-size:12px;letter-spacing:.05em;position:relative;overflow:hidden;transition:all 0.3s;}
+.btn-primary::after{content:'';position:absolute;inset:0;background:rgba(255,255,255,0);transition:background 0.2s;}
+.btn-primary:hover::after{background:rgba(255,255,255,0.08);}
+.btn-primary:active{transform:scale(0.96);}
+.btn-buy{background:linear-gradient(135deg,#059669,#00e676);color:#000;box-shadow:0 4px 20px rgba(0,230,118,0.3);}
+.btn-sell{background:linear-gradient(135deg,#be123c,#f43f5e);color:#fff;box-shadow:0 4px 20px rgba(244,63,94,0.3);}
+.btn-ai{background:linear-gradient(135deg,#7c3aed,#06b6d4);color:#fff;box-shadow:0 4px 20px rgba(124,58,237,0.4);}
+.btn-outline{background:transparent;border:1px solid var(--border);color:var(--text-primary);padding:7px 14px;border-radius:8px;cursor:pointer;font-size:11px;font-weight:700;transition:all 0.2s;}
+.btn-outline:hover{border-color:var(--accent);color:#a78bfa;background:rgba(124,58,237,0.06);}
+
+/* ─── Confidence Bar ─── */
+.conf-bar-wrap{background:rgba(255,255,255,0.05);border-radius:99px;height:6px;overflow:hidden;}
+.conf-bar{height:100%;border-radius:99px;transition:width 1.2s cubic-bezier(0.34,1.56,0.64,1);}
+.conf-bar-buy{background:linear-gradient(to right,#059669,#00e676);box-shadow:0 0 8px rgba(0,230,118,0.5);}
+.conf-bar-sell{background:linear-gradient(to right,#be123c,#f43f5e);box-shadow:0 0 8px rgba(244,63,94,0.5);}
+
+/* ─── Sections ─── */
+.section{display:none;animation:fadeSlideUp 0.4s ease-out;}
+.section.active{display:block;}
+@keyframes fadeSlideUp{from{opacity:0;transform:translateY(16px);}to{opacity:1;transform:translateY(0);}}
+
+/* ─── Stat Card ─── */
+.stat-card{padding:16px 20px;border-radius:14px;background:var(--bg-card);border:1px solid var(--border);position:relative;overflow:hidden;}
+.stat-card::before{content:'';position:absolute;top:0;right:0;width:60px;height:60px;border-radius:50%;filter:blur(30px);opacity:0.5;}
+.stat-card.purple::before{background:#7c3aed;}
+.stat-card.cyan::before{background:#06b6d4;}
+.stat-card.orange::before{background:#f97316;}
+.stat-card.green::before{background:#00e676;}
+
+/* ─── News Card ─── */
+.news-card{padding:16px;border-radius:12px;background:var(--bg-card);border:1px solid var(--border);transition:all 0.25s;cursor:pointer;}
+.news-card:hover{border-color:rgba(124,58,237,0.35);background:rgba(124,58,237,0.04);transform:translateX(4px);}
+.news-badge{padding:2px 8px;border-radius:99px;font-size:9px;font-weight:900;letter-spacing:.1em;}
+
+/* ─── Signal Card ─── */
+.signal-card{padding:20px;border-radius:14px;background:var(--bg-card);border:1px solid var(--border);transition:all 0.3s;}
+.signal-card:hover{transform:translateY(-3px);box-shadow:0 16px 48px rgba(0,0,0,0.4);}
+
+/* ─── Portfolio Table ─── */
+.ptable{width:100%;border-collapse:collapse;}
+.ptable th{font-size:9px;font-weight:800;letter-spacing:.12em;color:var(--text-dim);padding:8px 12px;text-align:left;border-bottom:1px solid var(--border);}
+.ptable td{padding:12px 12px;font-size:12px;border-bottom:1px solid rgba(255,255,255,0.03);font-family:'JetBrains Mono',monospace;}
+.ptable tr:hover td{background:rgba(124,58,237,0.04);}
+.pnl-pos{color:var(--accent-green);}
+.pnl-neg{color:var(--accent-red);}
+
+/* ─── SoDoggy ─── */
+#sodoggy-panel{display:flex;flex-direction:column;height:100%;}
+.dog-scene{height:220px;display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden;background:radial-gradient(ellipse at 50% 80%,rgba(124,58,237,0.15),transparent 70%);}
+.dog-container{position:relative;width:140px;height:140px;cursor:pointer;}
+.dog-body{width:100%;height:100%;animation:dogIdle 3s ease-in-out infinite;}
+@keyframes dogIdle{0%,100%{transform:translateY(0) rotate(-1deg);}50%{transform:translateY(-8px) rotate(1deg);}}
+.dog-shadow{width:80px;height:16px;background:radial-gradient(ellipse,rgba(124,58,237,0.4),transparent);border-radius:50%;position:absolute;bottom:-10px;left:50%;transform:translateX(-50%);animation:shadowPulse 3s ease-in-out infinite;}
+@keyframes shadowPulse{0%,100%{transform:translateX(-50%) scaleX(1);}50%{transform:translateX(-50%) scaleX(0.8);}}
+.dog-talk-bubble{position:absolute;top:-20px;right:-60px;background:linear-gradient(135deg,rgba(124,58,237,0.9),rgba(6,182,212,0.8));border-radius:12px 12px 12px 0;padding:6px 10px;font-size:10px;font-weight:700;color:#fff;white-space:nowrap;animation:bubblePop 0.3s cubic-bezier(0.34,1.56,0.64,1);display:none;}
+@keyframes bubblePop{from{transform:scale(0);opacity:0;}to{transform:scale(1);opacity:1;}}
+.dog-glow{position:absolute;inset:-20px;border-radius:50%;background:radial-gradient(circle,rgba(124,58,237,0.2),transparent);animation:glowPulse 2s ease-in-out infinite;}
+@keyframes glowPulse{0%,100%{opacity:0.5;}50%{opacity:1;}}
+.dog-ears{animation:earWiggle 2s ease-in-out infinite;}
+@keyframes earWiggle{0%,100%{transform:rotate(0);}25%{transform:rotate(-5deg);}75%{transform:rotate(5deg);}}
+
+.chat-messages{flex:1;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:8px;}
+.chat-msg{padding:10px 12px;border-radius:10px;font-size:12px;line-height:1.5;max-width:85%;animation:msgIn 0.3s ease-out;}
+@keyframes msgIn{from{opacity:0;transform:translateY(6px);}to{opacity:1;transform:translateY(0);}}
+.msg-dog{background:linear-gradient(135deg,rgba(124,58,237,0.15),rgba(6,182,212,0.1));border:1px solid rgba(124,58,237,0.2);align-self:flex-start;border-radius:4px 10px 10px 10px;}
+.msg-user{background:rgba(249,115,22,0.12);border:1px solid rgba(249,115,22,0.2);align-self:flex-end;border-radius:10px 4px 10px 10px;color:#fdba74;}
+.msg-thinking{display:flex;gap:4px;align-items:center;padding:10px 14px;}
+.dot-pulse{width:7px;height:7px;border-radius:50%;background:#a78bfa;animation:dotPulse 1.2s ease-in-out infinite;}
+.dot-pulse:nth-child(2){animation-delay:0.2s;}
+.dot-pulse:nth-child(3){animation-delay:0.4s;}
+@keyframes dotPulse{0%,80%,100%{transform:scale(0.6);opacity:0.4;}40%{transform:scale(1);opacity:1;}}
+
+.chat-input-wrap{padding:12px;border-top:1px solid var(--border);display:flex;gap:8px;}
+.chat-input{flex:1;background:rgba(255,255,255,0.04);border:1px solid var(--border);border-radius:10px;padding:9px 12px;font-size:12px;color:var(--text-primary);outline:none;font-family:'Inter',sans-serif;transition:border-color 0.2s;}
+.chat-input:focus{border-color:rgba(124,58,237,0.4);}
+.chat-input::placeholder{color:var(--text-dim);}
+.chat-send{width:34px;height:34px;border-radius:10px;border:none;background:linear-gradient(135deg,#7c3aed,#06b6d4);cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all 0.2s;flex-shrink:0;}
+.chat-send:hover{transform:scale(1.08);box-shadow:0 4px 16px rgba(124,58,237,0.4);}
+.chat-send:active{transform:scale(0.95);}
+
+/* ─── Ripple ─── */
+.ripple{position:absolute;border-radius:50%;background:rgba(255,255,255,0.25);transform:scale(0);animation:rippleAnim 0.6s linear;pointer-events:none;}
+@keyframes rippleAnim{to{transform:scale(4);opacity:0;}}
+
+/* ─── Night Toggle ─── */
+.theme-toggle{width:44px;height:24px;border-radius:12px;background:rgba(124,58,237,0.3);border:1px solid rgba(124,58,237,0.4);position:relative;cursor:pointer;flex-shrink:0;transition:background 0.3s;}
+.theme-toggle.light{background:rgba(249,115,22,0.3);}
+.toggle-dot{position:absolute;top:2px;left:2px;width:18px;height:18px;border-radius:50%;background:#a78bfa;transition:transform 0.3s,background 0.3s;}
+[data-theme="light"] .toggle-dot{transform:translateX(20px);background:#f97316;}
+
+/* ─── Backtest ─── */
+.backtest-bar{height:8px;border-radius:4px;background:linear-gradient(to right,#7c3aed,#22d3ee);position:relative;overflow:hidden;}
+.backtest-bar::after{content:'';position:absolute;inset:0;background:linear-gradient(90deg,transparent,rgba(255,255,255,0.3),transparent);animation:shimmer 2s linear infinite;}
+@keyframes shimmer{0%{transform:translateX(-100%);}100%{transform:translateX(100%);}}
+
+/* ─── Live dot ─── */
+.live-dot{width:7px;height:7px;border-radius:50%;background:var(--accent-green);box-shadow:0 0 8px var(--accent-green);animation:livePulse 1.5s ease-in-out infinite;}
+@keyframes livePulse{0%,100%{box-shadow:0 0 4px var(--accent-green);}50%{box-shadow:0 0 12px var(--accent-green),0 0 20px rgba(0,230,118,0.3);}}
+
+/* ─── Mobile ─── */
+@media(max-width:1100px){#right-panel{display:none;}}
+@media(max-width:768px){
+  #sidebar{position:fixed;left:-240px;top:0;bottom:0;z-index:100;}
+  #sidebar.open{left:0;}
+  #content{padding:16px;}
+}
+</style>
+</head>
+<body>
+<!-- BG -->
+<div class="bg-canvas">
+  <div class="orb orb1"></div>
+  <div class="orb orb2"></div>
+  <div class="orb orb3"></div>
+</div>
+<div class="scanlines"></div>
+
+<div id="app">
+  <!-- NAVBAR -->
+  <nav id="navbar">
+    <button id="menuBtn" class="btn-outline" style="display:none;padding:6px 10px;border-radius:8px;" onclick="toggleSidebar()">☰</button>
+    <div class="logo-text">SoSo Smre</div>
+    <div style="font-size:9px;color:var(--text-dim);font-weight:800;letter-spacing:.15em;white-space:nowrap;">SMRE</div>
+
+    <!-- Ticker -->
+    <div class="ticker-wrap">
+      <div class="ticker" id="ticker"></div>
+    </div>
+
+    <!-- Signal badge -->
+    <div style="display:flex;align-items:center;gap:6px;background:rgba(0,230,118,0.08);border:1px solid rgba(0,230,118,0.2);border-radius:99px;padding:5px 12px;white-space:nowrap;">
+      <div class="live-dot"></div>
+      <span style="font-size:10px;font-weight:900;color:var(--accent-green);">3 BUY Signals</span>
+    </div>
+
+    <!-- Theme toggle -->
+    <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">
+      <span style="font-size:10px;color:var(--text-dim);font-weight:700;">☀</span>
+      <div class="theme-toggle" id="themeToggle" onclick="toggleTheme()"><div class="toggle-dot"></div></div>
+      <span style="font-size:10px;color:var(--text-dim);font-weight:700;">🌙</span>
+    </div>
+
+    <!-- Wallet -->
+    <div style="background:rgba(124,58,237,0.1);border:1px solid rgba(124,58,237,0.25);border-radius:10px;padding:6px 12px;font-size:11px;font-weight:800;color:#a78bfa;white-space:nowrap;cursor:pointer;flex-shrink:0;" onclick="connectWallet(this)">
+      🔐 Connect
+    </div>
+  </nav>
+
+  <div class="main-layout">
+    <!-- SIDEBAR -->
+    <aside id="sidebar">
+      <div style="padding:16px 8px;flex:1;overflow-y:auto;">
+        <div style="padding:4px 14px 8px;font-size:9px;color:var(--text-dim);font-weight:800;letter-spacing:.18em;">NAVIGATION</div>
+        <div id="navItems"></div>
+        <div style="margin-top:20px;padding-top:14px;border-top:1px solid var(--border);padding:14px 14px 0;">
+          <div style="font-size:9px;color:var(--text-dim);font-weight:800;letter-spacing:.18em;margin-bottom:10px;">TOOLS</div>
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:9px 0;">
+            <span style="font-size:12px;font-weight:600;color:var(--text-secondary);">🌙 Night Mode</span>
+            <div class="theme-toggle" onclick="toggleTheme()" style="transform:scale(0.85);"><div class="toggle-dot"></div></div>
+          </div>
+        </div>
+      </div>
+      <!-- Wallet in sidebar -->
+      <div style="padding:14px;border-top:1px solid var(--border);">
+        <div style="background:rgba(124,58,237,0.08);border:1px solid rgba(124,58,237,0.15);border-radius:12px;padding:12px;">
+          <div style="font-size:9px;color:var(--text-dim);font-weight:800;letter-spacing:.1em;margin-bottom:4px;">WALLET</div>
+          <div id="walletDisplay" style="font-size:11px;color:#a78bfa;font-family:'JetBrains Mono',monospace;font-weight:700;">Not Connected</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:6px;margin-top:10px;padding:0 2px;">
+          <div class="live-dot"></div>
+          <span style="font-size:9px;color:var(--accent-green);font-weight:800;letter-spacing:.1em;">SYSTEM ONLINE</span>
+        </div>
+      </div>
+    </aside>
+
+    <!-- MAIN CONTENT -->
+    <main id="content">
+
+      <!-- DASHBOARD -->
+      <section class="section active" id="sec-dashboard">
+        <div style="margin-bottom:24px;">
+          <h1 style="font-size:22px;font-weight:900;letter-spacing:-0.03em;margin-bottom:4px;">Smart Money Dashboard</h1>
+          <p style="font-size:13px;color:var(--text-secondary);">AI-powered research engine · Real-time signals · Paper trading</p>
+        </div>
+
+        <!-- Stat cards -->
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px;margin-bottom:24px;">
+          <div class="stat-card purple card" style="padding:18px;">
+            <div style="font-size:9px;color:var(--text-dim);font-weight:800;letter-spacing:.12em;margin-bottom:10px;">PORTFOLIO VALUE</div>
+            <div style="font-size:26px;font-weight:900;font-family:'JetBrains Mono',monospace;color:#a78bfa;">$42,831</div>
+            <div style="font-size:11px;color:var(--accent-green);font-weight:700;margin-top:4px;">▲ +8.4% today</div>
+          </div>
+          <div class="stat-card cyan card" style="padding:18px;">
+            <div style="font-size:9px;color:var(--text-dim);font-weight:800;letter-spacing:.12em;margin-bottom:10px;">AI SIGNALS TODAY</div>
+            <div style="font-size:26px;font-weight:900;font-family:'JetBrains Mono',monospace;color:#22d3ee;">12</div>
+            <div style="font-size:11px;color:var(--accent-green);font-weight:700;margin-top:4px;">9 BUY · 3 SELL</div>
+          </div>
+          <div class="stat-card orange card" style="padding:18px;">
+            <div style="font-size:9px;color:var(--text-dim);font-weight:800;letter-spacing:.12em;margin-bottom:10px;">WIN RATE (30D)</div>
+            <div style="font-size:26px;font-weight:900;font-family:'JetBrains Mono',monospace;color:#fb923c;">73.5%</div>
+            <div style="font-size:11px;color:var(--text-secondary);font-weight:700;margin-top:4px;">147/200 trades</div>
+          </div>
+          <div class="stat-card green card" style="padding:18px;">
+            <div style="font-size:9px;color:var(--text-dim);font-weight:800;letter-spacing:.12em;margin-bottom:10px;">FEAR & GREED</div>
+            <div style="font-size:26px;font-weight:900;font-family:'JetBrains Mono',monospace;color:var(--accent-green);">68</div>
+            <div style="font-size:11px;color:#86efac;font-weight:700;margin-top:4px;">Greed — Bull Market</div>
+          </div>
+        </div>
+
+        <!-- AI Top Picks -->
+        <div style="margin-bottom:24px;">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+            <h2 style="font-size:14px;font-weight:900;letter-spacing:.02em;">🤖 AI Top Picks Right Now</h2>
+            <button class="btn-primary btn-ai" onclick="ripple(event,this)">Refresh Signals</button>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px;" id="signalCards"></div>
+        </div>
+
+        <!-- Recent Activity -->
+        <div class="card" style="padding:20px;">
+          <h2 style="font-size:13px;font-weight:900;margin-bottom:16px;letter-spacing:.02em;">📊 Recent Paper Trades</h2>
+          <table class="ptable">
+            <thead><tr><th>TOKEN</th><th>TYPE</th><th>ENTRY</th><th>CURRENT</th><th>PNL</th><th>STATUS</th></tr></thead>
+            <tbody id="recentTrades"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- BREAKING NEWS -->
+      <section class="section" id="sec-news">
+        <h1 style="font-size:22px;font-weight:900;margin-bottom:6px;">📰 Breaking News</h1>
+        <p style="font-size:13px;color:var(--text-secondary);margin-bottom:24px;">Real-time market intelligence · Sentiment analysis</p>
+        <div style="display:flex;flex-direction:column;gap:12px;" id="newsCards"></div>
+      </section>
+
+      <!-- AI ANALYSIS -->
+      <section class="section" id="sec-ai">
+        <h1 style="font-size:22px;font-weight:900;margin-bottom:6px;">🧠 AI Analysis Engine</h1>
+        <p style="font-size:13px;color:var(--text-secondary);margin-bottom:24px;">Dual-AI signals · Gemini 2.5 Flash + Groq LLaMA-3.3</p>
+        <div style="display:flex;flex-direction:column;gap:14px;" id="aiSignals"></div>
+      </section>
+
+      <!-- AI TRADE AGENT -->
+      <section class="section" id="sec-agent">
+        <h1 style="font-size:22px;font-weight:900;margin-bottom:6px;">🤖 AI Trade Agent</h1>
+        <p style="font-size:13px;color:var(--text-secondary);margin-bottom:24px;">Autonomous paper trading · Zero risk · Real insights</p>
+        <div class="card" style="padding:28px;text-align:center;">
+          <div style="font-size:48px;margin-bottom:16px;">🚀</div>
+          <h2 style="font-size:18px;font-weight:900;margin-bottom:8px;">Agent Status: <span style="color:var(--accent-green);">ACTIVE</span></h2>
+          <p style="color:var(--text-secondary);font-size:13px;max-width:400px;margin:0 auto 24px;">SoDoggy AI is running momentum + sentiment analysis. Currently monitoring 12 pairs for entry opportunities.</p>
+          <div style="display:flex;justify-content:center;gap:12px;flex-wrap:wrap;">
+            <button class="btn-primary btn-buy" onclick="ripple(event,this)">▶ Start Agent</button>
+            <button class="btn-primary btn-sell" onclick="ripple(event,this)" style="background:linear-gradient(135deg,#7c3aed,#06b6d4);">⏸ Pause</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- BACKTEST -->
+      <section class="section" id="sec-backtest">
+        <h1 style="font-size:22px;font-weight:900;margin-bottom:6px;">🔬 Backtest AI</h1>
+        <p style="font-size:13px;color:var(--text-secondary);margin-bottom:24px;">Test strategies against historical data · AI-optimized params</p>
+        <div class="card" style="padding:24px;margin-bottom:16px;">
+          <h2 style="font-size:14px;font-weight:800;margin-bottom:20px;">Strategy Configuration</h2>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;margin-bottom:20px;">
+            <div>
+              <label style="font-size:9px;color:var(--text-dim);font-weight:800;letter-spacing:.1em;display:block;margin-bottom:6px;">TOKEN PAIR</label>
+              <select style="width:100%;background:rgba(255,255,255,0.04);border:1px solid var(--border);border-radius:8px;padding:9px 12px;color:var(--text-primary);font-size:12px;outline:none;">
+                <option>BTC/USDC</option><option>ETH/USDC</option><option>SOL/USDC</option>
+              </select>
+            </div>
+            <div>
+              <label style="font-size:9px;color:var(--text-dim);font-weight:800;letter-spacing:.1em;display:block;margin-bottom:6px;">STRATEGY</label>
+              <select style="width:100%;background:rgba(255,255,255,0.04);border:1px solid var(--border);border-radius:8px;padding:9px 12px;color:var(--text-primary);font-size:12px;outline:none;">
+                <option>AI Momentum</option><option>Mean Reversion</option><option>Trend Follow</option>
+              </select>
+            </div>
+            <div>
+              <label style="font-size:9px;color:var(--text-dim);font-weight:800;letter-spacing:.1em;display:block;margin-bottom:6px;">TIMEFRAME</label>
+              <select style="width:100%;background:rgba(255,255,255,0.04);border:1px solid var(--border);border-radius:8px;padding:9px 12px;color:var(--text-primary);font-size:12px;outline:none;">
+                <option>30 Days</option><option>90 Days</option><option>1 Year</option>
+              </select>
+            </div>
+          </div>
+          <button class="btn-primary btn-ai" style="width:100%;padding:13px;" onclick="runBacktest(this)">🔬 RUN BACKTEST</button>
+        </div>
+        <div class="card" id="backtestResults" style="padding:24px;display:none;">
+          <h2 style="font-size:14px;font-weight:800;margin-bottom:16px;">Results</h2>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:20px;">
+            <div style="text-align:center;"><div style="font-size:22px;font-weight:900;color:var(--accent-green);">+127.4%</div><div style="font-size:9px;color:var(--text-dim);font-weight:800;margin-top:4px;">TOTAL RETURN</div></div>
+            <div style="text-align:center;"><div style="font-size:22px;font-weight:900;color:#a78bfa;">73.5%</div><div style="font-size:9px;color:var(--text-dim);font-weight:800;margin-top:4px;">WIN RATE</div></div>
+            <div style="text-align:center;"><div style="font-size:22px;font-weight:900;color:#22d3ee;">2.8x</div><div style="font-size:9px;color:var(--text-dim);font-weight:800;margin-top:4px;">SHARPE RATIO</div></div>
+            <div style="text-align:center;"><div style="font-size:22px;font-weight:900;color:var(--accent-red);">-12.3%</div><div style="font-size:9px;color:var(--text-dim);font-weight:800;margin-top:4px;">MAX DRAWDOWN</div></div>
+          </div>
+          <div style="height:8px;background:rgba(255,255,255,0.05);border-radius:4px;overflow:hidden;margin-bottom:8px;"><div class="backtest-bar" style="width:73%"></div></div>
+          <div style="font-size:10px;color:var(--text-dim);">73% win rate over 200 simulated trades · AI Momentum Strategy · BTC/USDC · 30 Days</div>
+        </div>
+      </section>
+
+      <!-- ETF DASHBOARD -->
+      <section class="section" id="sec-etf">
+        <h1 style="font-size:22px;font-weight:900;margin-bottom:6px;">📈 ETF Dashboard</h1>
+        <p style="font-size:13px;color:var(--text-secondary);margin-bottom:24px;">Bitcoin ETF flows · Institutional data</p>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px;" id="etfCards"></div>
+      </section>
+
+      <!-- PORTFOLIO -->
+      <section class="section" id="sec-portfolio">
+        <h1 style="font-size:22px;font-weight:900;margin-bottom:6px;">💼 Portfolio</h1>
+        <p style="font-size:13px;color:var(--text-secondary);margin-bottom:24px;">Paper trading holdings · Simulated P&amp;L</p>
+        <div class="card" style="padding:20px;">
+          <table class="ptable">
+            <thead><tr><th>ASSET</th><th>AMOUNT</th><th>AVG ENTRY</th><th>CURRENT</th><th>VALUE</th><th>P&amp;L</th><th>%</th></tr></thead>
+            <tbody id="portfolioTable"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- SETTINGS -->
+      <section class="section" id="sec-settings">
+        <h1 style="font-size:22px;font-weight:900;margin-bottom:6px;">⚙️ Settings</h1>
+        <p style="font-size:13px;color:var(--text-secondary);margin-bottom:24px;">Configure your SMRE experience</p>
+        <div class="card" style="padding:24px;max-width:500px;">
+          <div style="display:flex;flex-direction:column;gap:16px;">
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:1px solid var(--border);">
+              <div><div style="font-size:13px;font-weight:700;">Dark Mode</div><div style="font-size:11px;color:var(--text-dim);">Toggle light/dark theme</div></div>
+              <div class="theme-toggle" onclick="toggleTheme()"><div class="toggle-dot"></div></div>
+            </div>
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:1px solid var(--border);">
+              <div><div style="font-size:13px;font-weight:700;">AI Notifications</div><div style="font-size:11px;color:var(--text-dim);">Alert on strong signals</div></div>
+              <div style="background:rgba(0,230,118,0.2);border:1px solid rgba(0,230,118,0.4);border-radius:99px;padding:4px 12px;font-size:10px;font-weight:900;color:var(--accent-green);">ON</div>
+            </div>
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 0;">
+              <div><div style="font-size:13px;font-weight:700;">Risk Profile</div><div style="font-size:11px;color:var(--text-dim);">Conservative / Moderate / Aggressive</div></div>
+              <div style="background:rgba(249,115,22,0.15);border:1px solid rgba(249,115,22,0.3);border-radius:99px;padding:4px 12px;font-size:10px;font-weight:900;color:#fb923c;">MODERATE</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- GUIDELINES -->
+      <section class="section" id="sec-guidelines">
+        <h1 style="font-size:22px;font-weight:900;margin-bottom:6px;">📖 Guidelines</h1>
+        <p style="font-size:13px;color:var(--text-secondary);margin-bottom:24px;">DYOR · Risk management · Trading rules</p>
+        <div class="card" style="padding:24px;max-width:600px;">
+          <div style="display:flex;flex-direction:column;gap:14px;">
+            <div style="padding:16px;background:rgba(244,63,94,0.06);border:1px solid rgba(244,63,94,0.2);border-radius:12px;"><div style="font-size:12px;font-weight:800;color:#f43f5e;margin-bottom:6px;">⚠️ RISK WARNING</div><div style="font-size:12px;color:var(--text-secondary);line-height:1.6;">All trades on this platform are paper trades. No real funds are at risk. Always DYOR before any real investment.</div></div>
+            <div style="padding:16px;background:rgba(0,230,118,0.05);border:1px solid rgba(0,230,118,0.15);border-radius:12px;"><div style="font-size:12px;font-weight:800;color:var(--accent-green);margin-bottom:6px;">✅ GOLDEN RULES</div><ul style="font-size:12px;color:var(--text-secondary);line-height:2;padding-left:16px;"><li>Never risk more than 2% per trade</li><li>Always set stop-loss before entry</li><li>Trade with the trend, not against it</li><li>AI signals have 73% accuracy — not 100%</li><li>Diversify across sectors</li></ul></div>
+          </div>
+        </div>
+      </section>
+
+    </main>
+
+    <!-- RIGHT: SODOGGY -->
+    <aside id="right-panel">
+      <div id="sodoggy-panel">
+        <!-- Header -->
+        <div style="padding:14px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;">
+          <div style="width:8px;height:8px;border-radius:50%;background:#a78bfa;box-shadow:0 0 8px #a78bfa;"></div>
+          <span style="font-size:12px;font-weight:900;letter-spacing:.06em;">SODOGGY ANALYST</span>
+          <span style="margin-left:auto;font-size:9px;color:var(--text-dim);font-weight:800;background:rgba(124,58,237,0.1);border-radius:4px;padding:2px 6px;">AI v2.5</span>
+        </div>
+
+        <!-- Dog 3D scene -->
+        <div class="dog-scene">
+          <div class="dog-container" onclick="dogTalk()" id="dogContainer">
+            <div class="dog-glow"></div>
+            <svg class="dog-body" viewBox="0 0 140 140" fill="none">
+              <!-- Body -->
+              <ellipse cx="70" cy="95" rx="38" ry="32" fill="#c4a882"/>
+              <!-- Head -->
+              <circle cx="70" cy="52" r="30" fill="#d4b896"/>
+              <!-- Ears -->
+              <g class="dog-ears">
+                <ellipse cx="44" cy="32" rx="12" ry="18" fill="#c4a882" transform="rotate(-15 44 32)"/>
+                <ellipse cx="96" cy="32" rx="12" ry="18" fill="#c4a882" transform="rotate(15 96 32)"/>
+                <ellipse cx="44" cy="33" rx="7" ry="13" fill="#e8c4a0" transform="rotate(-15 44 33)"/>
+                <ellipse cx="96" cy="33" rx="7" ry="13" fill="#e8c4a0" transform="rotate(15 96 33)"/>
+              </g>
+              <!-- Eyes -->
+              <circle cx="58" cy="50" r="7" fill="#fff"/>
+              <circle cx="82" cy="50" r="7" fill="#fff"/>
+              <circle cx="60" cy="51" r="4" fill="#2a1a0a"/>
+              <circle cx="84" cy="51" r="4" fill="#2a1a0a"/>
+              <circle cx="61" cy="49" r="1.5" fill="#fff"/>
+              <circle cx="85" cy="49" r="1.5" fill="#fff"/>
+              <!-- Nose -->
+              <ellipse cx="70" cy="64" rx="8" ry="5" fill="#2a1a0a"/>
+              <ellipse cx="68" cy="63" rx="3" ry="2" fill="rgba(255,255,255,0.3)"/>
+              <!-- Mouth -->
+              <path d="M62 70 Q70 78 78 70" stroke="#2a1a0a" stroke-width="2" fill="none" stroke-linecap="round"/>
+              <!-- Tongue -->
+              <ellipse cx="70" cy="73" rx="6" ry="5" fill="#f87171"/>
+              <!-- Paws -->
+              <ellipse cx="48" cy="118" rx="12" ry="8" fill="#c4a882"/>
+              <ellipse cx="92" cy="118" rx="12" ry="8" fill="#c4a882"/>
+              <!-- Collar -->
+              <rect x="50" y="75" width="40" height="8" rx="4" fill="#7c3aed"/>
+              <circle cx="70" cy="79" r="3" fill="#f59e0b"/>
+              <!-- Tail -->
+              <path d="M108 88 Q128 68 122 52" stroke="#c4a882" stroke-width="10" fill="none" stroke-linecap="round"/>
+              <!-- Shades (cool factor) -->
+              <rect x="48" y="44" width="20" height="11" rx="5" fill="rgba(0,0,0,0.7)"/>
+              <rect x="72" y="44" width="20" height="11" rx="5" fill="rgba(0,0,0,0.7)"/>
+              <line x1="68" y1="49" x2="72" y2="49" stroke="rgba(0,0,0,0.7)" stroke-width="2"/>
+            </svg>
+            <div class="dog-shadow"></div>
+            <div class="dog-talk-bubble" id="talkBubble">Woof! 🐾</div>
+          </div>
+        </div>
+
+        <!-- Chat -->
+        <div class="chat-messages" id="chatMessages"></div>
+
+        <!-- Input -->
+        <div class="chat-input-wrap">
+          <input class="chat-input" id="chatInput" placeholder="Ask SoDoggy..." onkeydown="if(event.key==='Enter')sendMsg()"/>
+          <button class="chat-send" onclick="sendMsg()">
+            <svg width="14" height="14" fill="none" stroke="#fff" stroke-width="2.5" viewBox="0 0 24 24"><path d="M22 2L11 13M22 2L15 22L11 13L2 9L22 2Z"/></svg>
+          </button>
+        </div>
+      </div>
+    </aside>
+  </div>
+</div>
+
+<script>
+// ── Data ──────────────────────────────────────────────────────────────────
+const PRICES={BTC:105420,ETH:3847,SOL:182.4,BNB:645,ADA:0.642,DOGE:0.1847,AVAX:38.2,LINK:18.9};
+const TICKERS=['BTC/USDT','ETH/USDT','SOL/USDT','BNB/USDT','ADA/USDT','DOGE/USDT','AVAX/USDT','LINK/USDT'];
+let liveP={...PRICES};
+
+const SIGNALS=[
+  {token:'BTC',signal:'BUY',conf:82,entry:104200,tp:112000,sl:101000,reason:'Institutional accumulation detected. ETF inflows $480M. RSI oversold recovery.',timeframe:'4H',model:'Gemini 2.5'},
+  {token:'ETH',signal:'BUY',conf:75,entry:3780,tp:4200,sl:3600,reason:'L2 activity surge. Staking yield compression. Break above 200MA imminent.',timeframe:'1D',model:'Groq LLaMA'},
+  {token:'SOL',signal:'SELL',conf:68,entry:185,tp:165,sl:192,reason:'Overbought RSI 78. Whale distribution signal. Funding rate spike.',timeframe:'1H',model:'Gemini 2.5'},
+  {token:'LINK',signal:'BUY',conf:71,entry:18.2,tp:22.5,sl:16.8,reason:'Oracle ecosystem growth. Partnerships announcement expected. Strong accumulation.',timeframe:'4H',model:'Groq LLaMA'},
+];
+
+const NEWS=[
+  {title:'Bitcoin ETF Sees Record $2.1B Inflow in Single Day',time:'2m ago',sentiment:'bullish',source:'Bloomberg',body:'Spot Bitcoin ETFs recorded their largest single-day inflow, with BlackRock\'s IBIT leading at $1.2B. Institutional demand continues to accelerate.'},
+  {title:'Federal Reserve Signals Rate Cut — Crypto Rallies',time:'18m ago',sentiment:'bullish',source:'Reuters',body:'Fed Chair signals upcoming rate cuts as inflation cools. Risk assets surge with BTC up 3.2% on the news.'},
+  {title:'Ethereum Validator Queue Hits Record High',time:'1h ago',sentiment:'bullish',source:'CoinDesk',body:'Over 96,000 validators are queued to join the Ethereum network, signaling unprecedented demand for staking.'},
+  {title:'SEC Approves Multiple Altcoin ETF Applications',time:'3h ago',sentiment:'bullish',source:'The Block',body:'The SEC has greenlit ETF applications for SOL, AVAX, and XRP — a landmark day for crypto regulation.'},
+  {title:'Solana DeFi TVL Crosses $15B Milestone',time:'5h ago',sentiment:'bullish',source:'DeFiLlama',body:'Total Value Locked in Solana DeFi protocols surpassed $15 billion, driven by meme coin trading and new yield protocols.'},
+  {title:'Tether Mints $2B USDT — Liquidity Surge Expected',time:'8h ago',sentiment:'neutral',source:'CryptoQuant',body:'Tether minted $2 billion USDT on Tron and Ethereum networks, historically a precursor to major price moves.'},
+];
+
+const PORTFOLIO=[
+  {asset:'BTC',amount:0.42,entry:98500,pnl:2906,pct:7.02},
+  {asset:'ETH',amount:4.8,entry:3400,pct:13.15,pnl:2150.4},
+  {asset:'SOL',amount:68,entry:155,pct:17.68,pnl:1867.2},
+  {asset:'LINK',amount:210,entry:16.2,pct:16.67,pnl:567},
+  {asset:'ADA',amount:12000,entry:0.58,pct:10.69,pnl:746.4},
+];
+
+const RECENT_TRADES=[
+  {token:'BTC/USDC',type:'BUY',entry:102800,current:105420,pnl:'+$2,620',pct:'+2.55%',status:'OPEN'},
+  {token:'ETH/USDC',type:'BUY',entry:3650,current:3847,pnl:'+$197',pct:'+5.4%',status:'OPEN'},
+  {token:'SOL/USDC',type:'SELL',entry:190,current:182,pnl:'+$80',pct:'+4.2%',status:'CLOSED'},
+  {token:'DOGE/USDC',type:'BUY',entry:0.195,current:0.1847,pnl:'-$103',pct:'-5.3%',status:'OPEN'},
+];
+
+const ETF_DATA=[
+  {name:'BlackRock IBIT',aum:'$42.8B',flow:'+$1.2B',flowDir:1,shares:'401M'},
+  {name:'Fidelity FBTC',aum:'$18.2B',flow:'+$480M',flowDir:1,shares:'172M'},
+  {name:'ARK 21Shares',aum:'$4.1B',flow:'+$82M',flowDir:1,shares:'38M'},
+  {name:'Grayscale GBTC',aum:'$19.6B',flow:'-$240M',flowDir:-1,shares:'287M'},
+];
+
+const DOG_REPLIES=[
+  "Woof woof! 🐾 BTC is looking BULLISH today! Smart money accumulating below $105k! RUFF!",
+  "Sniff sniff... 👃 I smell a breakout forming on ETH/USDC! Watch the 4H chart closely, Raggy!",
+  "BARK BARK! 🔔 My AI nose detected whale activity on SOL! 68% confidence BUY signal generated!",
+  "Heh heh! 😎 Good question! The Fear & Greed index says 68 — Greed territory, be careful Shaggy!",
+  "Woof! 🎯 My momentum sensors are tingling! LINK/USDC showing strong accumulation patterns!",
+  "RUFF! 📊 Market breadth is improving! 9 out of 12 signals today are BUY. Zoinks!",
+  "Sniff sniff... 🌊 Liquidity is flowing in from institutional players! ETF inflows breaking records!",
+  "Woof woof! ⚡ SoDoggy AI processed 847 on-chain signals today. Markets looking HEALTHY!",
+];
+
+const NAV=[
+  {id:'dashboard',icon:'▦',label:'Dashboard'},
+  {id:'news',icon:'📰',label:'Breaking News'},
+  {id:'ai',icon:'🧠',label:'AI Analysis'},
+  {id:'agent',icon:'🤖',label:'AI Trade Agent'},
+  {id:'backtest',icon:'🔬',label:'Backtest AI'},
+  {id:'etf',icon:'📈',label:'ETF Dashboard'},
+  {id:'portfolio',icon:'💼',label:'Portfolio'},
+  {id:'settings',icon:'⚙️',label:'Settings'},
+  {id:'guidelines',icon:'📖',label:'Guidelines'},
+];
+
+// ── Init ──────────────────────────────────────────────────────────────────
+window.addEventListener('load',()=>{
+  buildNav();buildTicker();buildSignals();buildNews();buildAI();buildPortfolio();buildRecentTrades();buildETF();
+  const t=localStorage.getItem('smre-theme')||'dark';
+  if(t==='light')toggleTheme(true);
+  startLivePrices();
+  loadDogChat();
+  setTimeout(()=>addDogMsg("Woof! 🐾 I'm SoDoggy, your elite crypto analyst companion! Ask me anything about markets, signals, or strategies! BARK BARK! 🎯"),600);
+});
+
+function buildNav(){
+  const c=document.getElementById('navItems');
+  NAV.forEach(n=>{
+    c.innerHTML+=`<div class="nav-item ${n.id==='dashboard'?'active':''}" onclick="navigate('${n.id}',this)"><span style="font-size:15px;line-height:1">${n.icon}</span><span>${n.label}</span></div>`;
+  });
+}
+
+function navigate(id,el){
+  document.querySelectorAll('.nav-item').forEach(e=>e.classList.remove('active'));
+  el.classList.add('active');
+  document.querySelectorAll('.section').forEach(e=>e.classList.remove('active'));
+  document.getElementById('sec-'+id).classList.add('active');
+  if(window.innerWidth<=768) document.getElementById('sidebar').classList.remove('open');
+}
+
+function buildTicker(){
+  const t=document.getElementById('ticker');
+  const build=()=>TICKERS.map(sym=>{
+    const base=sym.split('/')[0];
+    const p=liveP[base]||0;
+    const ch=((Math.random()-0.45)*3).toFixed(2);
+    const up=ch>=0;
+    return `<div class="ticker-item"><span style="color:var(--text-dim)">${sym}</span><span class="${up?'ticker-up':'ticker-down'}">${p.toLocaleString('en-US',{minimumFractionDigits:p<1?4:2,maximumFractionDigits:p<1?4:2})}</span><span class="${up?'ticker-up':'ticker-down'}">${up?'+':''}${ch}%</span></div>`;
+  }).join('');
+  const html=build();
+  t.innerHTML=html+html; // duplicate for seamless loop
+}
+
+function startLivePrices(){
+  setInterval(()=>{
+    Object.keys(liveP).forEach(k=>{liveP[k]*=(1+(Math.random()-0.499)*0.002);});
+    buildTicker();
+  },3000);
+}
+
+function buildSignals(){
+  const c=document.getElementById('signalCards');
+  SIGNALS.slice(0,3).forEach(s=>{ c.innerHTML+=signalCardHTML(s,true); });
+}
+
+function buildAI(){
+  const c=document.getElementById('aiSignals');
+  SIGNALS.forEach(s=>{ c.innerHTML+=signalCardHTML(s,false); });
+  setTimeout(()=>document.querySelectorAll('.conf-bar').forEach(b=>{b.style.width=b.dataset.w;}),200);
+}
+
+function signalCardHTML(s,compact){
+  const isBuy=s.signal==='BUY';
+  const rr=((s.tp-s.entry)/(s.entry-s.sl)).toFixed(1);
+  return `<div class="signal-card ${compact?'':'glass'}" style="position:relative;overflow:hidden;">
+    <div style="position:absolute;top:0;left:0;right:0;height:2px;background:${isBuy?'linear-gradient(to right,#059669,#00e676)':'linear-gradient(to right,#be123c,#f43f5e)'}"></div>
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:12px;gap:12px;">
+      <div style="display:flex;align-items:center;gap:10px;">
+        <div style="width:36px;height:36px;border-radius:10px;background:${isBuy?'rgba(0,230,118,0.12)':'rgba(244,63,94,0.12)'};border:1px solid ${isBuy?'rgba(0,230,118,0.3)':'rgba(244,63,94,0.3)'};display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:900;color:${isBuy?'var(--accent-green)':'var(--accent-red)'};">${s.token.slice(0,2)}</div>
+        <div><div style="font-size:14px;font-weight:900;">${s.token}/USDC</div><div style="font-size:9px;color:var(--text-dim);font-weight:800;letter-spacing:.08em;">${s.timeframe} · ${s.model}</div></div>
+      </div>
+      <div style="background:${isBuy?'rgba(0,230,118,0.12)':'rgba(244,63,94,0.12)'};border:1px solid ${isBuy?'rgba(0,230,118,0.3)':'rgba(244,63,94,0.3)'};border-radius:8px;padding:5px 12px;font-weight:900;font-size:12px;color:${isBuy?'var(--accent-green)':'var(--accent-red)'};">${isBuy?'● BUY':'● SELL'}</div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:12px;">
+      <div style="background:rgba(255,255,255,0.03);border-radius:8px;padding:8px;text-align:center;"><div style="font-size:9px;color:var(--text-dim);font-weight:800;margin-bottom:3px;">ENTRY</div><div style="font-size:11px;font-weight:800;font-family:'JetBrains Mono',monospace;">$${s.entry.toLocaleString()}</div></div>
+      <div style="background:rgba(0,230,118,0.05);border-radius:8px;padding:8px;text-align:center;"><div style="font-size:9px;color:var(--text-dim);font-weight:800;margin-bottom:3px;">TARGET</div><div style="font-size:11px;font-weight:800;color:var(--accent-green);font-family:'JetBrains Mono',monospace;">$${s.tp.toLocaleString()}</div></div>
+      <div style="background:rgba(244,63,94,0.05);border-radius:8px;padding:8px;text-align:center;"><div style="font-size:9px;color:var(--text-dim);font-weight:800;margin-bottom:3px;">STOP</div><div style="font-size:11px;font-weight:800;color:var(--accent-red);font-family:'JetBrains Mono',monospace;">$${s.sl.toLocaleString()}</div></div>
+    </div>
+    <div style="margin-bottom:10px;">
+      <div style="display:flex;justify-content:space-between;margin-bottom:5px;"><span style="font-size:9px;color:var(--text-dim);font-weight:800;">CONFIDENCE</span><span style="font-size:10px;font-weight:900;color:${isBuy?'var(--accent-green)':'var(--accent-red)'};">${s.conf}%</span></div>
+      <div class="conf-bar-wrap"><div class="conf-bar ${isBuy?'conf-bar-buy':'conf-bar-sell'}" style="width:0" data-w="${s.conf}%"></div></div>
+    </div>
+    <div style="font-size:11px;color:var(--text-secondary);line-height:1.5;margin-bottom:12px;">${s.reason}</div>
+    <div style="display:flex;align-items:center;gap:8px;">
+      <button class="btn-primary ${isBuy?'btn-buy':'btn-sell'}" style="flex:1;padding:8px;" onclick="ripple(event,this)">Paper ${isBuy?'BUY':'SELL'}</button>
+      <div style="font-size:10px;color:var(--text-dim);background:rgba(255,255,255,0.04);border-radius:6px;padding:4px 8px;font-weight:800;">R:R ${rr}:1</div>
+    </div>
+  </div>`;
+}
+
+function buildNews(){
+  const c=document.getElementById('newsCards');
+  NEWS.forEach((n,i)=>{
+    const col=n.sentiment==='bullish'?'0,230,118':n.sentiment==='bearish'?'244,63,94':'249,115,22';
+    c.innerHTML+=`<div class="news-card" style="animation-delay:${i*0.05}s">
+      <div style="display:flex;align-items:flex-start;gap:12px;">
+        <div style="flex:1">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap;">
+            <span class="news-badge" style="background:rgba(${col},0.12);color:rgb(${col});border:1px solid rgba(${col},0.3);">${n.sentiment.toUpperCase()}</span>
+            <span style="font-size:10px;color:var(--text-dim);font-weight:700;">${n.source}</span>
+            <span style="font-size:10px;color:var(--text-dim);">${n.time}</span>
+          </div>
+          <div style="font-size:13px;font-weight:700;margin-bottom:6px;line-height:1.4;">${n.title}</div>
+          <div style="font-size:11px;color:var(--text-secondary);line-height:1.55;">${n.body}</div>
+        </div>
+      </div>
+    </div>`;
+  });
+}
+
+function buildPortfolio(){
+  const t=document.getElementById('portfolioTable');
+  PORTFOLIO.forEach(p=>{
+    const cur=liveP[p.asset]||p.entry;
+    const val=(cur*p.amount).toFixed(0);
+    const pos=p.pct>=0;
+    t.innerHTML+=`<tr>
+      <td style="font-weight:800;color:var(--text-primary);">${p.asset}</td>
+      <td>${p.amount}</td>
+      <td style="color:var(--text-secondary);">$${p.entry.toLocaleString()}</td>
+      <td style="color:var(--text-primary);">$${cur.toLocaleString('en',{maximumFractionDigits:2})}</td>
+      <td style="font-weight:700;">$${parseInt(val).toLocaleString()}</td>
+      <td class="${pos?'pnl-pos':'pnl-neg'}">${pos?'+':'-'}$${Math.abs(p.pnl).toLocaleString()}</td>
+      <td class="${pos?'pnl-pos':'pnl-neg'}" style="font-weight:900;">${pos?'+':''}${p.pct}%</td>
+    </tr>`;
+  });
+}
+
+function buildRecentTrades(){
+  const t=document.getElementById('recentTrades');
+  RECENT_TRADES.forEach(r=>{
+    const pos=r.pnl.startsWith('+');
+    const statusCol=r.status==='OPEN'?'rgba(0,230,118,0.15)':'rgba(255,255,255,0.06)';
+    t.innerHTML+=`<tr>
+      <td style="font-weight:800;">${r.token}</td>
+      <td style="color:${r.type==='BUY'?'var(--accent-green)':'var(--accent-red)'};font-weight:900;">${r.type}</td>
+      <td style="color:var(--text-secondary);">$${r.entry}</td>
+      <td>$${r.current}</td>
+      <td class="${pos?'pnl-pos':'pnl-neg'}" style="font-weight:900;">${r.pnl} <span style="font-size:10px;">(${r.pct})</span></td>
+      <td><span style="background:${statusCol};border-radius:4px;padding:2px 8px;font-size:9px;font-weight:900;color:${r.status==='OPEN'?'var(--accent-green)':'var(--text-dim)'};">${r.status}</span></td>
+    </tr>`;
+  });
+}
+
+function buildETF(){
+  const c=document.getElementById('etfCards');
+  ETF_DATA.forEach(e=>{
+    const pos=e.flowDir>=0;
+    c.innerHTML+=`<div class="card" style="padding:20px;">
+      <div style="font-size:13px;font-weight:800;margin-bottom:14px;">${e.name}</div>
+      <div style="display:flex;flex-direction:column;gap:8px;">
+        <div style="display:flex;justify-content:space-between;"><span style="font-size:10px;color:var(--text-dim);font-weight:800;">AUM</span><span style="font-size:13px;font-weight:900;font-family:'JetBrains Mono',monospace;">${e.aum}</span></div>
+        <div style="display:flex;justify-content:space-between;"><span style="font-size:10px;color:var(--text-dim);font-weight:800;">DAILY FLOW</span><span style="font-size:13px;font-weight:900;color:${pos?'var(--accent-green)':'var(--accent-red)'};font-family:'JetBrains Mono',monospace;">${e.flow}</span></div>
+        <div style="display:flex;justify-content:space-between;"><span style="font-size:10px;color:var(--text-dim);font-weight:800;">SHARES OUT</span><span style="font-size:11px;font-weight:700;color:var(--text-secondary);">${e.shares}</span></div>
+      </div>
+    </div>`;
+  });
+}
+
+// ── Interactions ──────────────────────────────────────────────────────────
+function ripple(e,btn){
+  const r=document.createElement('span');
+  r.className='ripple';
+  const rect=btn.getBoundingClientRect();
+  const size=Math.max(rect.width,rect.height);
+  r.style.cssText=`width:${size}px;height:${size}px;left:${e.clientX-rect.left-size/2}px;top:${e.clientY-rect.top-size/2}px;`;
+  btn.style.position='relative';
+  btn.appendChild(r);
+  setTimeout(()=>r.remove(),600);
+}
+
+// 3D card tilt
+document.addEventListener('mousemove',e=>{
+  document.querySelectorAll('.card').forEach(card=>{
+    const rect=card.getBoundingClientRect();
+    const cx=rect.left+rect.width/2;
+    const cy=rect.top+rect.height/2;
+    const dx=(e.clientX-cx)/rect.width*20;
+    const dy=(e.clientY-cy)/rect.height*20;
+    if(Math.abs(dx)<12&&Math.abs(dy)<12){
+      card.style.transform=`translateY(-4px) rotateX(${-dy*0.5}deg) rotateY(${dx*0.5}deg)`;
+    }
+  });
+});
+document.addEventListener('mouseleave',()=>{
+  document.querySelectorAll('.card').forEach(c=>c.style.transform='');
+});
+
+function toggleTheme(force){
+  const html=document.documentElement;
+  const isLight=force===true||(force===undefined&&html.dataset.theme==='dark');
+  html.dataset.theme=isLight?'light':'dark';
+  localStorage.setItem('smre-theme',isLight?'light':'dark');
+  document.querySelectorAll('.theme-toggle').forEach(t=>t.classList.toggle('light',isLight));
+}
+
+function toggleSidebar(){
+  document.getElementById('sidebar').classList.toggle('open');
+}
+
+function connectWallet(el){
+  if((window).ethereum){
+    (window).ethereum.request({method:'eth_requestAccounts'}).then(accounts=>{
+      const addr=accounts[0];
+      el.textContent=`${addr.slice(0,6)}...${addr.slice(-4)}`;
+      document.getElementById('walletDisplay').textContent=`${addr.slice(0,6)}...${addr.slice(-4)}`;
+      addDogMsg(`Woof! 🔐 Wallet connected! ${addr.slice(0,6)}...${addr.slice(-4)} — Welcome to SoSo Smre! 🐾`);
+    }).catch(()=>{});
+  } else {
+    el.textContent='🔐 0x7f3a...4e9b';
+    document.getElementById('walletDisplay').textContent='0x7f3a...4e9b';
+  }
+}
+
+function runBacktest(btn){
+  btn.textContent='⏳ Running...';
+  btn.disabled=true;
+  setTimeout(()=>{
+    document.getElementById('backtestResults').style.display='block';
+    document.getElementById('backtestResults').scrollIntoView({behavior:'smooth'});
+    btn.textContent='🔬 RUN BACKTEST';
+    btn.disabled=false;
+  },2200);
+}
+
+// ── SoDoggy ───────────────────────────────────────────────────────────────
+let dogMsgCount=0;
+function addDogMsg(text){
+  const c=document.getElementById('chatMessages');
+  c.innerHTML+=`<div class="chat-msg msg-dog"><span style="font-size:10px;color:#a78bfa;font-weight:800;display:block;margin-bottom:4px;">🐾 SoDoggy</span>${text}</div>`;
+  c.scrollTop=c.scrollHeight;
+  dogMsgCount++;
+}
+
+function addUserMsg(text){
+  const c=document.getElementById('chatMessages');
+  c.innerHTML+=`<div class="chat-msg msg-user">${text}</div>`;
+  c.scrollTop=c.scrollHeight;
+}
+
+function showThinking(){
+  const c=document.getElementById('chatMessages');
+  const id='thinking-'+Date.now();
+  c.innerHTML+=`<div class="chat-msg msg-dog msg-thinking" id="${id}"><div class="dot-pulse"></div><div class="dot-pulse"></div><div class="dot-pulse"></div></div>`;
+  c.scrollTop=c.scrollHeight;
+  return id;
+}
+
+function sendMsg(){
+  const inp=document.getElementById('chatInput');
+  const txt=inp.value.trim();
+  if(!txt)return;
+  addUserMsg(txt);
+  inp.value='';
+  const tid=showThinking();
+  setTimeout(()=>{
+    document.getElementById(tid)?.remove();
+    const reply=DOG_REPLIES[Math.floor(Math.random()*DOG_REPLIES.length)];
+    addDogMsg(reply);
+    dogTalk();
+  },1200+Math.random()*800);
+}
+
+function dogTalk(){
+  const bubble=document.getElementById('talkBubble');
+  const phrases=['Woof! 🐾','BARK! 📊','Buy signal! 🚀','Sniff sniff... 👃','RUFF! ⚡'];
+  bubble.textContent=phrases[Math.floor(Math.random()*phrases.length)];
+  bubble.style.display='block';
+  setTimeout(()=>bubble.style.display='none',2000);
+  const dog=document.getElementById('dogContainer');
+  dog.style.animation='none';
+  void dog.offsetWidth;
+  dog.style.animation='';
+}
+
+function loadDogChat(){
+  const saved=sessionStorage.getItem('dogChat');
+  if(saved) document.getElementById('chatMessages').innerHTML=saved;
+}
+
+// Auto dog messages
+setInterval(()=>{
+  if(document.hidden)return;
+  const tips=["Woof! 🎯 BTC just bounced off support — watching closely!","BARK! 📈 ETH funding rates cooling — potential long setup!","Sniff... 🔍 Unusual whale activity on SOL detected!","Ruff ruff! ⚡ Market breadth improving — bull signals!"];
+  addDogMsg(tips[Math.floor(Math.random()*tips.length)]);
+},45000);
+
+// Animate conf bars on section show
+const observer=new IntersectionObserver(entries=>{
+  entries.forEach(e=>{
+    if(e.isIntersecting){
+      e.target.querySelectorAll('.conf-bar[data-w]').forEach(b=>{
+        setTimeout(()=>b.style.width=b.dataset.w,100);
+      });
+    }
+  });
+});
+document.querySelectorAll('.section').forEach(s=>observer.observe(s));
+setTimeout(()=>document.querySelectorAll('.conf-bar[data-w]').forEach(b=>b.style.width=b.dataset.w),300);
+
+// Mobile detection
+if(window.innerWidth<=768) document.getElementById('menuBtn').style.display='flex';
+window.addEventListener('resize',()=>{
+  document.getElementById('menuBtn').style.display=window.innerWidth<=768?'flex':'none';
+});
+</script>
+</body>
+</html>
