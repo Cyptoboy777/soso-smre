@@ -5,6 +5,8 @@ import { X, Send, Volume2, VolumeX, Mic, MicOff, Wifi, Activity, Zap } from 'luc
 import { usePathname } from 'next/navigation';
 import SoDoggyBody from './SoDoggyBody';
 import useSpeech from './hooks/useSpeech';
+import { useSodexWS } from '@/hooks/useSodexWS';
+import { Maximize2, Minimize2 } from 'lucide-react';
 
 // ── Page-specific guidance — SoSo Dude! style ──
 const PAGE_GUIDANCE: Record<string, string> = {
@@ -30,6 +32,7 @@ export default function SoDoggyAssistant() {
   const { speak, speaking, cancel } = useSpeech();
 
   const [chatOpen,    setChatOpen]    = useState(false);
+  const [isExpanded,  setIsExpanded]  = useState(false);
   const [isHovered,   setIsHovered]   = useState(false);
   // ── VOICE TOGGLE STATE ──
   const [micOn,       setMicOn]       = useState(false);   // true = actively listening (toggle)
@@ -53,6 +56,7 @@ export default function SoDoggyAssistant() {
   const recognitionRef = useRef<any>(null);
   const idleTimerRef   = useRef<ReturnType<typeof setTimeout> | null>(null);
   const waveTimerRef   = useRef<ReturnType<typeof setInterval> | null>(null);
+  const { tickerList } = useSodexWS('mainnet');
 
   // ── Load username ──
   useEffect(() => {
@@ -217,12 +221,12 @@ export default function SoDoggyAssistant() {
       }
 
 
-      const [pricesRes, newsRes] = await Promise.allSettled([
-        fetch('/api/prices').then(r => r.json()),
+      const [newsRes] = await Promise.allSettled([
         fetch('/api/news').then(r => r.json()),
       ]);
-      const prices = pricesRes.status === 'fulfilled' ? pricesRes.value : {};
-      const news   = newsRes.status === 'fulfilled'   ? newsRes.value?.news?.slice(0, 3) : [];
+      const news = newsRes.status === 'fulfilled' ? newsRes.value?.news?.slice(0, 3) : [];
+      // Use live WebSocket prices!
+      const prices = Object.fromEntries(tickerList.slice(0, 10).map(t => [t.symbol, t.lastPrice]));
 
       const res  = await fetch('/api/dog-chat', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -261,16 +265,22 @@ export default function SoDoggyAssistant() {
         {chatOpen && (
           <motion.div
             initial={{ opacity: 0, y: 20, scale: 0.92 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
+            animate={{ 
+              opacity: 1, y: 0, scale: 1,
+              width: isExpanded ? 'calc(100vw - 40px)' : 360,
+              height: isExpanded ? 'calc(100vh - 180px)' : 'auto',
+              bottom: isExpanded ? 155 : 155,
+              right: isExpanded ? 20 : 0
+            }}
             exit={{ opacity: 0, y: 14, scale: 0.94 }}
             transition={{ type: 'spring', stiffness: 360, damping: 30 }}
             style={{
-              position: 'absolute', bottom: 155, right: 0,
-              width: 360,
+              position: 'absolute',
               background: 'linear-gradient(160deg, #05050f 0%, #080818 60%, #060612 100%)',
               border: `1px solid ${tc}28`,
               borderRadius: 20, overflow: 'hidden',
               boxShadow: `0 28px 70px rgba(0,0,0,0.85), 0 0 0 1px ${tc}12, 0 0 50px ${tc}06`,
+              display: 'flex', flexDirection: 'column'
             }}
           >
             {/* Terminal header */}
@@ -292,6 +302,9 @@ export default function SoDoggyAssistant() {
                 </motion.div>
                 <button onClick={() => setMuted(v => !v)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex' }}>
                   {muted ? <VolumeX size={11} color="#444" /> : <Volume2 size={11} color={tc} />}
+                </button>
+                <button onClick={() => setIsExpanded(v => !v)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex' }}>
+                  {isExpanded ? <Minimize2 size={11} color="#444" /> : <Maximize2 size={11} color={tc} />}
                 </button>
                 <button onClick={closeChat} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex' }}>
                   <X size={11} color="#444" />
@@ -317,13 +330,13 @@ export default function SoDoggyAssistant() {
             </div>
 
             {/* Scan line + messages */}
-            <div style={{ position: 'relative' }}>
+            <div style={{ position: 'relative', flex: 1, display: 'flex', flexDirection: 'column', minHeight: 280 }}>
               <motion.div
                 animate={{ y: ['0%','100%'] }}
                 transition={{ repeat: Infinity, duration: 3, ease: 'linear' }}
                 style={{ position: 'absolute', left: 0, right: 0, height: 1, zIndex: 10, pointerEvents: 'none', background: `linear-gradient(90deg, transparent, ${tc}30, transparent)` }}
               />
-              <div style={{ height: 280, overflowY: 'auto', padding: '12px 12px', display: 'flex', flexDirection: 'column', gap: 9 }}>
+              <div style={{ flex: 1, overflowY: 'auto', padding: '12px 12px', display: 'flex', flexDirection: 'column', gap: 9 }}>
                 {history.map((m, i) => (
                   <motion.div key={i}
                     initial={{ opacity: 0, x: m.role === 'user' ? 16 : -16 }}

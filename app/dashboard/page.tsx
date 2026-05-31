@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import MarketSentiment from '@/components/MarketSentiment';
 import TopMovers from '@/components/TopMovers';
-import SoEva from '@/components/SoEva';
+import SoEva from '@/components/SoEva/SoEva';
 import TradingViewChart from '@/components/TradingViewChart';
 import MarketFlowChart from '@/components/MarketFlowChart';
 

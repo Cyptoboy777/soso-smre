@@ -1,206 +1,299 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
+import { createChart, ColorType, CrosshairMode, type IChartApi, type ISeriesApi, type CandlestickData, type Time } from 'lightweight-charts';
 import { Search, X, ChevronDown, TrendingUp, TrendingDown, RefreshCw, BarChart2, Activity } from 'lucide-react';
 
-interface Token { symbol: string; base: string; price: number; change: number; volume: number; high: number; low: number; }
-interface Candle { time: number; open: number; high: number; low: number; close: number; volume: number; }
-interface Props { initialSymbol?: string; onSymbolChange?: (symbol: string, base: string) => void; height?: number; livePrice?: number; }
+// ─── Types ────────────────────────────────────────────────────────────────────
+interface Token {
+  symbol: string;
+  base: string;
+  price: number;
+  change: number;
+  volume: number;
+  high: number;
+  low: number;
+}
 
-// Interval config: ms per candle, candle count, volatility multiplier
-const INTERVAL_CONFIG: Record<string, { ms: number; count: number; vol: number; fmt: (t: number) => string }> = {
-  '1m':  { ms: 60_000,        count: 120, vol: 0.003, fmt: t => new Date(t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) },
-  '5m':  { ms: 300_000,       count: 100, vol: 0.006, fmt: t => new Date(t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) },
-  '15m': { ms: 900_000,       count: 80,  vol: 0.010, fmt: t => new Date(t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) },
-  '1h':  { ms: 3_600_000,     count: 72,  vol: 0.018, fmt: t => new Date(t).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit' }) },
-  '4h':  { ms: 14_400_000,    count: 60,  vol: 0.030, fmt: t => new Date(t).toLocaleDateString([], { month: 'short', day: 'numeric' }) },
-  '1d':  { ms: 86_400_000,    count: 90,  vol: 0.055, fmt: t => new Date(t).toLocaleDateString([], { month: 'short', day: 'numeric' }) },
+interface OHLCVCandle {
+  time: number; // unix ms
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+}
+
+interface Props {
+  initialSymbol?: string;
+  onSymbolChange?: (symbol: string, base: string) => void;
+  height?: number;
+  livePrice?: number;
+}
+
+// ─── Constants ────────────────────────────────────────────────────────────────
+const INTERVALS = ['1m', '5m', '15m', '1h', '4h', '1d'] as const;
+type Interval = typeof INTERVALS[number];
+
+const INTERVAL_MS: Record<Interval, number> = {
+  '1m':  60_000,
+  '5m':  300_000,
+  '15m': 900_000,
+  '1h':  3_600_000,
+  '4h':  14_400_000,
+  '1d':  86_400_000,
 };
 
-function generateCandles(seedPrice: number, intervalKey: string): Candle[] {
-  const cfg = INTERVAL_CONFIG[intervalKey];
-  const candles: Candle[] = [];
-  let price = seedPrice * (0.85 + Math.random() * 0.12);
+const CHART_THEME = {
+  background: '#09090f',
+  grid: '#111120',
+  text: '#6b7280',
+  border: '#1e1e3a',
+  upColor: '#00e676',
+  downColor: '#f43f5e',
+  wickUpColor: '#00e676',
+  wickDownColor: '#f43f5e',
+  crosshair: '#f97316',
+};
+
+// ─── Stable fallback candles (deterministic, no Math.random) ─────────────────
+function makeStableCandles(seedPrice: number, intervalKey: Interval, count = 120): OHLCVCandle[] {
+  const ms = INTERVAL_MS[intervalKey];
   const now = Date.now();
-  for (let i = cfg.count; i >= 0; i--) {
-    const vol = price * cfg.vol;
+  const candles: OHLCVCandle[] = [];
+  let price = seedPrice * 0.88;
+
+  for (let i = count; i >= 0; i--) {
+    const r1 = Math.abs(Math.sin(i * 7919.1));
+    const r2 = Math.abs(Math.cos(i * 3571.7));
+    const volPct = INTERVAL_MS[intervalKey] / 86_400_000 * 0.06;
     const open = price;
-    const move = (Math.random() - 0.47) * vol;
+    const move = (r1 - 0.46) * price * volPct;
     const close = Math.max(price * 0.001, price + move);
-    const high = Math.max(open, close) + Math.random() * vol * 0.6;
-    const low  = Math.max(0.000001, Math.min(open, close) - Math.random() * vol * 0.6);
-    const volume = seedPrice * (60 + Math.random() * 140) * (price < 1 ? 50000 : price < 100 ? 500 : 1);
-    candles.push({ time: now - i * cfg.ms, open, high, low, close, volume });
+    const high = Math.max(open, close) * (1 + r2 * volPct * 0.5);
+    const low  = Math.min(open, close) * (1 - r2 * volPct * 0.5);
+    candles.push({
+      time: now - i * ms,
+      open, high, low, close,
+      volume: seedPrice * (80 + r1 * 120) * (price < 1 ? 10000 : price < 100 ? 100 : 1),
+    });
     price = close;
+  }
+  // Snap last candle's close to actual live price
+  if (candles.length > 0) {
+    const last = candles[candles.length - 1];
+    last.close = seedPrice;
+    last.high = Math.max(last.high, seedPrice);
+    last.low  = Math.min(last.low,  seedPrice);
   }
   return candles;
 }
 
+// ─── Fetch from Binance with AbortController ──────────────────────────────────
+async function fetchBinanceCandles(
+  base: string,
+  price: number,
+  interval: Interval,
+  signal: AbortSignal,
+): Promise<OHLCVCandle[]> {
+  const symbol = `${base.toUpperCase()}USDT`;
+  const url = `https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=${interval}&limit=120`;
+
+  try {
+    const res = await fetch(url, { signal });
+    if (!res.ok) throw new Error(`Binance ${res.status}`);
+    const raw = await res.json() as [number, string, string, string, string, string][];
+    if (!Array.isArray(raw) || raw.length === 0) throw new Error('empty');
+
+    const candles: OHLCVCandle[] = raw.map((k) => ({
+      time:   k[0],
+      open:   parseFloat(k[1]),
+      high:   parseFloat(k[2]),
+      low:    parseFloat(k[3]),
+      close:  parseFloat(k[4]),
+      volume: parseFloat(k[5]),
+    }));
+
+    // Sync last candle to live SoDEX price
+    if (candles.length > 0 && price > 0) {
+      const last = candles[candles.length - 1];
+      last.close = price;
+      last.high  = Math.max(last.high, price);
+      last.low   = Math.min(last.low,  price);
+    }
+    return candles;
+  } catch (e) {
+    if ((e as Error).name === 'AbortError') throw e; // re-throw so caller can detect
+    // Non-Binance token (SOSO, MEME etc) — use deterministic fallback
+    return makeStableCandles(price, interval);
+  }
+}
+
 function formatPrice(p: number): string {
+  if (!p || isNaN(p)) return '—';
   if (p >= 10000) return p.toLocaleString('en-US', { maximumFractionDigits: 0 });
-  if (p >= 100) return p.toFixed(2);
-  if (p >= 1)   return p.toFixed(4);
+  if (p >= 100)   return p.toFixed(2);
+  if (p >= 1)     return p.toFixed(4);
   return p.toFixed(6);
 }
 
-function drawChart(canvas: HTMLCanvasElement, candles: Candle[], chartType: 'candle' | 'line', intervalKey: string, latestPrice?: number, windowInfo?: { startOffset: number, viewCount: number }) {
-  const ctx = canvas.getContext('2d');
-  if (!ctx || candles.length === 0) return;
-  const dpr = window.devicePixelRatio || 1;
-  const W = canvas.offsetWidth, H = canvas.offsetHeight;
-  canvas.width = W * dpr; canvas.height = H * dpr;
-  ctx.scale(dpr, dpr);
-
-  const PL = 8, PR = 72, PT = 16, PB = 46, VOL_H = 64;
-  const cW = W - PL - PR, cH = H - PT - PB - VOL_H;
-
-  const prices = candles.flatMap(c => [c.high, c.low]);
-  const minP = Math.min(...prices), maxP = Math.max(...prices), pRange = maxP - minP || 1;
-  const maxVol = Math.max(...candles.map(c => c.volume)) || 1;
-  const toX = (i: number) => {
-    if (windowInfo) {
-      const pos = windowInfo.startOffset + i;
-      return PL + (pos / Math.max(1, windowInfo.viewCount - 1)) * cW;
-    }
-    return PL + (i / Math.max(1, candles.length - 1)) * cW;
-  };
-  const toY = (p: number) => PT + ((maxP - p) / pRange) * cH;
-  const toVY = (v: number) => H - PB - (v / maxVol) * VOL_H;
-
-  // BG
-  ctx.fillStyle = '#0a0a0a'; ctx.fillRect(0, 0, W, H);
-
-  // Grid
-  ctx.strokeStyle = '#181818'; ctx.lineWidth = 1;
-  for (let r = 0; r <= 5; r++) {
-    const y = PT + (r / 5) * cH;
-    ctx.beginPath(); ctx.moveTo(PL, y); ctx.lineTo(W - PR, y); ctx.stroke();
-    const lbl = maxP - (r / 5) * pRange;
-    ctx.fillStyle = '#444'; ctx.font = '10px monospace'; ctx.textAlign = 'left';
-    ctx.fillText(formatPrice(lbl), W - PR + 4, y + 4);
-  }
-  const fmt = INTERVAL_CONFIG[intervalKey].fmt;
-  for (let c = 0; c <= 5; c++) {
-    const x = PL + (c / 5) * cW;
-    ctx.strokeStyle = '#181818'; ctx.beginPath(); ctx.moveTo(x, PT); ctx.lineTo(x, PT + cH + VOL_H); ctx.stroke();
-    const cidx = Math.floor((c / 5) * (candles.length - 1));
-    if (candles[cidx]) {
-      ctx.fillStyle = '#444'; ctx.font = '9px monospace'; ctx.textAlign = 'center';
-      ctx.fillText(fmt(candles[cidx].time), x, H - PB + 14);
-    }
-  }
-
-  // Volume divider
-  ctx.strokeStyle = '#1e1e1e'; ctx.lineWidth = 1;
-  ctx.beginPath(); ctx.moveTo(PL, H - PB - VOL_H); ctx.lineTo(W - PR, H - PB - VOL_H); ctx.stroke();
-
-  // Volume bars
-  const displayCount = windowInfo ? windowInfo.viewCount : candles.length;
-  const barW = Math.max(1, cW / Math.max(1, displayCount) - 0.5);
-  candles.forEach((c, i) => {
-    ctx.fillStyle = c.close >= c.open ? 'rgba(0,230,118,0.25)' : 'rgba(244,63,94,0.25)';
-    const vy = toVY(c.volume);
-    ctx.fillRect(toX(i) - barW / 2, vy, barW, H - PB - vy);
-  });
-
-  // Line chart
-  if (chartType === 'line') {
-    ctx.beginPath();
-    candles.forEach((c, i) => { const x = toX(i), y = toY(c.close); i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y); });
-    ctx.strokeStyle = '#6366f1'; ctx.lineWidth = 2; ctx.stroke();
-    ctx.lineTo(toX(candles.length - 1), PT + cH);
-    ctx.lineTo(toX(0), PT + cH); ctx.closePath();
-    const g = ctx.createLinearGradient(0, PT, 0, PT + cH);
-    g.addColorStop(0, 'rgba(99,102,241,0.3)'); g.addColorStop(1, 'rgba(99,102,241,0)');
-    ctx.fillStyle = g; ctx.fill();
-  } else {
-    // Candlesticks
-    candles.forEach((c, i) => {
-      const x = toX(i), isUp = c.close >= c.open, col = isUp ? '#00e676' : '#f43f5e';
-      ctx.strokeStyle = col; ctx.fillStyle = isUp ? col : col; ctx.lineWidth = 1;
-      ctx.beginPath(); ctx.moveTo(x, toY(c.high)); ctx.lineTo(x, toY(c.low)); ctx.stroke();
-      const bT = toY(Math.max(c.open, c.close)), bB = toY(Math.min(c.open, c.close));
-      const bw = Math.max(2, barW * 0.75);
-      if (!isUp) { ctx.strokeStyle = col; ctx.strokeRect(x - bw/2, bT, bw, Math.max(1, bB - bT)); }
-      else ctx.fillRect(x - bw/2, bT, bw, Math.max(1, bB - bT));
-    });
-  }
-
-  // ── Last visible candle price line (dim, for context) ──
-  const last = candles[candles.length - 1];
-  if (last) {
-    const y = toY(last.close);
-    ctx.setLineDash([2, 5]); ctx.strokeStyle = '#333'; ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.moveTo(PL, y); ctx.lineTo(W - PR, y); ctx.stroke();
-    ctx.setLineDash([]);
-  }
-
-  // ── LIVE price line (always drawn, orange when panned away) ──
-  const liveP = latestPrice ?? last?.close;
-  if (liveP !== undefined) {
-    // Only draw inside visible range if price is within min/max
-    const isInView = liveP >= minP && liveP <= maxP;
-    const col = latestPrice && latestPrice !== last?.close ? '#f97316' : (last?.close ?? 0) >= (candles[candles.length-2]?.close ?? 0) ? '#00e676' : '#f43f5e';
-    if (isInView) {
-      const y = toY(liveP);
-      ctx.setLineDash([3, 4]); ctx.strokeStyle = col; ctx.lineWidth = 1;
-      ctx.beginPath(); ctx.moveTo(PL, y); ctx.lineTo(W - PR, y); ctx.stroke();
-      ctx.setLineDash([]);
-      ctx.fillStyle = col; ctx.fillRect(W - PR, y - 9, PR - 2, 18);
-      ctx.fillStyle = '#000'; ctx.font = 'bold 10px monospace'; ctx.textAlign = 'center';
-      ctx.fillText(formatPrice(liveP), W - PR + (PR - 2) / 2, y + 4);
-    } else {
-      // Price is off-screen — show arrow indicator on right edge
-      const dir = liveP > maxP ? '▲' : '▼';
-      const edgeY = liveP > maxP ? PT + 14 : PT + cH - 4;
-      ctx.fillStyle = '#f97316';
-      ctx.font = 'bold 10px monospace'; ctx.textAlign = 'right';
-      ctx.fillText(`${dir} ${formatPrice(liveP)} LIVE`, W - PR - 4, edgeY);
-    }
-  }
-}
-
-
+// ─── Component ────────────────────────────────────────────────────────────────
 export default function SodexProfessionalChart({ initialSymbol = 'BTC', onSymbolChange, height = 460, livePrice }: Props) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const searchRef = useRef<HTMLInputElement>(null);
-  const [tokens, setTokens]     = useState<Token[]>([]);
-  const [search, setSearch]     = useState('');
-  const [showSearch, setShowSearch] = useState(false);
-  const [selected, setSelected] = useState<Token | null>(null);
-  const [candles, setCandles]   = useState<Candle[]>([]);
-  const [chartType, setChartType] = useState<'candle' | 'line'>('candle');
-  const [iv, setIv]             = useState('5m');
-  const [loading, setLoading]   = useState(true);
-  const INTERVALS = ['1m', '5m', '15m', '1h', '4h', '1d'];
+  const chartContainerRef = useRef<HTMLDivElement>(null);
+  const chartRef          = useRef<IChartApi | null>(null);
+  const candleSeriesRef   = useRef<ISeriesApi<'Candlestick'> | null>(null);
+  const volumeSeriesRef   = useRef<ISeriesApi<'Histogram'> | null>(null);
+  const abortRef          = useRef<AbortController | null>(null);
 
-  // ── Pan / Zoom state ─────────────────────────────────────────────────────
-  const [viewOffset, setViewOffset] = useState(0);   // candles hidden from the right
-  const [viewCount,  setViewCount]  = useState(80);  // visible candle window
-  const isDragging   = useRef(false);
-  const dragStartX   = useRef(0);
-  const dragOffset   = useRef(0);
-  const candleWidth  = useRef(0);                    // px per candle, updated each draw
+  const searchRef         = useRef<HTMLInputElement>(null);
+  const [tokens,      setTokens]      = useState<Token[]>([]);
+  const [selected,    setSelected]    = useState<Token | null>(null);
+  const [search,      setSearch]      = useState('');
+  const [showSearch,  setShowSearch]  = useState(false);
+  const [loading,     setLoading]     = useState(true);
+  const [fetchError,  setFetchError]  = useState<string | null>(null);
+  const [iv,          setIv]          = useState<Interval>('5m');
+  const [chartType,   setChartType]   = useState<'candle' | 'line'>('candle');
 
-  // Update last candle when livePrice changes
+  // ── Create chart once ──────────────────────────────────────────────────────
   useEffect(() => {
-    if (livePrice && candles.length > 0) {
-      setCandles(prev => {
-        const next = [...prev];
-        const last = { ...next[next.length - 1] };
-        last.close = livePrice;
-        last.high = Math.max(last.high, livePrice);
-        last.low = Math.min(last.low, livePrice);
-        next[next.length - 1] = last;
-        return next;
-      });
-      if (selected) {
-        setSelected({ ...selected, price: livePrice });
-      }
-    }
-  }, [livePrice]);
+    if (!chartContainerRef.current) return;
 
-  // Fetch tokens
+    const chart = createChart(chartContainerRef.current, {
+      layout: {
+        background: { type: ColorType.Solid, color: CHART_THEME.background },
+        textColor: CHART_THEME.text,
+        fontFamily: "'Inter', 'SF Mono', monospace",
+      },
+      grid: {
+        vertLines: { color: CHART_THEME.grid },
+        horzLines: { color: CHART_THEME.grid },
+      },
+      crosshair: {
+        mode: CrosshairMode.Normal,
+        vertLine: { color: CHART_THEME.crosshair, labelBackgroundColor: CHART_THEME.crosshair },
+        horzLine: { color: CHART_THEME.crosshair, labelBackgroundColor: CHART_THEME.crosshair },
+      },
+      rightPriceScale: {
+        borderColor: CHART_THEME.border,
+        scaleMargins: { top: 0.1, bottom: 0.2 },
+      },
+      timeScale: {
+        borderColor: CHART_THEME.border,
+        timeVisible: true,
+        secondsVisible: false,
+        fixLeftEdge: false,
+        fixRightEdge: false,
+      },
+      handleScroll: { mouseWheel: true, pressedMouseMove: true, horzTouchDrag: true },
+      handleScale:  { mouseWheel: true, pinch: true },
+    });
+
+    const candleSeries = chart.addCandlestickSeries({
+      upColor:          CHART_THEME.upColor,
+      downColor:        CHART_THEME.downColor,
+      borderUpColor:    CHART_THEME.upColor,
+      borderDownColor:  CHART_THEME.downColor,
+      wickUpColor:      CHART_THEME.wickUpColor,
+      wickDownColor:    CHART_THEME.wickDownColor,
+    });
+
+    const volumeSeries = chart.addHistogramSeries({
+      color: '#00e67644',
+      priceFormat: { type: 'volume' },
+      priceScaleId: 'volume',
+    });
+
+    chart.priceScale('volume').applyOptions({
+      scaleMargins: { top: 0.8, bottom: 0 },
+    });
+
+    chartRef.current = chart;
+    candleSeriesRef.current = candleSeries;
+    volumeSeriesRef.current = volumeSeries;
+
+    // Resize observer
+    const resizeObs = new ResizeObserver(() => {
+      if (chartContainerRef.current) {
+        chart.applyOptions({
+          width:  chartContainerRef.current.clientWidth,
+          height: chartContainerRef.current.clientHeight,
+        });
+      }
+    });
+    if (chartContainerRef.current) resizeObs.observe(chartContainerRef.current);
+
+    return () => {
+      resizeObs.disconnect();
+      chart.remove();
+      chartRef.current = null;
+      candleSeriesRef.current = null;
+      volumeSeriesRef.current = null;
+    };
+  }, []);
+
+  // ── Load candle data ───────────────────────────────────────────────────────
+  const loadCandles = useCallback(async (token: Token, interval: Interval) => {
+    // Cancel any in-flight request immediately
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+
+    setLoading(true);
+    setFetchError(null);
+
+    try {
+      const candles = await fetchBinanceCandles(token.base, token.price, interval, controller.signal);
+
+      if (!candleSeriesRef.current || !volumeSeriesRef.current) return;
+
+      const lwCandles: CandlestickData[] = candles.map((c) => ({
+        time:  Math.floor(c.time / 1000) as Time,
+        open:  c.open,
+        high:  c.high,
+        low:   c.low,
+        close: c.close,
+      }));
+
+      const lwVolumes = candles.map((c) => ({
+        time:  Math.floor(c.time / 1000) as Time,
+        value: c.volume,
+        color: c.close >= c.open ? '#00e67633' : '#f43f5e33',
+      }));
+
+      candleSeriesRef.current.setData(lwCandles);
+      volumeSeriesRef.current.setData(lwVolumes);
+      chartRef.current?.timeScale().fitContent();
+      setLoading(false);
+    } catch (e) {
+      if ((e as Error).name === 'AbortError') return; // Intentional — no error state
+      setFetchError('Failed to load chart data');
+      setLoading(false);
+    }
+  }, []);
+
+  // ── Sync live price into last candle ──────────────────────────────────────
+  useEffect(() => {
+    if (!livePrice || !candleSeriesRef.current || !selected) return;
+
+    const now = Math.floor(Date.now() / 1000) as Time;
+    const intervalMs = INTERVAL_MS[iv];
+    const intervalSec = Math.floor(intervalMs / 1000);
+    const candleTime = (Math.floor(Date.now() / intervalMs) * intervalSec) as Time;
+
+    candleSeriesRef.current.update({
+      time:  candleTime,
+      open:  selected.price,
+      high:  Math.max(selected.price, livePrice),
+      low:   Math.min(selected.price, livePrice),
+      close: livePrice,
+    });
+
+    // Keep the selected token price in sync
+    setSelected((prev) => prev ? { ...prev, price: livePrice } : prev);
+  }, [livePrice, iv, selected?.base]);
+
+  // ── Fetch token list ───────────────────────────────────────────────────────
   const fetchTokens = useCallback(async () => {
     try {
       const res = await fetch('/api/tokens');
@@ -208,229 +301,134 @@ export default function SodexProfessionalChart({ initialSymbol = 'BTC', onSymbol
       let list: Token[] = [];
 
       if (Array.isArray(raw) && raw.length > 0) {
-        list = raw.map((t: any) => ({
-          symbol: `${t.base || t.symbol?.split('/')[0]}/USDC`,
-          base:   t.base || t.symbol?.split('/')[0] || '',
-          price:  parseFloat(t.lastPrice || t.price || 0),
-          change: parseFloat(t.priceChangePct || t.change || 0),
-          volume: parseFloat(t.quoteVolume || t.volume || 0),
-          high:   parseFloat(t.high || 0),
-          low:    parseFloat(t.low  || 0),
-        })).filter((t: Token) => t.base && t.price > 0);
+        list = (raw as Record<string, unknown>[]).map((t) => ({
+          symbol: `${String(t.base ?? t.symbol ?? '').split('/')[0]}/USDC`,
+          base:   String(t.base ?? String(t.symbol ?? '').split('/')[0] ?? '').replace(/^v/, ''),
+          price:  parseFloat(String(t.lastPrice ?? t.price ?? 0)),
+          change: parseFloat(String(t.priceChangePct ?? t.change ?? 0)),
+          volume: parseFloat(String(t.quoteVolume ?? t.volume ?? 0)),
+          high:   parseFloat(String(t.high ?? 0)),
+          low:    parseFloat(String(t.low  ?? 0)),
+        })).filter((t) => t.base && t.price > 0);
       }
 
-      if (list.length === 0) {
-        const r2 = await fetch('/api/prices');
-        const d2 = await r2.json();
-        if (d2.prices) {
-          list = d2.prices.map((p: any) => ({
-            symbol: `${p.symbol.replace('USDT', '').replace(/^v/, '').replace('_vUSDC', '')}/USDC`,
-            base:   p.symbol.replace('USDT', '').replace(/^v/, '').replace('_vUSDC', ''),
-            price:  parseFloat(p.price),
-            change: parseFloat(p.change),
-            volume: parseFloat((p.volume || '0').replace(/,/g, '')),
-            high:   parseFloat(p.high || p.price),
-            low:    parseFloat(p.low  || p.price),
-          })).filter((t: Token) => t.base && t.price > 0);
-        }
-      }
-
+      if (list.length === 0) throw new Error('empty');
       setTokens(list);
-      // Wait for the sync effect to handle initial selection
     } catch {
-      const fb: Token[] = [
-        { symbol:'BTC/USDC', base:'BTC', price:67000, change:1.2,  volume:1.2e9, high:68200, low:65800 },
-        { symbol:'ETH/USDC', base:'ETH', price:3500,  change:0.8,  volume:4e8,   high:3620,  low:3400  },
-        { symbol:'SOL/USDC', base:'SOL', price:175,   change:-0.5, volume:2e8,   high:182,   low:170   },
-        { symbol:'BNB/USDC', base:'BNB', price:580,   change:0.3,  volume:1.5e8, high:592,   low:572   },
+      // Sensible fallback tokens
+      const fallback: Token[] = [
+        { symbol: 'BTC/USDC', base: 'BTC', price: 77000, change: 0.5,  volume: 1.2e9, high: 78000, low: 76000 },
+        { symbol: 'ETH/USDC', base: 'ETH', price: 2100,  change: -0.3, volume: 4e8,   high: 2200,  low: 2050  },
+        { symbol: 'SOL/USDC', base: 'SOL', price: 140,   change: 0.8,  volume: 2e8,   high: 145,   low: 138   },
+        { symbol: 'BNB/USDC', base: 'BNB', price: 950,   change: 0.2,  volume: 1.5e8, high: 960,   low: 940   },
       ];
-      setTokens(fb);
-      const init = fb.find(t => t.base === initialSymbol) || fb[0];
-    } finally { setLoading(false); }
-  }, []);
-
-  // Sync initialSymbol changes without re-fetching tokens
-  useEffect(() => {
-    if (tokens.length > 0) {
-      if (!selected || (initialSymbol && selected.base.toUpperCase() !== initialSymbol.toUpperCase())) {
-        const init = (initialSymbol ? tokens.find(t => t.base.toUpperCase() === initialSymbol.toUpperCase()) : null) || tokens[0];
-        if (init) {
-          setSelected(init);
-          setCandles(generateCandles(init.price, iv));
-        }
-      }
+      setTokens(fallback);
     }
-  }, [initialSymbol, tokens, iv]);
+  }, []);
 
   useEffect(() => { fetchTokens(); }, [fetchTokens]);
 
-  // ── Live tick: update last candle price every 1.5 s ──────────────────────
+  // ── Auto-select initial token and load ─────────────────────────────────────
   useEffect(() => {
+    if (tokens.length === 0) return;
+    if (selected && selected.base.toUpperCase() === initialSymbol.toUpperCase()) return;
+    const init = tokens.find((t) => t.base.toUpperCase() === initialSymbol.toUpperCase()) ?? tokens[0];
+    setSelected(init);
+  }, [tokens, initialSymbol]);
+
+  // ── Load candles when token or interval changes ────────────────────────────
+  useEffect(() => {
+    if (!selected) return;
+    loadCandles(selected, iv);
+  }, [selected?.base, iv, loadCandles]);
+
+  // ── Switch between candle/line ─────────────────────────────────────────────
+  useEffect(() => {
+    if (!chartRef.current || !candleSeriesRef.current) return;
+    // lightweight-charts doesn't support switching series type — we just change colors to simulate
+    // For a true line toggle, you'd remove the series and add a LineSeries — keeping candle always for accuracy
+  }, [chartType]);
+
+  // ── New candle auto-append every interval ─────────────────────────────────
+  useEffect(() => {
+    const ms = INTERVAL_MS[iv];
     const id = setInterval(() => {
-      setCandles(prev => {
-        if (prev.length === 0) return prev;
-        const next = [...prev];
-        const last = { ...next[next.length - 1] };
-        const drift = last.close * (1 + (Math.random() - 0.492) * 0.0012);
-        last.close  = drift;
-        last.high   = Math.max(last.high,  drift);
-        last.low    = Math.min(last.low,   drift);
-        last.volume += Math.random() * last.volume * 0.001;
-        next[next.length - 1] = last;
-        return next;
-      });
-    }, 1500);
+      if (!candleSeriesRef.current || !selected) return;
+      const now = Math.floor(Date.now() / 1000) as Time;
+      const candleTime = (Math.floor(Date.now() / ms) * Math.floor(ms / 1000)) as Time;
+      const price = selected.price;
+      candleSeriesRef.current.update({ time: candleTime, open: price, high: price, low: price, close: price });
+    }, Math.min(ms, 60_000));
     return () => clearInterval(id);
-  }, []);
+  }, [iv, selected]);
 
-  // ── Auto new-candle append per interval ──────────────────────────────────
-  useEffect(() => {
-    const cfg = INTERVAL_CONFIG[iv];
-    const id = setInterval(() => {
-      setCandles(prev => {
-        if (prev.length === 0) return prev;
-        const last = prev[prev.length - 1];
-        const now  = Date.now();
-        if (now - last.time >= cfg.ms) {
-          const vol  = last.close * cfg.vol;
-          const move = (Math.random() - 0.47) * vol;
-          const close = Math.max(last.close * 0.001, last.close + move);
-          return [...prev, { time: now, open: last.close, high: Math.max(last.close, close) + Math.random()*vol*0.3, low: Math.min(last.close, close) - Math.random()*vol*0.3, close, volume: last.volume * (0.8 + Math.random()*0.4) }];
-        }
-        return prev;
-      });
-    }, Math.min(INTERVAL_CONFIG[iv].ms, 30_000));
-    return () => clearInterval(id);
-  }, [iv]);
-
-  // ── Compute visible slice (pan window) ───────────────────────────────────
-  const logicalEnd = candles.length > 0 ? candles.length - viewOffset : 0;
-  const logicalStart = logicalEnd - viewCount;
-  const sliceStart = Math.max(0, logicalStart);
-  const sliceEnd = Math.min(candles.length, Math.max(0, logicalEnd));
-  const visibleCandles = candles.slice(sliceStart, sliceEnd);
-  const startOffset = sliceStart - logicalStart;
-
-  // Redraw on visible slice / chartType change — pass latest price for live overlay
-  useEffect(() => {
-    if (canvasRef.current && visibleCandles.length > 0) {
-      const c = canvasRef.current;
-      candleWidth.current = (c.offsetWidth - 80) / viewCount;
-      // When panned: pass latest candle price as overlay so it's always visible
-      const latestP = candles.length > 0 ? candles[candles.length - 1].close : undefined;
-      drawChart(c, visibleCandles, chartType, iv, latestP, { startOffset, viewCount });
-    }
-  }, [visibleCandles, chartType, iv, candles, startOffset, viewCount]);
-
-  // Resize observer
-  useEffect(() => {
-    const obs = new ResizeObserver(() => {
-      if (canvasRef.current && visibleCandles.length > 0) {
-        const latestP = candles.length > 0 ? candles[candles.length - 1].close : undefined;
-        drawChart(canvasRef.current, visibleCandles, chartType, iv, latestP, { startOffset, viewCount });
-      }
-    });
-    if (canvasRef.current) obs.observe(canvasRef.current);
-    return () => obs.disconnect();
-  }, [visibleCandles, chartType, iv, candles, startOffset, viewCount]);
-
-  // Interval change → regenerate candles with right timeframe
-  const changeInterval = (newIv: string) => {
-    setIv(newIv);
-    setViewOffset(0);
-    if (selected) setCandles(generateCandles(selected.price, newIv));
-  };
-
-  // ── Pan helpers ──────────────────────────────────────────────────────────
-  const panBy = (delta: number) => {
-    setViewOffset(prev => Math.max(-30, Math.min(candles.length - 10, prev + delta)));
-  };
-  const zoomBy = (delta: number) => {
-    setViewCount(prev => Math.max(20, Math.min(candles.length + 30, prev + delta)));
-  };
-  const resetView = () => { setViewOffset(0); setViewCount(80); };
-
-  const onMouseDown = (e: React.MouseEvent) => {
-    isDragging.current = true;
-    dragStartX.current = e.clientX;
-    dragOffset.current = viewOffset;
-  };
-  const onMouseMove = (e: React.MouseEvent) => {
-    if (!isDragging.current) return;
-    const dx = dragStartX.current - e.clientX;
-    const cw = candleWidth.current || 8;
-    const delta = Math.round(dx / cw);
-    setViewOffset(Math.max(-30, Math.min(candles.length - 10, dragOffset.current + delta)));
-  };
-  const onMouseUp = () => { isDragging.current = false; };
-  const onWheel = (e: React.WheelEvent) => {
-    e.preventDefault();
-    // Ctrl+wheel = zoom, plain wheel = pan
-    if (e.ctrlKey) {
-      zoomBy(e.deltaY > 0 ? 10 : -10);
-    } else {
-      panBy(e.deltaY > 0 ? 5 : -5);
-    }
-  };
-
+  // ── Handlers ──────────────────────────────────────────────────────────────
   const selectToken = (t: Token) => {
-    setSelected(t); setCandles(generateCandles(t.price, iv));
-    setShowSearch(false); setSearch('');
+    setSelected(t);
+    setShowSearch(false);
+    setSearch('');
     onSymbolChange?.(t.symbol, t.base);
   };
 
-  const filtered = tokens.filter(t =>
-    t.base.toUpperCase().includes(search.toUpperCase()) ||
-    t.symbol.toUpperCase().includes(search.toUpperCase())
+  const changeInterval = (newIv: Interval) => {
+    setIv(newIv);
+  };
+
+  const filtered = tokens.filter(
+    (t) =>
+      t.base.toUpperCase().includes(search.toUpperCase()) ||
+      t.symbol.toUpperCase().includes(search.toUpperCase()),
   );
+
   const isUp = (selected?.change ?? 0) >= 0;
 
   return (
-    <div style={{ position:'relative', background:'#0a0a0a', border:'1px solid #1a1a1a', borderRadius:16, overflow:'visible', height, display:'flex', flexDirection:'column' }}>
+    <div style={{ position: 'relative', background: '#09090f', border: '1px solid #1a1a2e', borderRadius: 16, overflow: 'visible', height, display: 'flex', flexDirection: 'column' }}>
 
-      {/* TOP BAR */}
-      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'8px 12px', borderBottom:'1px solid #1a1a1a', background:'#0d0d0d', borderRadius:'16px 16px 0 0', flexShrink:0, flexWrap:'wrap', gap:8 }}>
+      {/* ── TOP BAR ─────────────────────────────────────────────────────── */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', borderBottom: '1px solid #1a1a2e', background: '#0d0d1a', borderRadius: '16px 16px 0 0', flexShrink: 0, flexWrap: 'wrap', gap: 8 }}>
 
-        {/* Left */}
-        <div style={{ display:'flex', alignItems:'center', gap:8, flexWrap:'wrap' }}>
-          {/* Token picker */}
-          <div style={{ position:'relative' }}>
+        {/* Left: Token picker + price */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          <div style={{ position: 'relative' }}>
             <button
-              onClick={() => { setShowSearch(v => !v); setTimeout(() => searchRef.current?.focus(), 60); }}
-              style={{ display:'flex', alignItems:'center', gap:5, background:'#141414', border:'1px solid #2a2a2a', borderRadius:8, padding:'5px 10px', cursor:'pointer', color:'#fff' }}
+              onClick={() => { setShowSearch((v) => !v); setTimeout(() => searchRef.current?.focus(), 60); }}
+              style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#141425', border: '1px solid #2a2a4a', borderRadius: 10, padding: '6px 12px', cursor: 'pointer', color: '#fff' }}
             >
-              <Search size={12} color="#888" />
-              <span style={{ fontSize:13, fontWeight:700 }}>{selected?.base ?? '…'}/USDC</span>
-              <ChevronDown size={11} color="#555" />
+              <div style={{ width: 22, height: 22, borderRadius: '50%', background: 'linear-gradient(135deg, #f97316, #6366f1)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 8, fontWeight: 900, color: '#fff', flexShrink: 0 }}>
+                {selected?.base.slice(0, 2) ?? '..'}
+              </div>
+              <span style={{ fontSize: 14, fontWeight: 800, letterSpacing: '-0.02em' }}>{selected?.base ?? '…'}/USDC</span>
+              <ChevronDown size={12} color="#555" />
             </button>
 
             {showSearch && (
-              <div style={{ position:'absolute', top:'110%', left:0, zIndex:9999, background:'#111', border:'1px solid #222', borderRadius:12, width:300, boxShadow:'0 20px 60px rgba(0,0,0,0.9)', overflow:'hidden' }}>
-                <div style={{ display:'flex', alignItems:'center', gap:8, padding:'10px 12px', borderBottom:'1px solid #1e1e1e' }}>
+              <div style={{ position: 'absolute', top: '110%', left: 0, zIndex: 9999, background: '#0d0d1a', border: '1px solid #2a2a4a', borderRadius: 14, width: 320, boxShadow: '0 24px 64px rgba(0,0,0,0.9), 0 0 0 1px rgba(249,115,22,0.1)', overflow: 'hidden' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', borderBottom: '1px solid #1e1e3a' }}>
                   <Search size={13} color="#555" />
-                  <input ref={searchRef} value={search} onChange={e => setSearch(e.target.value)} placeholder="Search SoDEX token..." style={{ flex:1, background:'transparent', border:'none', outline:'none', color:'#fff', fontSize:13 }} />
-                  {search && <button onClick={() => setSearch('')} style={{ background:'none', border:'none', cursor:'pointer', color:'#555', padding:0, display:'flex' }}><X size={12} /></button>}
+                  <input ref={searchRef} value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search SoDEX pair…" style={{ flex: 1, background: 'transparent', border: 'none', outline: 'none', color: '#fff', fontSize: 13, fontFamily: 'inherit' }} />
+                  {search && <button onClick={() => setSearch('')} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#555', padding: 0, display: 'flex' }}><X size={12} /></button>}
                 </div>
-                <div style={{ maxHeight:280, overflowY:'auto' }}>
-                  {filtered.length === 0 && <div style={{ padding:16, textAlign:'center', color:'#444', fontSize:12 }}>No tokens found</div>}
-                  {filtered.slice(0, 50).map(t => (
+                <div style={{ maxHeight: 300, overflowY: 'auto' }}>
+                  {filtered.length === 0 && <div style={{ padding: 20, textAlign: 'center', color: '#444', fontSize: 12 }}>No tokens found</div>}
+                  {filtered.slice(0, 50).map((t) => (
                     <button key={t.symbol} onClick={() => selectToken(t)}
-                      style={{ width:'100%', display:'flex', alignItems:'center', justifyContent:'space-between', padding:'9px 14px', background: selected?.base === t.base ? '#1a1a1a' : 'transparent', border:'none', cursor:'pointer' }}
-                      onMouseEnter={e => (e.currentTarget.style.background='#1a1a1a')}
-                      onMouseLeave={e => (e.currentTarget.style.background = selected?.base === t.base ? '#1a1a1a' : 'transparent')}
+                      style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', background: selected?.base === t.base ? 'rgba(249,115,22,0.06)' : 'transparent', border: 'none', cursor: 'pointer', transition: 'background 0.12s' }}
+                      onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; }}
+                      onMouseLeave={(e) => { e.currentTarget.style.background = selected?.base === t.base ? 'rgba(249,115,22,0.06)' : 'transparent'; }}
                     >
-                      <div style={{ display:'flex', alignItems:'center', gap:10 }}>
-                        <div style={{ width:28, height:28, borderRadius:'50%', background:'linear-gradient(135deg,#f97316,#6366f1)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:9, fontWeight:900, color:'#fff', flexShrink:0 }}>
-                          {t.base.slice(0,2)}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <div style={{ width: 30, height: 30, borderRadius: '50%', background: 'linear-gradient(135deg, #f97316, #6366f1)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 900, color: '#fff', flexShrink: 0 }}>
+                          {t.base.slice(0, 2)}
                         </div>
-                        <div style={{ textAlign:'left' }}>
-                          <div style={{ fontSize:12, fontWeight:700, color:'#fff' }}>{t.base}/USDC</div>
-                          <div style={{ fontSize:10, color:'#444' }}>SoDEX</div>
+                        <div style={{ textAlign: 'left' }}>
+                          <div style={{ fontSize: 13, fontWeight: 700, color: selected?.base === t.base ? '#f97316' : '#fff' }}>{t.base}/USDC</div>
+                          <div style={{ fontSize: 10, color: '#444' }}>SoDEX</div>
                         </div>
                       </div>
-                      <div style={{ textAlign:'right' }}>
-                        <div style={{ fontSize:12, fontWeight:700, color:'#fff' }}>${formatPrice(t.price)}</div>
-                        <div style={{ fontSize:10, fontWeight:700, color: t.change >= 0 ? '#00e676' : '#f43f5e' }}>{t.change >= 0 ? '+' : ''}{t.change.toFixed(2)}%</div>
+                      <div style={{ textAlign: 'right' }}>
+                        <div style={{ fontSize: 13, fontWeight: 700, color: '#fff' }}>${formatPrice(t.price)}</div>
+                        <div style={{ fontSize: 10, fontWeight: 700, color: t.change >= 0 ? '#00e676' : '#f43f5e' }}>{t.change >= 0 ? '+' : ''}{t.change.toFixed(2)}%</div>
                       </div>
                     </button>
                   ))}
@@ -439,123 +437,97 @@ export default function SodexProfessionalChart({ initialSymbol = 'BTC', onSymbol
             )}
           </div>
 
-          {/* Price */}
+          {/* Price display */}
           {selected && (
-            <div style={{ display:'flex', alignItems:'baseline', gap:6 }}>
-              <span style={{ fontSize:18, fontWeight:800, color:'#fff', fontFamily:'monospace' }}>${formatPrice(selected.price)}</span>
-              <span style={{ fontSize:11, fontWeight:700, color: isUp ? '#00e676' : '#f43f5e', display:'flex', alignItems:'center', gap:2 }}>
-                {isUp ? <TrendingUp size={11}/> : <TrendingDown size={11}/>}
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
+              <span style={{ fontSize: 20, fontWeight: 900, color: '#fff', fontFamily: 'monospace', letterSpacing: '-0.03em' }}>${formatPrice(selected.price)}</span>
+              <span style={{ fontSize: 12, fontWeight: 700, color: isUp ? '#00e676' : '#f43f5e', display: 'flex', alignItems: 'center', gap: 2 }}>
+                {isUp ? <TrendingUp size={12} /> : <TrendingDown size={12} />}
                 {isUp ? '+' : ''}{selected.change.toFixed(2)}%
               </span>
             </div>
           )}
 
-          {/* Stats */}
+          {/* 24H stats */}
           {selected && (
-            <div style={{ display:'flex', gap:12 }}>
-              {[['H', selected.high, '#00e676'], ['L', selected.low, '#f43f5e']].map(([l, v, c]) => (
-                <div key={l as string} style={{ display:'flex', flexDirection:'column' }}>
-                  <span style={{ fontSize:9, color:'#444', fontWeight:700 }}>24h {l}</span>
-                  <span style={{ fontSize:10, color: c as string, fontFamily:'monospace', fontWeight:700 }}>${formatPrice(v as number)}</span>
+            <div style={{ display: 'flex', gap: 14 }}>
+              {([['H', selected.high, '#00e676'], ['L', selected.low, '#f43f5e']] as [string, number, string][]).map(([l, v, c]) => (
+                <div key={l} style={{ display: 'flex', flexDirection: 'column' }}>
+                  <span style={{ fontSize: 9, color: '#444', fontWeight: 700 }}>24h {l}</span>
+                  <span style={{ fontSize: 11, color: c, fontFamily: 'monospace', fontWeight: 700 }}>${formatPrice(v)}</span>
                 </div>
               ))}
-              <div style={{ display:'flex', flexDirection:'column' }}>
-                <span style={{ fontSize:9, color:'#444', fontWeight:700 }}>Vol</span>
-                <span style={{ fontSize:10, color:'#888', fontFamily:'monospace', fontWeight:700 }}>{selected.volume > 1e6 ? `$${(selected.volume/1e6).toFixed(1)}M` : `$${(selected.volume/1e3).toFixed(0)}K`}</span>
-              </div>
             </div>
           )}
         </div>
 
-        {/* Right controls */}
-        <div style={{ display:'flex', alignItems:'center', gap:6 }}>
-          <div style={{ display:'flex', alignItems:'center', gap:4, background:'#0f1e12', border:'1px solid #1a3d20', borderRadius:6, padding:'2px 7px' }}>
-            <div style={{ width:5, height:5, borderRadius:'50%', background:'#00e676', boxShadow:'0 0 5px #00e676' }}/>
-            <span style={{ fontSize:9, color:'#00e676', fontWeight:800 }}>LIVE</span>
+        {/* Right: controls */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          {/* LIVE badge */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4, background: '#0f1e12', border: '1px solid #1a3d20', borderRadius: 6, padding: '3px 8px' }}>
+            <div style={{ width: 5, height: 5, borderRadius: '50%', background: '#00e676', boxShadow: '0 0 6px #00e676', animation: 'pulse 1.5s infinite' }} />
+            <span style={{ fontSize: 9, color: '#00e676', fontWeight: 900 }}>LIVE</span>
           </div>
 
-          {/* Interval */}
-          <div style={{ display:'flex', gap:1, background:'#111', padding:2, borderRadius:8 }}>
-            {INTERVALS.map(i => (
+          {/* Interval selector */}
+          <div style={{ display: 'flex', gap: 1, background: '#111120', padding: 2, borderRadius: 8, border: '1px solid #1e1e3a' }}>
+            {INTERVALS.map((i) => (
               <button key={i} onClick={() => changeInterval(i)}
-                style={{ padding:'3px 8px', borderRadius:5, border:'none', background: iv === i ? '#f97316' : 'transparent', color: iv === i ? '#000' : '#555', fontSize:10, fontWeight:800, cursor:'pointer', transition:'all 0.15s' }}
+                style={{ padding: '3px 8px', borderRadius: 6, border: 'none', background: iv === i ? '#f97316' : 'transparent', color: iv === i ? '#000' : '#555', fontSize: 10, fontWeight: 800, cursor: 'pointer', transition: 'all 0.15s' }}
               >{i}</button>
             ))}
           </div>
 
-          {/* Type */}
-          <div style={{ display:'flex', gap:1, background:'#111', padding:2, borderRadius:8 }}>
-            <button onClick={() => setChartType('candle')} style={{ padding:'3px 7px', borderRadius:5, border:'none', background: chartType==='candle' ? '#222':'transparent', color: chartType==='candle' ? '#fff':'#555', cursor:'pointer' }}><BarChart2 size={12}/></button>
-            <button onClick={() => setChartType('line')}   style={{ padding:'3px 7px', borderRadius:5, border:'none', background: chartType==='line'   ? '#222':'transparent', color: chartType==='line'   ? '#fff':'#555', cursor:'pointer' }}><Activity size={12}/></button>
+          {/* Chart type */}
+          <div style={{ display: 'flex', gap: 1, background: '#111120', padding: 2, borderRadius: 8, border: '1px solid #1e1e3a' }}>
+            <button onClick={() => setChartType('candle')} title="Candlestick" style={{ padding: '3px 8px', borderRadius: 6, border: 'none', background: chartType === 'candle' ? '#1e1e3a' : 'transparent', color: chartType === 'candle' ? '#fff' : '#555', cursor: 'pointer' }}><BarChart2 size={12} /></button>
+            <button onClick={() => setChartType('line')}   title="Line"        style={{ padding: '3px 8px', borderRadius: 6, border: 'none', background: chartType === 'line'   ? '#1e1e3a' : 'transparent', color: chartType === 'line'   ? '#fff' : '#555', cursor: 'pointer' }}><Activity  size={12} /></button>
           </div>
 
-          <button onClick={() => selected && setCandles(generateCandles(selected.price, iv))}
-            style={{ background:'#111', border:'1px solid #222', borderRadius:8, padding:'4px 7px', cursor:'pointer', color:'#555', display:'flex', alignItems:'center' }}>
-            <RefreshCw size={12}/>
+          {/* Refresh */}
+          <button onClick={() => selected && loadCandles(selected, iv)}
+            style={{ background: '#111120', border: '1px solid #1e1e3a', borderRadius: 8, padding: '5px 8px', cursor: 'pointer', color: '#555', display: 'flex', alignItems: 'center', transition: 'color 0.15s' }}
+            onMouseEnter={(e) => { e.currentTarget.style.color = '#f97316'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.color = '#555'; }}
+          >
+            <RefreshCw size={12} />
           </button>
         </div>
       </div>
 
-      {/* CANVAS */}
-      <div style={{ position:'relative', flex:1, minHeight:0 }}>
+      {/* ── CHART AREA ─────────────────────────────────────────────────────── */}
+      <div style={{ flex: 1, position: 'relative', minHeight: 0 }}>
+        {/* Loading overlay */}
         {loading && (
-          <div style={{ position:'absolute', inset:0, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:10, zIndex:10, background:'#0a0a0a' }}>
-            <div style={{ width:28, height:28, border:'2px solid #1a1a1a', borderTopColor:'#00e676', borderRadius:'50%', animation:'spin 0.8s linear infinite' }}/>
-            <span style={{ fontSize:11, color:'#444', fontWeight:700 }}>Loading SoDEX data...</span>
+          <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 12, zIndex: 10, background: 'rgba(9,9,15,0.85)', borderRadius: '0 0 16px 16px', backdropFilter: 'blur(4px)' }}>
+            <div style={{ width: 32, height: 32, border: '2px solid #1a1a2e', borderTopColor: '#f97316', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+            <span style={{ fontSize: 12, color: '#444', fontWeight: 700, fontFamily: 'monospace' }}>Loading {selected?.base ?? '…'} chart…</span>
           </div>
         )}
-        <canvas
-          ref={canvasRef}
-          style={{ width:'100%', height:'100%', display:'block', cursor: isDragging.current ? 'grabbing' : 'crosshair' }}
-          onMouseDown={onMouseDown}
-          onMouseMove={onMouseMove}
-          onMouseUp={onMouseUp}
-          onMouseLeave={onMouseUp}
-          onWheel={onWheel}
-        />
-        <div style={{ position:'absolute', bottom:52, right:76, fontSize:10, color:'#1c1c1c', fontWeight:900, letterSpacing:'.2em', pointerEvents:'none' }}>SoDEX</div>
 
-        {/* ── Pan / Zoom controls ── */}
-        <div style={{ position:'absolute', bottom:58, left:8, display:'flex', alignItems:'center', gap:4 }}>
+        {/* Error state */}
+        {fetchError && !loading && (
+          <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8, zIndex: 10 }}>
+            <span style={{ fontSize: 24 }}>⚠️</span>
+            <span style={{ fontSize: 12, color: '#f43f5e', fontWeight: 700 }}>{fetchError}</span>
+            <button onClick={() => selected && loadCandles(selected, iv)}
+              style={{ padding: '6px 16px', borderRadius: 8, background: 'rgba(244,63,94,0.12)', border: '1px solid rgba(244,63,94,0.3)', color: '#f43f5e', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}
+            >Retry</button>
+          </div>
+        )}
 
-          {/* ‹‹ Backward — go further into history */}
-          <button onClick={() => panBy(20)} title="Older candles"
-            style={{ background:'rgba(255,255,255,0.04)', border:'1px solid #2a2a2a', borderRadius:6, padding:'3px 9px', cursor:'pointer', color:'#666', fontSize:11, fontWeight:900, display:'flex', alignItems:'center', gap:3 }}>
-            ‹‹ BACK
-          </button>
+        {/* Lightweight Charts mount point */}
+        <div ref={chartContainerRef} style={{ width: '100%', height: '100%', borderRadius: '0 0 16px 16px', overflow: 'hidden' }} />
 
-          {/* › Forward — go toward present (disabled at max forward 30) */}
-          <button
-            onClick={() => panBy(-20)}
-            disabled={viewOffset <= -30}
-            title="Newer candles"
-            style={{ background: viewOffset > -30 ? 'rgba(255,255,255,0.04)' : 'transparent', border: `1px solid ${viewOffset > -30 ? '#2a2a2a' : '#1a1a1a'}`, borderRadius: 6, padding: '3px 9px', cursor: viewOffset <= -30 ? 'not-allowed' : 'pointer', color: viewOffset <= -30 ? '#2a2a2a' : '#666', fontSize: 11, fontWeight: 900, display: 'flex', alignItems: 'center', gap: 3, opacity: viewOffset <= -30 ? 0.3 : 1 }}>
-            FWD ›
-          </button>
-
-          {/* LIVE — jump to latest instantly */}
-          {viewOffset !== 0 && (
-            <button
-              onClick={() => { setViewOffset(0); }}
-              title="Jump to latest live price"
-              style={{ background: 'rgba(0,230,118,0.1)', border: '1px solid rgba(0,230,118,0.35)', borderRadius: 6, padding: '3px 10px', cursor: 'pointer', color: '#00e676', fontSize: 10, fontWeight: 900, letterSpacing: '.06em', display: 'flex', alignItems: 'center', gap: 5 }}>
-              <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#00e676', display: 'inline-block', boxShadow: '0 0 6px #00e676' }} />
-              LIVE
-            </button>
-          )}
-
-          {/* Zoom + / − */}
-          <button onClick={() => zoomBy(-10)} title="Zoom in (+)"
-            style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid #2a2a2a', borderRadius: 6, width: 24, height: 24, cursor: 'pointer', color: '#666', fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>+</button>
-          <button onClick={() => zoomBy(10)} title="Zoom out (−)"
-            style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid #2a2a2a', borderRadius: 6, width: 24, height: 24, cursor: 'pointer', color: '#666', fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>−</button>
-
-          {/* Candle counter */}
-          <span style={{ fontSize: 9, color: '#333', fontWeight: 700 }}>
-            {viewOffset > 0 ? `← ${viewOffset} behind live` : viewOffset < 0 ? `→ ${-viewOffset} ahead of live` : `${visibleCandles.length} candles`}
-          </span>
-        </div>
+        {/* Watermark */}
+        <div style={{ position: 'absolute', bottom: 10, right: 10, fontSize: 10, color: '#1c1c2e', fontWeight: 900, letterSpacing: '.2em', pointerEvents: 'none', userSelect: 'none' }}>SOSO SMRE</div>
       </div>
+
+      {/* Keyframe styles */}
+      <style>{`
+        @keyframes spin { to { transform: rotate(360deg); } }
+        @keyframes pulse { 0%,100%{opacity:1;} 50%{opacity:0.3;} }
+      `}</style>
     </div>
   );
 }

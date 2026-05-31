@@ -3,10 +3,12 @@ import type { NextConfig } from 'next';
 const nextConfig: NextConfig = {
   reactStrictMode: true,
   eslint: {
-    ignoreDuringBuilds: true,
+    // Keep ESLint relaxed during active dev — tighten before final submission
+    ignoreDuringBuilds: false,
   },
+  // TypeScript strict mode — NO ignoreBuildErrors
   typescript: {
-    ignoreBuildErrors: true,
+    ignoreBuildErrors: false,
   },
   serverExternalPackages: ['@google/genai', 'groq-sdk'],
   images: {
@@ -14,7 +16,20 @@ const nextConfig: NextConfig = {
       { protocol: 'https', hostname: '**.redd.it' },
       { protocol: 'https', hostname: '**.reddit.com' },
       { protocol: 'https', hostname: 'lh3.googleusercontent.com' },
+      { protocol: 'https', hostname: 'assets.coingecko.com' },
     ],
+  },
+  async headers() {
+    return [
+      {
+        source: '/api/:path*',
+        headers: [
+          { key: 'Access-Control-Allow-Origin', value: '*' },
+          { key: 'Access-Control-Allow-Methods', value: 'GET,POST,OPTIONS' },
+          { key: 'Access-Control-Allow-Headers', value: 'Content-Type' },
+        ],
+      },
+    ];
   },
 };
 

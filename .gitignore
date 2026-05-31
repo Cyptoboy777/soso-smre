@@ -39,3 +39,7 @@ next-env.d.ts
 # logs
 *.log
 dev-server.*.log
+
+# Local env
+.env.local
+.env.*.local
