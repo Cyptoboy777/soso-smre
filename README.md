@@ -15,6 +15,11 @@
   <img src="https://img.shields.io/badge/Gemini%202.5%20Flash-AI%20Powered-purple?logo=google" />
 </p>
 
+<p align="center">
+  <b>🌍 Live Demo: <a href="https://soso-smre.vercel.app/login">https://soso-smre.vercel.app/login</a></b><br/>
+  <i>Connect your wallet and experience the 100% Real Execution Engine.</i>
+</p>
+
 ---
 
 ## 🏆 What is SOSO SMRE?
