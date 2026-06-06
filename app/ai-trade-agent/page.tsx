@@ -5,7 +5,8 @@ import { doc, getDoc, serverTimestamp, setDoc } from 'firebase/firestore';
 import { useAuth } from '@/components/FirebaseProvider';
 import { db } from '@/lib/firebase';
 import { CopyTradePanel } from '@/components/SodexMarket';
-import SodexProfessionalChart from '@/components/SodexProfessionalChart';
+import { useSodexStore } from '@/store/sodexStore';
+import { Search } from 'lucide-react';
 
 interface Holding { symbol: string; amount: number; avgBuyPrice: number; }
 interface Trade { id: string; symbol: string; type: 'BUY'|'SELL'; amount: number; price: number; total: number; timestamp: number; }
@@ -46,6 +47,12 @@ export default function AITradeAgentPage() {
   const [side, setSide] = useState<'LONG' | 'SHORT'>('LONG');
   const [spotSide, setSpotSide] = useState<'BUY' | 'SELL'>('BUY');
   const [aiActive, setAiActive] = useState(false);
+  
+  // Custom Token Search State
+  const [searchToken, setSearchToken] = useState('');
+  const [showSearchDropdown, setShowSearchDropdown] = useState(false);
+  const tickerList = useSodexStore(state => state.tickerList);
+  
   const [aiLogs, setAiLogs] = useState<string[]>(['SOSO AI-Trader initialized. Engine ready.']);
   const [strategy, setStrategy] = useState('Momentum + Sentiment');
   const [risk, setRisk] = useState('Medium');
@@ -395,81 +402,88 @@ export default function AITradeAgentPage() {
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '1fr 360px 300px', height: '100%', overflow: 'hidden', gap: 0 }}>
 
-      {/* LEFT COL: Chart + Order Book + Execution */}
+      {/* LEFT COL: Search + Execution */}
       <div style={{ overflowY: 'auto', padding: '16px 12px 16px 20px', display: 'flex', flexDirection: 'column', gap: 16 }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             
-            {/* 1. SODEX PROFESSIONAL CHART */}
-            <SodexProfessionalChart
-              initialSymbol={baseCoin}
-              height={chartHeight}
-              onSymbolChange={(symbol, base) => {
-                const match = assets.find(a => a.startsWith(base + ' /'));
-                if (match) setAsset(match);
-              }}
-            />
-
-            {/* Order Book + Execution side by side */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.3fr', gap: 12 }}>
-              {/* ORDER BOOK */}
-              <div style={{ background: '#0a0a0a', border: '1px solid #1a1a1a', borderRadius: 14, padding: 14 }}>
-                <h3 style={{ fontSize: 10, fontWeight: 900, color: '#444', marginBottom: 12, letterSpacing: '.1em' }}>ORDER BOOK</h3>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 9, color: '#333', fontWeight: 700, marginBottom: 6 }}>
-                  <span>PRICE (USDC)</span><span>SIZE</span>
-                </div>
-                {[...Array(5)].map((_, i) => (
-                  <div key={`ask-${i}`} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, padding: '3px 0', position: 'relative' }}>
-                    <div style={{ position: 'absolute', right: 0, top: 0, bottom: 0, background: 'rgba(244,63,94,0.08)', width: `${25 + i * 10}%` }} />
-                    <span style={{ color: '#f43f5e', fontWeight: 700, zIndex: 1, fontFamily: 'monospace' }}>{(parseFloat(limitPrice) * (1 + (5-i) * 0.0001)).toFixed(2)}</span>
-                    <span style={{ color: '#333', zIndex: 1, fontFamily: 'monospace' }}>{(Math.random() * 2 + 0.1).toFixed(3)}</span>
+            {/* TOKEN SEARCH (Paper Trading) */}
+            <div style={{ background: '#0a0a0a', border: '1px solid #1a1a1a', borderRadius: 14, padding: 16, position: 'relative' }}>
+              <h3 style={{ fontSize: 10, fontWeight: 900, color: '#444', margin: 0, marginBottom: 10, letterSpacing: '.1em' }}>SELECT TOKEN (PAPER TRADE)</h3>
+              <div style={{ position: 'relative' }}>
+                <Search size={14} color="#666" style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)' }} />
+                <input
+                  type="text"
+                  placeholder="Search SOL, BTC, PEPE..."
+                  value={searchToken}
+                  onChange={(e) => {
+                    setSearchToken(e.target.value);
+                    setShowSearchDropdown(true);
+                  }}
+                  onFocus={() => setShowSearchDropdown(true)}
+                  style={{ width: '100%', padding: '12px 12px 12px 34px', borderRadius: 8, background: '#111', border: '1px solid #2a2a2a', color: '#fff', fontSize: 14, outline: 'none', boxSizing: 'border-box' }}
+                />
+                {showSearchDropdown && searchToken && (
+                  <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, marginTop: 4, background: '#111', border: '1px solid #2a2a2a', borderRadius: 8, maxHeight: 200, overflowY: 'auto', zIndex: 100, boxShadow: '0 8px 32px rgba(0,0,0,0.8)' }}>
+                    {tickerList
+                      .filter(t => t.base.toLowerCase().includes(searchToken.toLowerCase()))
+                      .map(t => (
+                        <div
+                          key={t.symbol}
+                          onClick={() => {
+                            setAsset(`${t.base} / USDC`);
+                            setSearchToken('');
+                            setShowSearchDropdown(false);
+                          }}
+                          style={{ padding: '10px 12px', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #1a1a1a' }}
+                        >
+                          <span style={{ color: '#fff', fontSize: 13, fontWeight: 700 }}>{t.base}</span>
+                          <span style={{ color: '#888', fontSize: 11 }}>${t.lastPrice.toFixed(4)}</span>
+                        </div>
+                      ))}
+                    {tickerList.filter(t => t.base.toLowerCase().includes(searchToken.toLowerCase())).length === 0 && (
+                      <div style={{ padding: '10px 12px', color: '#666', fontSize: 12 }}>No tokens found</div>
+                    )}
                   </div>
-                ))}
-                <div style={{ padding: '8px 0', textAlign: 'center', margin: '6px 0', borderTop: '1px solid #1a1a1a', borderBottom: '1px solid #1a1a1a' }}>
-                  <span style={{ fontSize: 14, fontWeight: 900, color: '#fff', fontFamily: 'monospace' }}>${parseFloat(limitPrice).toLocaleString()}</span>
-                </div>
-                {[...Array(5)].map((_, i) => (
-                  <div key={`bid-${i}`} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, padding: '3px 0', position: 'relative' }}>
-                    <div style={{ position: 'absolute', right: 0, top: 0, bottom: 0, background: 'rgba(0,230,118,0.08)', width: `${30 + i * 8}%` }} />
-                    <span style={{ color: '#00e676', fontWeight: 700, zIndex: 1, fontFamily: 'monospace' }}>{(parseFloat(limitPrice) * (1 - (i+1) * 0.0001)).toFixed(2)}</span>
-                    <span style={{ color: '#333', zIndex: 1, fontFamily: 'monospace' }}>{(Math.random() * 2 + 0.1).toFixed(3)}</span>
-                  </div>
-                ))}
+                )}
               </div>
+            </div>
 
-              {/* EXECUTION PANEL */}
-              <div style={{ background: '#0a0a0a', border: '1px solid #1a1a1a', borderRadius: 14, padding: 16 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
-                  <h3 style={{ fontSize: 10, fontWeight: 900, color: '#444', margin: 0, letterSpacing: '.1em' }}>PLACE ORDER</h3>
-                  <div style={{ display: 'flex', background: '#111', padding: 3, borderRadius: 8 }}>
-                    {['BUY', 'SELL'].map(s => (
-                      <button key={s} onClick={() => setSpotSide(s as any)} style={{ padding: '4px 10px', borderRadius: 5, border: 'none', background: spotSide === s ? (s === 'BUY' ? '#00e676' : '#f43f5e') : 'transparent', color: spotSide === s ? '#000' : '#555', fontSize: 10, fontWeight: 900, cursor: 'pointer' }}>{s}</button>
+            {/* EXECUTION PANEL */}
+            <div style={{ background: '#0a0a0a', border: '1px solid #1a1a1a', borderRadius: 14, padding: 16 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+                <h3 style={{ fontSize: 10, fontWeight: 900, color: '#444', margin: 0, letterSpacing: '.1em' }}>PLACE ORDER</h3>
+                <div style={{ display: 'flex', background: '#111', padding: 3, borderRadius: 8 }}>
+                  {['BUY', 'SELL'].map(s => (
+                    <button key={s} onClick={() => setSpotSide(s as any)} style={{ padding: '4px 10px', borderRadius: 5, border: 'none', background: spotSide === s ? (s === 'BUY' ? '#00e676' : '#f43f5e') : 'transparent', color: spotSide === s ? '#000' : '#555', fontSize: 10, fontWeight: 900, cursor: 'pointer' }}>{s}</button>
+                  ))}
+                </div>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                <div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+                    <label style={{ fontSize: 9, color: '#444', fontWeight: 800 }}>AMOUNT (USDC)</label>
+                    <span style={{ fontSize: 9, color: '#fff', fontWeight: 800 }}>Price: ${parseFloat(limitPrice).toLocaleString()}</span>
+                  </div>
+                  <input value={amount} onChange={e => setAmount(e.target.value)} style={{ width: '100%', padding: '10px 12px', borderRadius: 8, background: '#111', border: '1px solid #2a2a2a', color: '#fff', fontSize: 14, fontWeight: 700, outline: 'none', boxSizing: 'border-box' }} />
+                  <div style={{ display: 'flex', gap: 4, marginTop: 6 }}>
+                    {[25, 50, 75, 100].map(p => (
+                      <button key={p} onClick={() => setPct(p)} style={{ flex: 1, padding: '5px 0', borderRadius: 5, background: '#1a1a1a', border: '1px solid #252525', color: '#666', fontSize: 9, fontWeight: 700, cursor: 'pointer' }}>{p}%</button>
                     ))}
                   </div>
                 </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
                   <div>
-                    <label style={{ fontSize: 9, color: '#444', fontWeight: 800, display: 'block', marginBottom: 6 }}>AMOUNT (USDC)</label>
-                    <input value={amount} onChange={e => setAmount(e.target.value)} style={{ width: '100%', padding: '10px 12px', borderRadius: 8, background: '#111', border: '1px solid #2a2a2a', color: '#fff', fontSize: 14, fontWeight: 700, outline: 'none', boxSizing: 'border-box' }} />
-                    <div style={{ display: 'flex', gap: 4, marginTop: 6 }}>
-                      {[25, 50, 75, 100].map(p => (
-                        <button key={p} onClick={() => setPct(p)} style={{ flex: 1, padding: '5px 0', borderRadius: 5, background: '#1a1a1a', border: '1px solid #252525', color: '#666', fontSize: 9, fontWeight: 700, cursor: 'pointer' }}>{p}%</button>
-                      ))}
-                    </div>
+                    <label style={{ fontSize: 9, color: '#f43f5e', fontWeight: 800, display: 'block', marginBottom: 4 }}>STOP LOSS</label>
+                    <input value={stopLoss} onChange={e => setStopLoss(e.target.value)} style={{ width: '100%', padding: '8px', borderRadius: 7, background: '#111', border: '1px solid #2a1a1a', color: '#f43f5e', fontSize: 12, fontWeight: 700, outline: 'none', boxSizing: 'border-box' }} />
                   </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-                    <div>
-                      <label style={{ fontSize: 9, color: '#f43f5e', fontWeight: 800, display: 'block', marginBottom: 4 }}>STOP LOSS</label>
-                      <input value={stopLoss} onChange={e => setStopLoss(e.target.value)} style={{ width: '100%', padding: '8px', borderRadius: 7, background: '#111', border: '1px solid #2a1a1a', color: '#f43f5e', fontSize: 12, fontWeight: 700, outline: 'none', boxSizing: 'border-box' }} />
-                    </div>
-                    <div>
-                      <label style={{ fontSize: 9, color: '#00e676', fontWeight: 800, display: 'block', marginBottom: 4 }}>TAKE PROFIT</label>
-                      <input value={takeProfit} onChange={e => setTakeProfit(e.target.value)} style={{ width: '100%', padding: '8px', borderRadius: 7, background: '#111', border: '1px solid #1a2a1a', color: '#00e676', fontSize: 12, fontWeight: 700, outline: 'none', boxSizing: 'border-box' }} />
-                    </div>
+                  <div>
+                    <label style={{ fontSize: 9, color: '#00e676', fontWeight: 800, display: 'block', marginBottom: 4 }}>TAKE PROFIT</label>
+                    <input value={takeProfit} onChange={e => setTakeProfit(e.target.value)} style={{ width: '100%', padding: '8px', borderRadius: 7, background: '#111', border: '1px solid #1a2a1a', color: '#00e676', fontSize: 12, fontWeight: 700, outline: 'none', boxSizing: 'border-box' }} />
                   </div>
-                  <button onClick={confirmBuy} disabled={tradeStatus !== 'IDLE'} style={{ width: '100%', padding: '14px', borderRadius: 10, background: spotSide === 'BUY' ? 'linear-gradient(135deg,#00e676,#00c853)' : 'linear-gradient(135deg,#f43f5e,#e11d48)', color: '#000', border: 'none', fontSize: 13, fontWeight: 900, cursor: 'pointer', boxShadow: spotSide === 'BUY' ? '0 6px 20px rgba(0,230,118,0.25)' : '0 6px 20px rgba(244,63,94,0.25)' }}>
-                    {tradeStatus === 'SUBMITTING' ? 'EXECUTING...' : `CONFIRM ${spotSide}`}
-                  </button>
                 </div>
+                <button onClick={confirmBuy} disabled={tradeStatus !== 'IDLE'} style={{ width: '100%', padding: '14px', borderRadius: 10, background: spotSide === 'BUY' ? 'linear-gradient(135deg,#00e676,#00c853)' : 'linear-gradient(135deg,#f43f5e,#e11d48)', color: '#000', border: 'none', fontSize: 13, fontWeight: 900, cursor: 'pointer', boxShadow: spotSide === 'BUY' ? '0 6px 20px rgba(0,230,118,0.25)' : '0 6px 20px rgba(244,63,94,0.25)' }}>
+                  {tradeStatus === 'SUBMITTING' ? 'EXECUTING...' : `CONFIRM ${spotSide}`}
+                </button>
               </div>
             </div>
           </div>

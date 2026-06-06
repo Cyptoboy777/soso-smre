@@ -2,6 +2,8 @@ import type { Metadata } from 'next';
 import './globals.css';
 import AppShell from '@/components/AppShell';
 import { FirebaseProvider } from '@/components/FirebaseProvider';
+import WalletErrorSuppressor from '@/components/WalletErrorSuppressor';
+import { Web3Provider } from '@/components/Web3Provider';
 
 export const metadata: Metadata = {
   title: 'SoSo SMRE — Smart Money Research Engine',
@@ -24,9 +26,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
       </head>
       <body style={{ background: '#000', color: '#fff', minHeight: '100vh', overflow: 'hidden' }}>
-        <FirebaseProvider>
-          <AppShell>{children}</AppShell>
-        </FirebaseProvider>
+        <WalletErrorSuppressor />
+        <Web3Provider>
+          <FirebaseProvider>
+            <AppShell>{children}</AppShell>
+          </FirebaseProvider>
+        </Web3Provider>
       </body>
     </html>
   );

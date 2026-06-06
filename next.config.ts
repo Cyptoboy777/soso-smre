@@ -2,10 +2,6 @@ import type { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
-  eslint: {
-    // Keep ESLint relaxed during active dev — tighten before final submission
-    ignoreDuringBuilds: false,
-  },
   // TypeScript strict mode — NO ignoreBuildErrors
   typescript: {
     ignoreBuildErrors: false,

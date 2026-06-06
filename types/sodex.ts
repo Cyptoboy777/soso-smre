@@ -57,4 +57,39 @@ export interface OrderBook {
   updatedAt: number
 }
 
-export type Network = 'mainnet' | 'testnet'
+export type Network = 'mainnet' | 'testnet';
+
+export interface TradeSetup {
+  side: 'BUY' | 'SELL';
+  entry: number;
+  sl: number;
+  tp: number[]; // Can be multiple TPs (TP1, TP2, TP3)
+  trailingStop: boolean;
+  breakevenMove: boolean;
+}
+
+export interface RiskSettings {
+  maxRiskPerTradePct: number; // e.g. 1%
+  maxDailyRiskPct: number;    // e.g. 3%
+  minRR: number;              // e.g. 2.0 (1:2)
+}
+
+export interface ExecutedOrder {
+  id: string;
+  symbol: string;
+  side: 'BUY' | 'SELL';
+  size: number;
+  price: number;
+  timestamp: number;
+  mode: 'paper' | 'real';
+}
+
+export interface Position {
+  id: string;
+  symbol: string;
+  side: 'BUY' | 'SELL';
+  size: number;
+  entryPrice: number;
+  unrealizedPnL: number;
+  mode: 'paper' | 'real';
+}

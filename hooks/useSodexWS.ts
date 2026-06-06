@@ -1,25 +1,19 @@
 'use client'
-import { useEffect, useRef, useState, useCallback } from 'react'
+import { useEffect, useRef, useCallback } from 'react'
 import { normaliseTicker, normaliseL2Book, ENDPOINTS } from '@/lib/sodex'
-import type { Ticker, OrderBook, Network } from '@/types/sodex'
+import type { Network } from '@/types/sodex'
+import { useSodexStore } from '@/store/sodexStore'
 
 export interface SodexWSState {
-  tickers:     Map<string, Ticker>
-  tickerList:  Ticker[]
-  orderBook:   OrderBook | null
-  connected:   boolean
-  error:       string | null
-  updatedAt:   number
   subscribeBook:   (symbol: string) => void
   unsubscribeBook: (symbol: string) => void
 }
 
 export function useSodexWS(network: Network = 'mainnet'): SodexWSState {
-  const [tickers,   setTickers]   = useState<Map<string, Ticker>>(new Map())
-  const [orderBook, setOrderBook] = useState<OrderBook | null>(null)
-  const [connected, setConnected] = useState(false)
-  const [error,     setError]     = useState<string | null>(null)
-  const [updatedAt, setUpdatedAt] = useState(Date.now())
+  const setTickers = useSodexStore(state => state.setTickers)
+  const setOrderBook = useSodexStore(state => state.setOrderBook)
+  const setConnected = useSodexStore(state => state.setConnected)
+  const setError = useSodexStore(state => state.setError)
 
   const wsRef          = useRef<WebSocket | null>(null)
   const pingTimer      = useRef<ReturnType<typeof setInterval>>(undefined)
@@ -80,11 +74,9 @@ export function useSodexWS(network: Network = 'mainnet'): SodexWSState {
           for (const raw of data) if (raw?.s) next.set(raw.s, normaliseTicker(raw))
           return next
         })
-        setUpdatedAt(Date.now())
       }
       if (channel === 'l2Book' && data) {
         setOrderBook(normaliseL2Book(data))
-        setUpdatedAt(Date.now())
       }
     }
 
@@ -108,5 +100,5 @@ export function useSodexWS(network: Network = 'mainnet'): SodexWSState {
     }
   }, [connect])
 
-  return { tickers, tickerList: Array.from(tickers.values()), orderBook, connected, error, updatedAt, subscribeBook, unsubscribeBook }
+  return { subscribeBook, unsubscribeBook }
 }

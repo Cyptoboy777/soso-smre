@@ -4,6 +4,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Search, TrendingUp, TrendingDown, Zap, BarChart2, BookOpen, Terminal, RefreshCw } from 'lucide-react';
 import { fmtPrice, fmtPct } from '@/lib/sodex';
 import type { Ticker, OrderBook as OB, Network } from '@/types/sodex';
+import { useSodexStore } from '@/store/sodexStore';
+import React from 'react';
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  MARKET TICKER SIDEBAR
@@ -117,7 +119,9 @@ export function MarketTicker({
 // ─────────────────────────────────────────────────────────────────────────────
 //  ORDER BOOK
 // ─────────────────────────────────────────────────────────────────────────────
-export function OrderBook({ book, symbol }: { book: OB | null; symbol: string | null }) {
+export const OrderBook = React.memo(function OrderBook({ symbol }: { symbol: string | null }) {
+  const book = useSodexStore(state => state.orderBook);
+
   if (!symbol || !book) return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--text-dim)', fontSize: 12, flexDirection: 'column', gap: 8, opacity: 0.5 }}>
       <BookOpen size={20} />
@@ -188,7 +192,7 @@ export function OrderBook({ book, symbol }: { book: OB | null; symbol: string | 
       })()}
     </div>
   );
-}
+});
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  COPY TRADE PANEL (unchanged interface, improved UI)

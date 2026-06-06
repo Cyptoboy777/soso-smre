@@ -1,7 +1,18 @@
 'use client';
 
-import { useEffect, useRef, useState, useCallback } from 'react';
-import { createChart, ColorType, CrosshairMode, type IChartApi, type ISeriesApi, type CandlestickData, type Time } from 'lightweight-charts';
+import React, { useEffect, useRef, useState, useCallback, memo } from 'react';
+import { useSodexStore } from '@/store/sodexStore';
+import {
+  createChart,
+  ColorType,
+  CrosshairMode,
+  CandlestickSeries,
+  HistogramSeries,
+  type IChartApi,
+  type ISeriesApi,
+  type Time,
+  type IPriceLine,
+} from 'lightweight-charts';
 import { Search, X, ChevronDown, TrendingUp, TrendingDown, RefreshCw, BarChart2, Activity } from 'lucide-react';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -28,7 +39,7 @@ interface Props {
   initialSymbol?: string;
   onSymbolChange?: (symbol: string, base: string) => void;
   height?: number;
-  livePrice?: number;
+  tradeSetup?: { entry: number; sl: number; tp: number[]; side: 'BUY' | 'SELL' };
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -138,12 +149,18 @@ function formatPrice(p: number): string {
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
-export default function SodexProfessionalChart({ initialSymbol = 'BTC', onSymbolChange, height = 460, livePrice }: Props) {
+const SodexProfessionalChart = memo(function SodexProfessionalChart({ initialSymbol = 'BTC', onSymbolChange, height = 460, tradeSetup }: Props) {
+  const livePrice = useSodexStore(state => state.tickers.get(initialSymbol + 'USDT')?.lastPrice);
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef          = useRef<IChartApi | null>(null);
   const candleSeriesRef   = useRef<ISeriesApi<'Candlestick'> | null>(null);
   const volumeSeriesRef   = useRef<ISeriesApi<'Histogram'> | null>(null);
   const abortRef          = useRef<AbortController | null>(null);
+  
+  // Refs for dynamic price lines
+  const entryLineRef = useRef<IPriceLine | null>(null);
+  const slLineRef    = useRef<IPriceLine | null>(null);
+  const tpLineRefs   = useRef<IPriceLine[]>([]);
 
   const searchRef         = useRef<HTMLInputElement>(null);
   const [tokens,      setTokens]      = useState<Token[]>([]);
@@ -189,7 +206,7 @@ export default function SodexProfessionalChart({ initialSymbol = 'BTC', onSymbol
       handleScale:  { mouseWheel: true, pinch: true },
     });
 
-    const candleSeries = chart.addCandlestickSeries({
+    const candle = chart.addSeries(CandlestickSeries, {
       upColor:          CHART_THEME.upColor,
       downColor:        CHART_THEME.downColor,
       borderUpColor:    CHART_THEME.upColor,
@@ -198,9 +215,9 @@ export default function SodexProfessionalChart({ initialSymbol = 'BTC', onSymbol
       wickDownColor:    CHART_THEME.wickDownColor,
     });
 
-    const volumeSeries = chart.addHistogramSeries({
+    const volume = chart.addSeries(HistogramSeries, {
       color: '#00e67644',
-      priceFormat: { type: 'volume' },
+      priceFormat: { type: 'volume' as const },
       priceScaleId: 'volume',
     });
 
@@ -209,8 +226,8 @@ export default function SodexProfessionalChart({ initialSymbol = 'BTC', onSymbol
     });
 
     chartRef.current = chart;
-    candleSeriesRef.current = candleSeries;
-    volumeSeriesRef.current = volumeSeries;
+    candleSeriesRef.current = candle;
+    volumeSeriesRef.current = volume;
 
     // Resize observer
     const resizeObs = new ResizeObserver(() => {
@@ -247,7 +264,7 @@ export default function SodexProfessionalChart({ initialSymbol = 'BTC', onSymbol
 
       if (!candleSeriesRef.current || !volumeSeriesRef.current) return;
 
-      const lwCandles: CandlestickData[] = candles.map((c) => ({
+      const lwCandles = candles.map((c) => ({
         time:  Math.floor(c.time / 1000) as Time,
         open:  c.open,
         high:  c.high,
@@ -361,6 +378,62 @@ export default function SodexProfessionalChart({ initialSymbol = 'BTC', onSymbol
     }, Math.min(ms, 60_000));
     return () => clearInterval(id);
   }, [iv, selected]);
+
+  // ── Render Trade Setup Price Lines ─────────────────────────────────────────
+  useEffect(() => {
+    if (!candleSeriesRef.current) return;
+    
+    // Clear old lines
+    if (entryLineRef.current) candleSeriesRef.current.removePriceLine(entryLineRef.current);
+    if (slLineRef.current) candleSeriesRef.current.removePriceLine(slLineRef.current);
+    tpLineRefs.current.forEach(l => candleSeriesRef.current?.removePriceLine(l));
+    
+    entryLineRef.current = null;
+    slLineRef.current = null;
+    tpLineRefs.current = [];
+
+    if (tradeSetup) {
+      const { entry, sl, tp, side } = tradeSetup;
+      
+      if (entry > 0) {
+        entryLineRef.current = candleSeriesRef.current.createPriceLine({
+          price: entry,
+          color: '#38bdf8',
+          lineWidth: 2,
+          lineStyle: 0, // Solid
+          axisLabelVisible: true,
+          title: `ENTRY (${side})`,
+        });
+      }
+      
+      if (sl > 0) {
+        slLineRef.current = candleSeriesRef.current.createPriceLine({
+          price: sl,
+          color: '#f43f5e',
+          lineWidth: 2,
+          lineStyle: 1, // Dotted
+          axisLabelVisible: true,
+          title: 'SL',
+        });
+      }
+      
+      if (tp && Array.isArray(tp)) {
+        tp.forEach((tpVal, idx) => {
+          if (tpVal > 0) {
+            const line = candleSeriesRef.current?.createPriceLine({
+              price: tpVal,
+              color: '#00e676',
+              lineWidth: 2,
+              lineStyle: 1, // Dotted
+              axisLabelVisible: true,
+              title: `TP${idx+1}`,
+            });
+            if (line) tpLineRefs.current.push(line);
+          }
+        });
+      }
+    }
+  }, [tradeSetup]);
 
   // ── Handlers ──────────────────────────────────────────────────────────────
   const selectToken = (t: Token) => {
@@ -530,4 +603,6 @@ export default function SodexProfessionalChart({ initialSymbol = 'BTC', onSymbol
       `}</style>
     </div>
   );
-}
+});
+
+export default SodexProfessionalChart;

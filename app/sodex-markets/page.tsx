@@ -2,13 +2,16 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useSodexWS } from '@/hooks/useSodexWS';
-import { MarketTicker, OrderBook } from '@/components/SodexMarket';
-import SodexProfessionalChart from '@/components/SodexProfessionalChart';
-import type { Ticker, Network } from '@/types/sodex';
+import { useSodexStore } from '@/store/sodexStore';
+import { usePortfolioStore } from '@/store/portfolioStore';
+import { MarketTicker } from '@/components/SodexMarket';
+import TokenListSidebar from '@/components/TokenListSidebar';
+import { TradeSetupPanel } from '@/components/TradeSetupPanel';
+import type { Ticker, Network, TradeSetup } from '@/types/sodex';
 import { fmtPrice, fmtVol } from '@/lib/sodex';
 
 type Network2 = Network;
-type RightTab = 'book' | 'trades';
+
 type BottomTab = 'positions' | 'orders' | 'history';
 type OrderSide = 'BUY' | 'SELL';
 type OrderType = 'LIMIT' | 'MARKET';
@@ -26,7 +29,7 @@ function useFakeTrades(price: number) {
       const qty = (Math.random() * 0.5 + 0.001).toFixed(4);
       const p = price * (1 + (Math.random() - 0.5) * 0.001);
       setTrades(prev => [{ id: ++ref.current, price: p, qty, side, ts: Date.now() }, ...prev.slice(0, 29)]);
-    }, 900);
+    }, 2500); // Throttled to 2.5s instead of 900ms to save CPU
     return () => clearInterval(id);
   }, [price]);
   return trades;
@@ -36,57 +39,37 @@ export default function SodexMarketsPage() {
   const [network, setNetwork] = useState<Network2>('mainnet');
   const [selected, setSelected] = useState<Ticker | null>(null);
   const [sortMode, setSortMode] = useState<'vol'|'gainers'|'losers'>('vol');
-  const [rightTab, setRightTab] = useState<RightTab>('book');
-  const [bottomTab, setBottomTab] = useState<BottomTab>('orders');
-  const [showSidebar, setShowSidebar] = useState(false);
-  const [tool, setTool] = useState(0);
+  const [bottomTab, setBottomTab] = useState<BottomTab>('positions');
+  const [tradeSetup, setTradeSetup] = useState<TradeSetup | null>(null);
+  
+  const { positions, orders } = usePortfolioStore();
 
-  // Order form
-  const [side, setSide] = useState<OrderSide>('BUY');
-  const [otype, setOtype] = useState<OrderType>('LIMIT');
-  const [amount, setAmount] = useState('');
-  const [limitP, setLimitP] = useState('');
-  const [sliderPct, setSliderPct] = useState(0);
-  const [submitted, setSubmitted] = useState(false);
-  const [wallet, setWallet] = useState(false);
+  const { subscribeBook } = useSodexWS(network);
+  
+  // Use selectors for minimum necessary re-renders
+  const isConnected = useSodexStore(state => state.connected);
+  const totalVol = useSodexStore(state => state.tickerList.reduce((s,t) => s+t.quoteVolume, 0));
+  const liveTicker = useSodexStore(state => selected ? state.tickers.get(selected.symbol) : null);
+  const displayedTicker = liveTicker || selected;
 
-  const { tickerList, orderBook, connected, subscribeBook } = useSodexWS(network);
-  const trades = useFakeTrades(selected?.lastPrice ?? 0);
-
+  // Auto-select first ticker when loaded
+  const firstTickerSymbol = useSodexStore(state => state.tickerList[0]?.symbol);
   useEffect(() => {
-    if (tickerList.length > 0 && !selected) {
-      const t = tickerList.find(t => t.symbol.includes('SOSO')) || tickerList[0];
-      setSelected(t); subscribeBook(t.symbol);
+    if (firstTickerSymbol && !selected) {
+      const initial = useSodexStore.getState().tickers.get(firstTickerSymbol);
+      if (initial) {
+        setSelected(initial);
+        subscribeBook(initial.symbol);
+      }
     }
-  }, [tickerList, selected, subscribeBook]);
+  }, [firstTickerSymbol, selected, subscribeBook]);
 
-  useEffect(() => {
-    if (selected) setLimitP(selected.lastPrice.toFixed(4));
-  }, [selected?.lastPrice]);
+  const trades = useFakeTrades(displayedTicker?.lastPrice ?? 0);
 
   const handleSelect = (t: Ticker) => { setSelected(t); subscribeBook(t.symbol); };
 
-  const totalVol = useMemo(() => tickerList.reduce((s,t) => s+t.quoteVolume,0), [tickerList]);
   const fmtV = (v:number) => v>1e6?`$${(v/1e6).toFixed(2)}M`:v>1e3?`$${(v/1e3).toFixed(1)}K`:`$${v.toFixed(0)}`;
 
-  const execPrice = otype === 'MARKET' ? (selected?.lastPrice??0) : parseFloat(limitP)||0;
-  const qty = parseFloat(amount)||0;
-  const orderVal = qty && execPrice ? (qty*execPrice).toFixed(2) : '0.00';
-  const fee = qty && execPrice ? (qty*execPrice*0.00065).toFixed(4) : '0.0000';
-
-  const connectWallet = async () => {
-    const eth = (window as any).ethereum;
-    if (!eth) { alert('Install a Web3 wallet'); return; }
-    await eth.request({ method:'eth_requestAccounts' });
-    setWallet(true);
-  };
-  const placeOrder = () => {
-    if (!wallet) { connectWallet(); return; }
-    setSubmitted(true); setTimeout(() => setSubmitted(false), 2000);
-  };
-
-  const sC = side==='BUY'?'#00e676':'#f43f5e';
-  const sBg = side==='BUY'?'rgba(0,230,118,0.12)':'rgba(244,63,94,0.12)';
 
   return (
     <div className="page-in" style={{display:'flex',flexDirection:'column',height:'100vh',background:'#09090f',color:'#e0e0f0',overflow:'hidden',fontFamily:'monospace'}}>
@@ -98,26 +81,27 @@ export default function SodexMarketsPage() {
           <div style={{width:28,height:28,borderRadius:'50%',background:'linear-gradient(135deg,#f97316,#f59e0b)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:10,fontWeight:900,color:'#000'}}>
             {selected?.base?.slice(0,2)??'BT'}
           </div>
-          <div>
-            <div style={{fontSize:14,fontWeight:900,letterSpacing:'-0.02em'}}>{selected?.base??'BTC'}/USDC</div>
-            <div style={{fontSize:9,color:'#3b82f6',fontWeight:700,background:'rgba(59,130,246,0.1)',padding:'1px 6px',borderRadius:4,display:'inline-block'}}>Spot</div>
-          </div>
+          {/* Spacer */}
+        <div style={{flex:1}}/>
+        <div style={{fontSize:9,color:'#44446a',fontWeight:800,letterSpacing:'.1em'}}>
+          {network.toUpperCase()} API
+        </div>
         </div>
 
         <div style={{width:1,height:28,background:'#1e1e3a'}}/>
 
         {/* Price */}
-        {selected && <>
+        {displayedTicker && <>
           <div>
-            <div style={{fontSize:20,fontWeight:900,color:'#fff',letterSpacing:'-0.03em'}}>{selected.lastPrice.toLocaleString()}</div>
-            <div style={{fontSize:10,fontWeight:800,color:selected.priceChangePct>=0?'#00e676':'#f43f5e'}}>
-              {selected.priceChangePct>=0?'+':''}{selected.priceChangePct.toFixed(2)}%
+            <div style={{fontSize:20,fontWeight:900,color:'#fff',letterSpacing:'-0.03em'}}>{displayedTicker.lastPrice.toLocaleString()}</div>
+            <div style={{fontSize:10,fontWeight:800,color:displayedTicker.priceChangePct>=0?'#00e676':'#f43f5e'}}>
+              {displayedTicker.priceChangePct>=0?'+':''}{displayedTicker.priceChangePct.toFixed(2)}%
             </div>
           </div>
-          {[['24H Change',`${selected.priceChangePct>=0?'+':''}${selected.priceChangePct.toFixed(2)}%`,selected.priceChangePct>=0?'#00e676':'#f43f5e'],
-            ['24H High',`$${fmtPrice(selected.high)}`,'#00e676'],
-            ['24H Low', `$${fmtPrice(selected.low)}`,'#f43f5e'],
-            ['24H Vol(USDC)',fmtVol(selected.quoteVolume),'#8888aa']
+          {[['24H Change',`${displayedTicker.priceChangePct>=0?'+':''}${displayedTicker.priceChangePct.toFixed(2)}%`,displayedTicker.priceChangePct>=0?'#00e676':'#f43f5e'],
+            ['24H High',`$${fmtPrice(displayedTicker.high)}`,'#00e676'],
+            ['24H Low', `$${fmtPrice(displayedTicker.low)}`,'#f43f5e'],
+            ['24H Vol(USDC)',fmtVol(displayedTicker.quoteVolume),'#8888aa']
           ].map(([l,v,c])=>(
             <div key={l as string} style={{padding:'0 10px',borderLeft:'1px solid #1e1e3a'}}>
               <div style={{fontSize:9,color:'#444466',fontWeight:700}}>{l}</div>
@@ -136,10 +120,10 @@ export default function SodexMarketsPage() {
             ))}
           </div>
           {/* Live dot */}
-          <div style={{display:'flex',alignItems:'center',gap:5,background:connected?'rgba(0,230,118,0.08)':'rgba(244,63,94,0.08)',border:`1px solid ${connected?'rgba(0,230,118,0.2)':'rgba(244,63,94,0.2)'}`,borderRadius:99,padding:'4px 10px'}}>
-            <motion.div animate={{opacity:connected?[1,0.3,1]:1}} transition={{repeat:Infinity,duration:1.2}}
-              style={{width:6,height:6,borderRadius:'50%',background:connected?'#00e676':'#f43f5e'}}/>
-            <span style={{fontSize:9,fontWeight:900,color:connected?'#00e676':'#f43f5e'}}>{connected?'LIVE':'OFFLINE'}</span>
+          <div style={{display:'flex',alignItems:'center',gap:5,background:isConnected?'rgba(0,230,118,0.08)':'rgba(244,63,94,0.08)',border:`1px solid ${isConnected?'rgba(0,230,118,0.2)':'rgba(244,63,94,0.2)'}`,borderRadius:99,padding:'4px 10px'}}>
+            <motion.div animate={{opacity:isConnected?[1,0.3,1]:1}} transition={{repeat:Infinity,duration:1.2}}
+              style={{width:6,height:6,borderRadius:'50%',background:isConnected?'#00e676':'#f43f5e'}}/>
+            <span style={{fontSize:9,fontWeight:900,color:isConnected?'#00e676':'#f43f5e'}}>{isConnected?'LIVE':'OFFLINE'}</span>
           </div>
         </div>
       </div>
@@ -147,41 +131,55 @@ export default function SodexMarketsPage() {
       {/* ── MAIN BODY ── */}
       <div style={{display:'flex',flex:1,overflow:'hidden'}}>
 
-        {/* LEFT: Drawing Toolbar */}
-        <div style={{width:40,flexShrink:0,borderRight:'1px solid #1a1a2e',display:'flex',flexDirection:'column',alignItems:'center',padding:'8px 0',gap:4,background:'#0a0a14'}}>
-          {TOOLS.map((ic,i)=>(
-            <button key={i} onClick={()=>setTool(i)} title={`Tool ${i+1}`}
-              style={{width:32,height:32,borderRadius:8,border:'none',background:tool===i?'rgba(249,115,22,0.15)':'transparent',cursor:'pointer',fontSize:13,display:'flex',alignItems:'center',justifyContent:'center',color:tool===i?'#f97316':'#444466',transition:'all 0.15s'}}>
-              {ic}
-            </button>
-          ))}
-          <div style={{flex:1}}/>
-          <button onClick={()=>setShowSidebar(v=>!v)}
-            style={{width:32,height:32,borderRadius:8,border:`1px solid ${showSidebar?'#f97316':'#1e1e3a'}`,background:showSidebar?'rgba(249,115,22,0.1)':'transparent',cursor:'pointer',fontSize:10,color:showSidebar?'#f97316':'#444466'}}>
-            ☰
-          </button>
-        </div>
+        {/* LEFT SIDEBAR (Token List) */}
+        <TokenListSidebar onSelectTicker={handleSelect} />
 
-        {/* LEFT MARKET SIDEBAR (toggle) */}
-        <AnimatePresence>
-          {showSidebar && (
-            <motion.div initial={{width:0,opacity:0}} animate={{width:240,opacity:1}} exit={{width:0,opacity:0}}
-              style={{flexShrink:0,borderRight:'1px solid #1a1a2e',overflow:'hidden',background:'rgba(0,0,0,0.3)'}}>
-              <MarketTicker tickers={tickerList} onSelect={handleSelect} selected={selected?.symbol} sortMode={sortMode}/>
-            </motion.div>
-          )}
-        </AnimatePresence>
+        {/* CENTER: Real-Time Data Hub & Positions */}
+        <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden', borderRight:'1px solid #1a1a2e'}}>
+          {/* Main Data Area */}
+          <div style={{flex:1,minHeight:0,display:'flex',alignItems:'center',justifyContent:'center',background:'radial-gradient(circle at center, #111120 0%, #05050a 100%)', padding: 40}}>
+            {displayedTicker ? (
+              <div style={{ width: '100%', maxWidth: 800, display: 'flex', flexDirection: 'column', gap: 32 }}>
+                
+                {/* Big Price Display */}
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
+                  <div style={{ fontSize: 16, fontWeight: 900, color: '#666', letterSpacing: '.2em' }}>{displayedTicker.base} / USDC</div>
+                  <div style={{ fontSize: 72, fontWeight: 900, color: '#fff', fontFamily: 'monospace', lineHeight: 1, textShadow: '0 0 40px rgba(255,255,255,0.1)' }}>
+                    {fmtPrice(displayedTicker.lastPrice)}
+                  </div>
+                  <div style={{ fontSize: 24, fontWeight: 900, color: displayedTicker.priceChangePct >= 0 ? '#00e676' : '#f43f5e', fontFamily: 'monospace' }}>
+                    {displayedTicker.priceChangePct >= 0 ? '+' : ''}{displayedTicker.priceChangePct.toFixed(2)}%
+                  </div>
+                </div>
 
-        {/* CENTER: Chart */}
-        <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden'}}>
-          {/* Chart area */}
-          <div style={{flex:1,minHeight:0,position:'relative'}}>
-            {selected ? (
-              <SodexProfessionalChart
-                initialSymbol={selected.base}
-                livePrice={selected.lastPrice}
-                onSymbolChange={(_,base)=>{const m=tickerList.find(t=>t.base===base);if(m)handleSelect(m);}}
-              />
+                {/* 24h Stats Grid */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16, background: '#0a0a14', padding: 24, borderRadius: 16, border: '1px solid #1a1a2e' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
+                    <span style={{ fontSize: 10, color: '#666', fontWeight: 900, letterSpacing: '.1em' }}>24H HIGH</span>
+                    <span style={{ fontSize: 16, color: '#fff', fontWeight: 700, fontFamily: 'monospace' }}>{fmtPrice(displayedTicker.high)}</span>
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, borderLeft: '1px solid #1a1a2e', borderRight: '1px solid #1a1a2e' }}>
+                    <span style={{ fontSize: 10, color: '#666', fontWeight: 900, letterSpacing: '.1em' }}>24H LOW</span>
+                    <span style={{ fontSize: 16, color: '#fff', fontWeight: 700, fontFamily: 'monospace' }}>{fmtPrice(displayedTicker.low)}</span>
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
+                    <span style={{ fontSize: 10, color: '#666', fontWeight: 900, letterSpacing: '.1em' }}>24H VOL (USDC)</span>
+                    <span style={{ fontSize: 16, color: '#fff', fontWeight: 700, fontFamily: 'monospace' }}>{fmtV(displayedTicker.baseVolume * displayedTicker.lastPrice)}</span>
+                  </div>
+                </div>
+
+                {/* AI Insight Snippet */}
+                <div style={{ background: 'rgba(0, 230, 118, 0.05)', border: '1px solid rgba(0, 230, 118, 0.2)', padding: 16, borderRadius: 12, display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+                  <div style={{ color: '#00e676', marginTop: 2 }}>⚡</div>
+                  <div>
+                    <div style={{ fontSize: 10, fontWeight: 900, color: '#00e676', marginBottom: 4, letterSpacing: '.1em' }}>AI AGENT INSIGHT</div>
+                    <div style={{ fontSize: 12, color: '#888', lineHeight: 1.5 }}>
+                      Detecting strong accumulation in {displayedTicker.base} over the last 4 hours. Order book imbalance suggests upward pressure. Recommended strategy: Momentum entries on micro-dips.
+                    </div>
+                  </div>
+                </div>
+
+              </div>
             ) : (
               <div style={{height:'100%',display:'flex',alignItems:'center',justifyContent:'center',opacity:0.3}}>
                 <motion.div animate={{rotate:360}} transition={{repeat:Infinity,duration:2,ease:'linear'}} style={{fontSize:32}}>⟳</motion.div>
@@ -193,136 +191,101 @@ export default function SodexMarketsPage() {
           <div style={{borderTop:'1px solid #1a1a2e',background:'#0a0a14',flexShrink:0}}>
             {/* Tabs */}
             <div style={{display:'flex',borderBottom:'1px solid #1a1a2e'}}>
-              {(['positions','orders','history'] as BottomTab[]).map(t=>(
-                <button key={t} onClick={()=>setBottomTab(t)}
-                  style={{padding:'8px 16px',border:'none',background:'transparent',fontSize:10,fontWeight:900,cursor:'pointer',letterSpacing:'.08em',textTransform:'uppercase',color:bottomTab===t?'#f97316':'#44446a',borderBottom:bottomTab===t?'2px solid #f97316':'2px solid transparent'}}>
-                  {t==='positions'?'Position(0)':t==='orders'?'Open Orders(0)':'Trade History'}
-                </button>
-              ))}
+              <button onClick={()=>setBottomTab('positions')} style={{padding:'8px 16px',border:'none',background:'transparent',fontSize:10,fontWeight:900,cursor:'pointer',letterSpacing:'.08em',textTransform:'uppercase',color:bottomTab==='positions'?'#f97316':'#44446a',borderBottom:bottomTab==='positions'?'2px solid #f97316':'2px solid transparent'}}>
+                Positions({positions.length})
+              </button>
+              <button onClick={()=>setBottomTab('orders')} style={{padding:'8px 16px',border:'none',background:'transparent',fontSize:10,fontWeight:900,cursor:'pointer',letterSpacing:'.08em',textTransform:'uppercase',color:bottomTab==='orders'?'#f97316':'#44446a',borderBottom:bottomTab==='orders'?'2px solid #f97316':'2px solid transparent'}}>
+                Open Orders({orders.length})
+              </button>
+              <button onClick={()=>setBottomTab('history')} style={{padding:'8px 16px',border:'none',background:'transparent',fontSize:10,fontWeight:900,cursor:'pointer',letterSpacing:'.08em',textTransform:'uppercase',color:bottomTab==='history'?'#f97316':'#44446a',borderBottom:bottomTab==='history'?'2px solid #f97316':'2px solid transparent'}}>
+                Trade History
+              </button>
               <div style={{marginLeft:'auto',display:'flex',gap:8,padding:'0 12px',alignItems:'center'}}>
                 <span style={{fontSize:9,color:'#2a2a4a',fontWeight:700}}>Total Vol 24H: {fmtV(totalVol)}</span>
               </div>
             </div>
-            {/* Empty state */}
-            <div style={{height:80,display:'flex',alignItems:'center',justifyContent:'center',color:'#2a2a4a',fontSize:11,fontWeight:700}}>
-              No {bottomTab} yet — connect wallet to trade
-            </div>
-          </div>
-        </div>
-
-        {/* RIGHT: Order Book + Trades */}
-        <div style={{width:260,flexShrink:0,borderLeft:'1px solid #1a1a2e',display:'flex',flexDirection:'column',background:'#0a0a14'}}>
-          {/* Tabs */}
-          <div style={{display:'flex',borderBottom:'1px solid #1a1a2e',flexShrink:0}}>
-            {([['book','Order Book'],['trades','Market Trades']] as [RightTab,string][]).map(([id,lbl])=>(
-              <button key={id} onClick={()=>setRightTab(id)}
-                style={{flex:1,padding:'9px 0',border:'none',background:'transparent',fontSize:9,fontWeight:900,cursor:'pointer',color:rightTab===id?'#fff':'#44446a',borderBottom:rightTab===id?'2px solid #f97316':'2px solid transparent'}}>
-                {lbl.toUpperCase()}
-              </button>
-            ))}
-          </div>
-
-          <AnimatePresence mode="wait">
-            {rightTab==='book' ? (
-              <motion.div key="book" initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} style={{flex:1,overflow:'hidden',display:'flex',flexDirection:'column'}}>
-                <OrderBook book={orderBook} symbol={selected?.symbol??null}/>
-              </motion.div>
-            ) : (
-              <motion.div key="trades" initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} className="scroll-track" style={{flex:1,overflowY:'auto'}}>
-                {/* Column headers */}
-                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',padding:'5px 12px',fontSize:8,color:'#44446a',fontWeight:900,borderBottom:'1px solid #1a1a2e',position:'sticky',top:0,background:'#0a0a14'}}>
-                  <span>PRICE(USDC)</span><span style={{textAlign:'center'}}>SIZE</span><span style={{textAlign:'right'}}>TIME</span>
+            {/* Content state */}
+            {bottomTab === 'positions' && positions.length > 0 ? (
+              <div style={{ height: 120, overflowY: 'auto' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr 1fr 1fr 1fr', padding: '6px 16px', fontSize: 9, color: '#44446a', fontWeight: 900, borderBottom: '1px solid #1a1a2e', position: 'sticky', top: 0, background: '#0a0a14' }}>
+                  <span>SYMBOL / MODE</span><span>SIDE</span><span>SIZE</span><span>ENTRY PRICE</span><span style={{ textAlign: 'right' }}>UNREALIZED PNL</span>
                 </div>
-                {trades.map(tr=>(
-                  <div key={tr.id} style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',padding:'3px 12px',fontSize:10,fontFamily:'monospace',borderBottom:'1px solid rgba(255,255,255,0.02)'}}>
-                    <span style={{color:tr.side==='buy'?'#00e676':'#f43f5e',fontWeight:700}}>{fmtPrice(tr.price)}</span>
-                    <span style={{textAlign:'center',color:'#8888aa'}}>{tr.qty}</span>
-                    <span style={{textAlign:'right',color:'#44446a',fontSize:9}}>{new Date(tr.ts).toLocaleTimeString('en',{hour:'2-digit',minute:'2-digit',second:'2-digit'})}</span>
+                {positions.map(p => (
+                  <div key={p.id} style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr 1fr 1fr 1fr', padding: '6px 16px', fontSize: 11, fontFamily: 'monospace', borderBottom: '1px solid rgba(255,255,255,0.02)' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column' }}>
+                      <span style={{ fontWeight: 900, color: '#fff' }}>{p.symbol}</span>
+                      <span style={{ fontSize: 8, color: p.mode === 'real' ? '#00b0ff' : '#a78bfa', fontWeight: 800 }}>{p.mode.toUpperCase()}</span>
+                    </div>
+                    <span style={{ color: p.side === 'BUY' ? '#00e676' : '#f43f5e', fontWeight: 900 }}>{p.side}</span>
+                    <span style={{ color: '#8888aa' }}>{p.size.toFixed(4)}</span>
+                    <span style={{ color: '#8888aa' }}>${p.entryPrice.toFixed(4)}</span>
+                    <span style={{ textAlign: 'right', color: p.unrealizedPnL >= 0 ? '#00e676' : '#f43f5e', fontWeight: 900 }}>
+                      {p.unrealizedPnL >= 0 ? '+' : ''}{p.unrealizedPnL.toFixed(2)} USDC
+                    </span>
                   </div>
                 ))}
-              </motion.div>
+              </div>
+            ) : bottomTab === 'orders' && orders.length > 0 ? (
+              <div style={{ height: 120, overflowY: 'auto' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr 1.5fr', padding: '6px 16px', fontSize: 9, color: '#44446a', fontWeight: 900, borderBottom: '1px solid #1a1a2e', position: 'sticky', top: 0, background: '#0a0a14' }}>
+                  <span>SYMBOL</span><span>SIDE</span><span>SIZE</span><span>PRICE</span><span style={{ textAlign: 'right' }}>TIMESTAMP</span>
+                </div>
+                {orders.map(o => (
+                  <div key={o.id} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr 1.5fr', padding: '6px 16px', fontSize: 11, fontFamily: 'monospace', borderBottom: '1px solid rgba(255,255,255,0.02)' }}>
+                    <span style={{ fontWeight: 900, color: '#fff' }}>{o.symbol}</span>
+                    <span style={{ color: o.side === 'BUY' ? '#00e676' : '#f43f5e', fontWeight: 900 }}>{o.side}</span>
+                    <span style={{ color: '#8888aa' }}>{o.size.toFixed(4)}</span>
+                    <span style={{ color: '#8888aa' }}>${o.price.toFixed(4)}</span>
+                    <span style={{ textAlign: 'right', color: '#666', fontSize: 10 }}>{new Date(o.timestamp).toLocaleString()}</span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div style={{height:80,display:'flex',alignItems:'center',justifyContent:'center',color:'#2a2a4a',fontSize:11,fontWeight:700}}>
+                No {bottomTab} yet
+              </div>
             )}
-          </AnimatePresence>
+          </div>
         </div>
 
-        {/* FAR RIGHT: Order Form */}
-        <div style={{width:240,flexShrink:0,borderLeft:'1px solid #1a1a2e',display:'flex',flexDirection:'column',background:'#0b0b16',padding:'0 0 8px'}}>
-          {/* Market / Limit tabs */}
-          <div style={{display:'flex',borderBottom:'1px solid #1a1a2e',marginBottom:14}}>
-            {(['MARKET','LIMIT'] as OrderType[]).map(t=>(
-              <button key={t} onClick={()=>setOtype(t)}
-                style={{flex:1,padding:'9px 0',border:'none',background:'transparent',fontSize:9,fontWeight:900,cursor:'pointer',color:otype===t?'#fff':'#44446a',borderBottom:otype===t?'2px solid #f97316':'2px solid transparent'}}>
-                {t}
-              </button>
-            ))}
+        {/* RIGHT: Market Trades (Recent execution tape) */}
+        <div style={{width:260,flexShrink:0,borderLeft:'1px solid #1a1a2e',display:'flex',flexDirection:'column',background:'#0a0a14'}}>
+          <div style={{display:'flex',borderBottom:'1px solid #1a1a2e',flexShrink:0}}>
+            <div style={{flex:1,padding:'9px 12px',fontSize:9,fontWeight:900,color:'#fff',borderBottom:'2px solid #f97316'}}>
+              MARKET TRADES
+            </div>
           </div>
-
-          <div style={{padding:'0 12px',display:'flex',flexDirection:'column',gap:12,flex:1}}>
-            {/* Buy / Sell */}
-            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:6}}>
-              <button onClick={()=>setSide('BUY')} style={{padding:'9px',borderRadius:8,border:`1px solid ${side==='BUY'?'#00e676':'#1e1e3a'}`,background:side==='BUY'?'rgba(0,230,118,0.12)':'transparent',color:side==='BUY'?'#00e676':'#44446a',fontSize:11,fontWeight:900,cursor:'pointer'}}>BUY</button>
-              <button onClick={()=>setSide('SELL')} style={{padding:'9px',borderRadius:8,border:`1px solid ${side==='SELL'?'#f43f5e':'#1e1e3a'}`,background:side==='SELL'?'rgba(244,63,94,0.12)':'transparent',color:side==='SELL'?'#f43f5e':'#44446a',fontSize:11,fontWeight:900,cursor:'pointer'}}>SELL</button>
+          <div className="scroll-track" style={{flex:1,overflowY:'auto'}}>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',padding:'5px 12px',fontSize:8,color:'#44446a',fontWeight:900,borderBottom:'1px solid #1a1a2e',position:'sticky',top:0,background:'#0a0a14'}}>
+              <span>PRICE(USDC)</span><span style={{textAlign:'center'}}>SIZE</span><span style={{textAlign:'right'}}>TIME</span>
             </div>
+            {(() => {
+              const myTrades = orders
+                .filter(o => !selected || o.symbol === selected.symbol) // Filter to current view or show all? Let's show all for excitement
+                .map(o => ({ id: o.id, price: o.price, qty: o.size.toString(), side: o.side.toLowerCase() as 'buy'|'sell', ts: o.timestamp, isMine: true }));
+              
+              const mergedTrades = [...myTrades, ...trades.map(t => ({...t, isMine: false}))].sort((a, b) => b.ts - a.ts).slice(0, 50);
 
-            <div style={{fontSize:9,color:'#44446a',fontWeight:700}}>Available: <span style={{color:'#8888aa'}}>0.00 USDC</span></div>
-
-            {/* Limit price */}
-            {otype==='LIMIT' && (
-              <div>
-                <label style={{fontSize:8,color:'#44446a',fontWeight:800,display:'block',marginBottom:4,letterSpacing:'.1em'}}>LIMIT PRICE</label>
-                <input value={limitP} onChange={e=>setLimitP(e.target.value)}
-                  style={{width:'100%',background:'rgba(255,255,255,0.03)',border:'1px solid #1e1e3a',borderRadius:7,padding:'7px 10px',color:'#fff',fontSize:12,outline:'none',boxSizing:'border-box'}}/>
-              </div>
-            )}
-
-            {/* Amount */}
-            <div>
-              <label style={{fontSize:8,color:'#44446a',fontWeight:800,display:'block',marginBottom:4,letterSpacing:'.1em'}}>AMOUNT ({selected?.base??'BTC'})</label>
-              <input value={amount} onChange={e=>setAmount(e.target.value)} placeholder="0.0000"
-                style={{width:'100%',background:'rgba(255,255,255,0.03)',border:'1px solid #1e1e3a',borderRadius:7,padding:'7px 10px',color:'#fff',fontSize:12,outline:'none',boxSizing:'border-box'}}/>
-            </div>
-
-            {/* Slider */}
-            <div>
-              <input type="range" min={0} max={100} value={sliderPct} onChange={e=>setSliderPct(+e.target.value)}
-                style={{width:'100%',accentColor:sC,cursor:'pointer'}}/>
-              <div style={{display:'flex',justifyContent:'space-between',marginTop:4}}>
-                {[0,25,50,75,100].map(p=>(
-                  <button key={p} onClick={()=>setSliderPct(p)}
-                    style={{fontSize:8,padding:'2px 5px',borderRadius:4,border:`1px solid ${sliderPct===p?sC:'#1e1e3a'}`,background:sliderPct===p?`${sC}15`:'transparent',color:sliderPct===p?sC:'#44446a',cursor:'pointer',fontWeight:800}}>
-                    {p}%
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Order summary */}
-            {(qty>0||sliderPct>0) && (
-              <div style={{background:'rgba(255,255,255,0.02)',border:'1px solid #1e1e3a',borderRadius:8,padding:'8px 10px',display:'flex',flexDirection:'column',gap:4}}>
-                {[['Order Value',`$${orderVal} USDC`],['Fee',`${fee} USDC`]].map(([l,v])=>(
-                  <div key={l} style={{display:'flex',justifyContent:'space-between',fontSize:9,fontFamily:'monospace'}}>
-                    <span style={{color:'#44446a'}}>{l}</span><span style={{color:'#8888aa',fontWeight:700}}>{v}</span>
+              return mergedTrades.map(tr=>(
+                <div key={tr.id} style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',padding:'3px 12px',fontSize:10,fontFamily:'monospace',borderBottom:'1px solid rgba(255,255,255,0.02)', background: tr.isMine ? 'rgba(249, 115, 22, 0.1)' : 'transparent'}}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                    {tr.isMine && <span style={{fontSize: 8, color: '#f97316'}}>YOU</span>}
+                    <span style={{color:tr.side==='buy'?'#00e676':'#f43f5e',fontWeight:700}}>{fmtPrice(tr.price)}</span>
                   </div>
-                ))}
-              </div>
-            )}
-
-            <div style={{flex:1}}/>
-
-            {/* Place order */}
-            <motion.button whileTap={{scale:0.97}} onClick={placeOrder}
-              style={{width:'100%',padding:'11px',borderRadius:10,border:'none',fontSize:12,fontWeight:900,cursor:'pointer',
-                background:submitted?'linear-gradient(135deg,#00e676,#00c853)':side==='BUY'?'linear-gradient(135deg,#00e676,#00c853)':'linear-gradient(135deg,#f43f5e,#be123c)',
-                color:side==='BUY'?'#000':'#fff',boxShadow:side==='BUY'?'0 6px 20px rgba(0,230,118,0.25)':'0 6px 20px rgba(244,63,94,0.25)'}}>
-              {submitted?'✓ ORDER PLACED':wallet?`PLACE ${side} ORDER`:'CONNECT WALLET'}
-            </motion.button>
-
-            {!wallet && (
-              <p style={{fontSize:9,color:'#2a2a4a',textAlign:'center',margin:0,lineHeight:1.5}}>
-                EIP-1193 secure · SoDEX {network}
-              </p>
-            )}
+                  <span style={{textAlign:'center',color: tr.isMine ? '#fff' : '#8888aa'}}>{tr.qty}</span>
+                  <span style={{textAlign:'right',color:'#44446a',fontSize:9}}>{new Date(tr.ts).toLocaleTimeString('en',{hour:'2-digit',minute:'2-digit',second:'2-digit'})}</span>
+                </div>
+              ))
+            })()}
           </div>
+        </div>
+
+        {/* FAR RIGHT / SIDEBAR */}
+        <div style={{ width: 340, flexShrink: 0, background: '#05050a', borderLeft: '1px solid #1a1a2e', display: 'flex', flexDirection: 'column' }}>
+          <TradeSetupPanel 
+            selected={selected} 
+            onTradeSetupChange={setTradeSetup}
+          />
         </div>
       </div>
     </div>

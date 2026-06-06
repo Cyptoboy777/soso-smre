@@ -5,7 +5,7 @@ import { X, Send, Volume2, VolumeX, Mic, MicOff, Wifi, Activity, Zap } from 'luc
 import { usePathname } from 'next/navigation';
 import SoDoggyBody from './SoDoggyBody';
 import useSpeech from './hooks/useSpeech';
-import { useSodexWS } from '@/hooks/useSodexWS';
+import { useSodexStore } from '@/store/sodexStore';
 import { Maximize2, Minimize2 } from 'lucide-react';
 
 // ── Page-specific guidance — SoSo Dude! style ──
@@ -56,7 +56,7 @@ export default function SoDoggyAssistant() {
   const recognitionRef = useRef<any>(null);
   const idleTimerRef   = useRef<ReturnType<typeof setTimeout> | null>(null);
   const waveTimerRef   = useRef<ReturnType<typeof setInterval> | null>(null);
-  const { tickerList } = useSodexWS('mainnet');
+  const tickerList = useSodexStore(state => state.tickerList);
 
   // ── Load username ──
   useEffect(() => {
@@ -113,6 +113,8 @@ export default function SoDoggyAssistant() {
     setMicOn(false);
   }, []);
 
+
+
   const startContinuousListening = useCallback(() => {
     const SR = (window as any).webkitSpeechRecognition || (window as any).SpeechRecognition;
     if (!SR) { alert('Speech recognition not supported in this browser.'); return; }
@@ -130,7 +132,7 @@ export default function SoDoggyAssistant() {
       const idx = e.resultIndex;
       if (e.results[idx].isFinal) {
         const transcript = e.results[idx][0].transcript.trim();
-        if (transcript) handleSend(transcript);
+        if (transcript) handleSendRef.current(transcript);
       }
     };
 
@@ -245,6 +247,11 @@ export default function SoDoggyAssistant() {
     }
   };
 
+  const handleSendRef = useRef(handleSend);
+  useEffect(() => {
+    handleSendRef.current = handleSend;
+  }, [handleSend]);
+
   const emotion   = history[history.length - 1]?.emotion || 'neutral';
   const tc        = COLOR_MAP[emotion] || '#00e5ff';
   const bodyAction = isWaving ? 'waving' : speaking ? 'talking' : micOn ? 'listening' : 'idle';
@@ -331,11 +338,7 @@ export default function SoDoggyAssistant() {
 
             {/* Scan line + messages */}
             <div style={{ position: 'relative', flex: 1, display: 'flex', flexDirection: 'column', minHeight: 280 }}>
-              <motion.div
-                animate={{ y: ['0%','100%'] }}
-                transition={{ repeat: Infinity, duration: 3, ease: 'linear' }}
-                style={{ position: 'absolute', left: 0, right: 0, height: 1, zIndex: 10, pointerEvents: 'none', background: `linear-gradient(90deg, transparent, ${tc}30, transparent)` }}
-              />
+              <div style={{ position: 'absolute', left: 0, right: 0, height: 1, zIndex: 10, pointerEvents: 'none', background: `linear-gradient(90deg, transparent, ${tc}30, transparent)` }} />
               <div style={{ flex: 1, overflowY: 'auto', padding: '12px 12px', display: 'flex', flexDirection: 'column', gap: 9 }}>
                 {history.map((m, i) => (
                   <motion.div key={i}
@@ -362,6 +365,37 @@ export default function SoDoggyAssistant() {
                       fontSize: 11, color: m.role === 'dog' ? '#dde' : '#666', lineHeight: 1.55,
                       fontFamily: m.role === 'dog' ? 'var(--font-mono)' : 'inherit',
                     }}>{m.text}</div>
+                    
+                    {/* Auto-Trade Setup Button if signal detected */}
+                    {m.role === 'dog' && (() => {
+                      const match = m.text.match(/\b(BUY|SELL|LONG|SHORT|BULLISH|BEARISH)\b.*\b([A-Z]{3,6})\b/i);
+                      if (match) {
+                        const side = ['BUY','LONG','BULLISH'].includes(match[1].toUpperCase()) ? 'BUY' : 'SELL';
+                        const symbol = match[2].toUpperCase();
+                        return (
+                          <motion.button
+                            whileHover={{ scale: 1.02 }}
+                            whileTap={{ scale: 0.95 }}
+                            onClick={() => {
+                              window.dispatchEvent(new CustomEvent('TradeSignal', { 
+                                detail: { side, autoSuggest: true } 
+                              }));
+                            }}
+                            style={{
+                              marginTop: 4, padding: '4px 10px',
+                              background: side === 'BUY' ? 'rgba(0,230,118,0.1)' : 'rgba(244,63,94,0.1)',
+                              border: `1px solid ${side === 'BUY' ? '#00e676' : '#f43f5e'}`,
+                              borderRadius: 4, color: side === 'BUY' ? '#00e676' : '#f43f5e',
+                              fontSize: 9, fontWeight: 900, cursor: 'pointer', fontFamily: 'var(--font-mono)'
+                            }}
+                          >
+                            ⚡ SET UP {side} TRADE ({symbol})
+                          </motion.button>
+                        );
+                      }
+                      return null;
+                    })()}
+                    
                     {m.role === 'user' && <span style={{ fontSize: 7, color: '#252525', fontFamily: 'var(--font-mono)' }}>{m.ts}</span>}
                   </motion.div>
                 ))}
