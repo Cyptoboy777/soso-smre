@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import MarketSentiment from '@/components/MarketSentiment';
 import TopMovers from '@/components/TopMovers';
-import SoEva from '@/components/SoEva/SoEva';
+import SoEva from '@/components/SoEva';
 import TradingViewChart from '@/components/TradingViewChart';
 import MarketFlowChart from '@/components/MarketFlowChart';
 
@@ -92,8 +92,8 @@ export default function DashboardPage() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 32 }}>
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
-            <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--accent-orange)', boxShadow: '0 0 10px var(--accent-orange)' }} />
-            <h1 style={{ fontSize: 28, fontWeight: 900, color: 'var(--text-primary)', letterSpacing: '-0.04em', textTransform: 'uppercase' }}>Intelligence Terminal</h1>
+            <div className="smart-status-indicator" style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--accent-orange)' }} />
+            <h1 className="neon-glow-text" style={{ fontSize: 28, fontWeight: 900, color: 'var(--text-primary)', letterSpacing: '-0.04em', textTransform: 'uppercase', margin: 0 }}>Intelligence Terminal</h1>
           </div>
           <p style={{ fontSize: 13, color: 'var(--text-secondary)', fontWeight: 500 }}>
             Global Market Cap: <span style={{ color: 'var(--accent-green)', fontWeight: 700 }}>{prices?.globalMarketCap ?? '--'}</span> 
@@ -102,17 +102,16 @@ export default function DashboardPage() {
           </p>
         </div>
         <div style={{ display: 'flex', gap: 12, flexDirection: 'column', alignItems: 'flex-end' }}>
-           <div style={{ display: 'flex', gap: 12 }}>
+           <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
              <button
                onClick={sendAlpha}
                disabled={alphaStatus !== 'idle'}
+               className="figma-btn"
                style={{
-                 background: alphaStatus === 'done' ? 'var(--accent-green)' : alphaStatus === 'error' ? '#f43f5e' : alphaStatus !== 'idle' ? '#333' : 'var(--accent-orange)',
-                 color: '#fff', border: 'none', padding: '10px 20px', borderRadius: 12,
                  fontSize: 12, fontWeight: 900, cursor: alphaStatus !== 'idle' ? 'not-allowed' : 'pointer',
                  display: 'flex', alignItems: 'center', gap: 8,
-                 boxShadow: alphaStatus === 'idle' ? '0 4px 20px rgba(249,115,22,0.35)' : 'none',
-                 transition: 'all 0.3s',
+                 background: alphaStatus === 'done' ? 'var(--accent-green)' : alphaStatus === 'error' ? '#f43f5e' : undefined,
+                 boxShadow: alphaStatus !== 'idle' ? 'none' : undefined,
                }}
              >
                {alphaStatus === 'analyzing' && <div className="spin" style={{ width: 12, height: 12, border: '2px solid #fff', borderTopColor: 'transparent', borderRadius: '50%' }} />}
@@ -123,7 +122,7 @@ export default function DashboardPage() {
                 alphaStatus === 'error'     ? '❌ Failed' :
                 '🚀 SEND TODAY\'S ALPHA'}
              </button>
-             <div className="glass" style={{ fontSize: 10, color: 'var(--accent-green)', padding: '6px 12px', borderRadius: 20, fontWeight: 800, border: '1px solid rgba(0,230,118,0.2)', letterSpacing: '.1em', display: 'flex', alignItems: 'center' }}>LIVE SYNC</div>
+             <div className="figma-badge">LIVE SYNC</div>
            </div>
            {alphaMsg && (
              <div style={{ fontSize: 11, color: alphaStatus === 'error' ? '#f43f5e' : '#94a3b8', fontWeight: 600, textAlign: 'right' }}>
@@ -140,10 +139,10 @@ export default function DashboardPage() {
       {/* TOP ROW: Price Cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 20, marginBottom: 32 }}>
         {cards.map(c => (
-          <div key={c.label} className="neon-border glass" style={{ borderRadius: 20, padding: '24px', position: 'relative', overflow: 'hidden' }}>
+          <div key={c.label} className="figma-card" style={{ borderRadius: 20, padding: '24px', position: 'relative', overflow: 'hidden' }}>
             <div style={{ position: 'absolute', top: -20, right: -20, width: 80, height: 80, background: c.color, filter: 'blur(50px)', opacity: 0.1 }} />
             <div style={{ fontSize: 10, color: 'var(--text-secondary)', fontWeight: 800, letterSpacing: '.15em', marginBottom: 16 }}>{c.label}</div>
-            <div style={{ fontSize: 28, fontWeight: 900, color: 'var(--text-primary)', fontFamily: 'monospace', marginBottom: 4, letterSpacing: '-0.02em' }}>{c.value}</div>
+            <div className="neon-glow-text" style={{ fontSize: 28, fontWeight: 900, color: 'var(--text-primary)', fontFamily: 'monospace', marginBottom: 4, letterSpacing: '-0.02em' }}>{c.value}</div>
             <div style={{ fontSize: 12, color: c.color, fontWeight: 700, letterSpacing: '.05em', opacity: 0.8 }}>{c.sub.toUpperCase()}</div>
           </div>
         ))}

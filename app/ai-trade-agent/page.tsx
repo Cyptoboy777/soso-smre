@@ -1,6 +1,6 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
-import { Info, CheckCircle } from 'lucide-react';
+import { Info, CheckCircle, Zap, TrendingUp, TrendingDown } from 'lucide-react';
 import { doc, getDoc, serverTimestamp, setDoc } from 'firebase/firestore';
 import { useAuth } from '@/components/FirebaseProvider';
 import { db } from '@/lib/firebase';
@@ -62,6 +62,107 @@ export default function AITradeAgentPage() {
   const [exchange, setExchange] = useState('SoDEX');
   const [maxTrades, setMaxTrades] = useState('3');
   const [trailingStop, setTrailingStop] = useState(true);
+
+  // NLP Autonomous triggers
+  const [nlpInput, setNlpInput] = useState('');
+  const [nlpTriggers, setNlpTriggers] = useState<Array<{ type: 'BUY' | 'SELL'; amount: number; symbol: string; conditionType: 'above' | 'below'; targetPrice: number; raw: string }>>([]);
+
+  const parseNlpTrigger = (instruction: string) => {
+    const lower = instruction.toLowerCase();
+    let type: 'BUY' | 'SELL' = 'BUY';
+    if (lower.includes('sell') || lower.includes('short') || lower.includes('liquidate')) {
+      type = 'SELL';
+    }
+    
+    let amount = 100;
+    const amtMatch = lower.match(/(\d+)\s*(usdc|usd|tokens)/);
+    if (amtMatch) amount = parseFloat(amtMatch[1]);
+
+    let symbol = 'BTC';
+    if (lower.includes('eth')) symbol = 'ETH';
+    else if (lower.includes('sol')) symbol = 'SOL';
+    else if (lower.includes('bnb')) symbol = 'BNB';
+    else if (lower.includes('soso')) symbol = 'SOSO';
+
+    let conditionType: 'above' | 'below' = 'below';
+    if (lower.includes('above') || lower.includes('breakout') || lower.includes('greater') || lower.includes('rises')) {
+      conditionType = 'above';
+    }
+
+    let targetPrice = 77000;
+    const priceMatch = lower.match(/(below|above|drops|rises|at|to)\s*([0-9.,]+)/);
+    if (priceMatch) {
+      targetPrice = parseFloat(priceMatch[2].replace(/,/g, ''));
+    } else {
+      const directNum = lower.match(/(?:below|above)\s+(\d+)/);
+      if (directNum) targetPrice = parseFloat(directNum[1]);
+    }
+
+    return { type, amount, symbol, conditionType, targetPrice, raw: instruction };
+  };
+
+  const addNlpTrigger = () => {
+    if (!nlpInput.trim()) return;
+    const parsed = parseNlpTrigger(nlpInput);
+    setNlpTriggers(prev => [...prev, parsed]);
+    setNlpInput('');
+    setAiLogs(logs => [...logs.slice(-15), `[AI Trigger] Registered trigger instruction: "${nlpInput}"`]);
+  };
+
+  const removeNlpTrigger = (idx: number) => {
+    setNlpTriggers(prev => prev.filter((_, i) => i !== idx));
+  };
+
+  const executeNlpTrade = async (symbol: string, type: 'BUY' | 'SELL', amountUsdc: number, price: number, rawInput: string) => {
+    const amountTokens = amountUsdc / price;
+    const localData = localStorage.getItem('soso_paper_portfolio');
+    const parsedPortfolio = localData ? JSON.parse(localData) : { usdc: 10000, holdings: {} };
+    const currentHolding = parsedPortfolio.holdings[symbol]?.amount || 0;
+    
+    try {
+      const r = await fetch('/api/trade', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          symbol, 
+          type, 
+          amount: amountTokens, 
+          price, 
+          availableUsdc: parsedPortfolio.usdc,
+          currentHolding,
+          tradeMode: 'SPOT'
+        }),
+      });
+      const d = await r.json();
+      if (d.trade) {
+        setAiLogs(logs => [...logs.slice(-15), `[AI Executor] Order filled for NLP trigger: "${rawInput}"`]);
+        setToast(`NLP Trigger Order Filled: ${type} ${symbol} for $${amountUsdc}`);
+        
+        const next = {
+          ...parsedPortfolio,
+          usdc: type === 'SELL' ? parsedPortfolio.usdc + d.trade.total : Math.max(0, parsedPortfolio.usdc - amountUsdc),
+          holdings: { ...parsedPortfolio.holdings },
+          trades: [d.trade, ...(parsedPortfolio.trades ?? [])]
+        };
+        const h = next.holdings[symbol] ? { ...next.holdings[symbol] } : { symbol, amount: 0, avgBuyPrice: price };
+        if (type === 'SELL') {
+          h.amount = Math.max(0, h.amount - d.trade.amount);
+          if (h.amount <= 0.0001) { h.amount = 0; h.avgBuyPrice = 0; }
+        } else {
+          const newTotal = h.amount + d.trade.amount;
+          h.avgBuyPrice = (h.amount * h.avgBuyPrice + d.trade.total) / newTotal;
+          h.amount = newTotal;
+        }
+        next.holdings[symbol] = h;
+        
+        localStorage.setItem('soso_paper_portfolio', JSON.stringify(next));
+        setPortfolio(next);
+        fetchAnalytics(next);
+      }
+    } catch (e) {
+      console.error("NLP Trade Execution Failed", e);
+    }
+  };
 
   const baseCoin = asset.split(' / ')[0];
 
@@ -218,7 +319,7 @@ export default function AITradeAgentPage() {
   }, [portfolioLoaded, portfolio, user, fetchAnalytics]);
 
 
-  // Fetch live price when asset changes
+  // Fetch live price when asset changes & evaluate NLP triggers
   useEffect(() => {
     const fetchPrice = async () => {
       try {
@@ -242,12 +343,38 @@ export default function AITradeAgentPage() {
           setTakeProfit(tp.toFixed(decimals));
           setStopLoss(sl.toFixed(decimals));
         }
+
+        // Evaluate active NLP triggers against live prices
+        setNlpTriggers(prev => {
+          const next: typeof nlpTriggers = [];
+          prev.forEach(t => {
+            const tokenSym = isSodex ? `v${t.symbol}_vUSDC` : `${t.symbol}USDT`;
+            const symPriceObj = d.prices?.find(p => p.symbol.toUpperCase().includes(tokenSym.toUpperCase()));
+            if (symPriceObj) {
+              const currentVal = parseFloat(symPriceObj.price);
+              let conditionMet = false;
+              if (t.conditionType === 'below' && currentVal <= t.targetPrice) conditionMet = true;
+              if (t.conditionType === 'above' && currentVal >= t.targetPrice) conditionMet = true;
+
+              if (conditionMet) {
+                // Execute NLP trigger trade!
+                setAiLogs(logs => [...logs.slice(-15), `[AI Trigger matched] NLP: "${t.raw}"`]);
+                executeNlpTrade(t.symbol, t.type, t.amount, currentVal, t.raw);
+              } else {
+                next.push(t);
+              }
+            } else {
+              next.push(t);
+            }
+          });
+          return next;
+        });
       } catch {}
     };
     fetchPrice();
     const id = setInterval(fetchPrice, 10000);
     return () => clearInterval(id);
-  }, [baseCoin]);
+  }, [baseCoin, nlpTriggers]);
 
 
   // Auto-update price/SL/TP on asset change
@@ -484,6 +611,41 @@ export default function AITradeAgentPage() {
                 <button onClick={confirmBuy} disabled={tradeStatus !== 'IDLE'} style={{ width: '100%', padding: '14px', borderRadius: 10, background: spotSide === 'BUY' ? 'linear-gradient(135deg,#00e676,#00c853)' : 'linear-gradient(135deg,#f43f5e,#e11d48)', color: '#000', border: 'none', fontSize: 13, fontWeight: 900, cursor: 'pointer', boxShadow: spotSide === 'BUY' ? '0 6px 20px rgba(0,230,118,0.25)' : '0 6px 20px rgba(244,63,94,0.25)' }}>
                   {tradeStatus === 'SUBMITTING' ? 'EXECUTING...' : `CONFIRM ${spotSide}`}
                 </button>
+              </div>
+            </div>
+
+            {/* NLP AUTONOMOUS TRIGGERS */}
+            <div style={{ background: '#0a0a0a', border: '1px solid #1a1a1a', borderRadius: 14, padding: 16 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 12 }}>
+                <Zap size={14} color="var(--accent-orange)" />
+                <h3 style={{ fontSize: 10, fontWeight: 900, color: '#e2e2e2', margin: 0, letterSpacing: '.1em' }}>NLP AUTONOMOUS AI TRIGGERS</h3>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                <input
+                  type="text"
+                  placeholder='e.g. Buy 100 USDC of SOL if price drops below 140'
+                  value={nlpInput}
+                  onChange={e => setNlpInput(e.target.value)}
+                  style={{ width: '100%', padding: '10px 12px', borderRadius: 8, background: '#111', border: '1px solid #2a2a2a', color: '#fff', fontSize: 12, outline: 'none', boxSizing: 'border-box' }}
+                />
+                <button onClick={addNlpTrigger} className="btn-ai-premium" style={{ padding: '10px', fontSize: 11, fontWeight: 900, display: 'flex', justifyContent: 'center' }}>
+                  SET SMART TRIGGER
+                </button>
+
+                {nlpTriggers.length > 0 && (
+                  <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    <span style={{ fontSize: 9, color: 'var(--text-dim)', fontWeight: 800 }}>ACTIVE NLP TRIGGERS</span>
+                    {nlpTriggers.map((t, idx) => (
+                      <div key={idx} style={{ padding: 10, background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div>
+                          <div style={{ fontSize: 11, color: '#fff', fontWeight: 700 }}>{t.type} {t.amount} USDC of {t.symbol}</div>
+                          <div style={{ fontSize: 9, color: 'var(--text-secondary)' }}>Condition: Price {t.conditionType} ${t.targetPrice}</div>
+                        </div>
+                        <button onClick={() => removeNlpTrigger(idx)} style={{ background: 'transparent', border: 'none', color: 'var(--accent-red)', cursor: 'pointer', fontSize: 11 }}>Cancel</button>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
           </div>

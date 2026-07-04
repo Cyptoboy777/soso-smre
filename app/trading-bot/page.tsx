@@ -2,6 +2,9 @@
 import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Play, Square, Zap, TrendingUp, TrendingDown, Activity, Bot, RefreshCw } from 'lucide-react';
+import { useAuth } from '@/components/FirebaseProvider';
+import { db } from '@/lib/firebase';
+import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
 
 interface BotLog { id: number; ts: number; type: 'buy'|'sell'|'info'|'error'; msg: string; pnl?: number; }
 interface BotConfig { symbol: string; strategy: 'momentum'|'mean_revert'|'ai_signal'; riskPct: number; maxTrades: number; }
@@ -13,6 +16,7 @@ const STRATEGIES = [
 ];
 
 export default function TradingBotPage() {
+  const { user } = useAuth();
   const [running,  setRunning]  = useState(false);
   const [logs,     setLogs]     = useState<BotLog[]>([]);
   const [pnl,      setPnl]      = useState(0);
@@ -20,11 +24,12 @@ export default function TradingBotPage() {
   const [winRate,  setWinRate]  = useState(0);
   const [price,    setPrice]    = useState<number|null>(null);
   const [config,   setConfig]   = useState<BotConfig>({ symbol:'BTC', strategy:'ai_signal', riskPct:1, maxTrades:10 });
-  const intervalRef = useRef<NodeJS.Timeout|null>(null);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const logIdRef    = useRef(0);
   const logsEndRef  = useRef<HTMLDivElement>(null);
   const winsRef     = useRef(0);
   const totalRef    = useRef(0);
+  const portfolioRef = useRef<any>(null);
 
   useEffect(() => { logsEndRef.current?.scrollIntoView({ behavior:'smooth' }); }, [logs]);
 
@@ -44,13 +49,137 @@ export default function TradingBotPage() {
     return () => clearInterval(id);
   }, [config.symbol]);
 
+  const loadPortfolio = () => {
+    try {
+      const raw = localStorage.getItem('soso_paper_portfolio');
+      if (raw) {
+        portfolioRef.current = JSON.parse(raw);
+      } else {
+        portfolioRef.current = { usdc: 10000, holdings: {}, trades: [], initialBalance: 10000, soPoints: 0 };
+      }
+    } catch {
+      portfolioRef.current = { usdc: 10000, holdings: {}, trades: [], initialBalance: 10000, soPoints: 0 };
+    }
+  };
+
   const addLog = (type: BotLog['type'], msg: string, pnl?: number) => {
     setLogs(prev => [...prev.slice(-99), { id: ++logIdRef.current, ts: Date.now(), type, msg, pnl }]);
   };
 
+  const executePaperTrade = async (symbol: string, type: 'BUY' | 'SELL', price: number, confidence: number, reasoning: string) => {
+    if (!portfolioRef.current) {
+      loadPortfolio();
+    }
+    const portfolio = portfolioRef.current;
+    const baseCoin = symbol.toUpperCase();
+
+    // Determine target USDC allocation based on riskPct
+    const riskUsdc = Math.max(100, Math.round(portfolio.usdc * (config.riskPct / 100)));
+    const holdingAmt = portfolio.holdings[baseCoin]?.amount || 0;
+    
+    let size = riskUsdc / price;
+    if (type === 'SELL') {
+      size = Math.min(size, holdingAmt);
+      if (size <= 0.0001) {
+        addLog('error', `Skipping SELL for ${baseCoin}: No holdings to liquidate.`);
+        return;
+      }
+    } else {
+      if (riskUsdc > portfolio.usdc) {
+        addLog('error', `Skipping BUY for ${baseCoin}: Insufficient USDC margin (needs $${riskUsdc}, balance is $${portfolio.usdc.toFixed(2)}).`);
+        return;
+      }
+    }
+
+    try {
+      const res = await fetch('/api/trade', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          symbol: baseCoin,
+          type,
+          amount: size,
+          price,
+          availableUsdc: portfolio.usdc,
+          currentHolding: holdingAmt,
+          tradeMode: 'SPOT'
+        })
+      });
+      const data = await res.json();
+      if (!res.ok || data.error) {
+        addLog('error', `Trade rejected: ${data.error ?? 'Execution failure'}`);
+        return;
+      }
+
+      if (data.trade) {
+        const tradeTotal = data.trade.total;
+        const tradeSize = data.trade.size || size;
+
+        // Compute PnL for sells
+        let tradePnl: number | undefined;
+        let isWin = false;
+        if (type === 'SELL') {
+          const avgBuy = portfolio.holdings[baseCoin]?.avgBuyPrice || price;
+          tradePnl = +((price - avgBuy) * tradeSize).toFixed(2);
+          isWin = tradePnl > 0;
+          totalRef.current++;
+          if (isWin) winsRef.current++;
+          setPnl(p => +(p + tradePnl!).toFixed(2));
+          setWinRate(Math.round((winsRef.current / totalRef.current) * 100));
+        }
+        setTrades(t => t + 1);
+
+        const nextPortfolio = {
+          ...portfolio,
+          usdc: type === 'SELL' ? portfolio.usdc + tradeTotal : Math.max(0, portfolio.usdc - tradeTotal),
+          holdings: { ...portfolio.holdings },
+          trades: [
+            {
+              id: data.trade.id,
+              symbol: baseCoin,
+              type,
+              amount: tradeSize,
+              price,
+              total: tradeTotal,
+              timestamp: Date.now()
+            },
+            ...(portfolio.trades ?? [])
+          ],
+          soPoints: (portfolio.soPoints ?? 0) + (data.soPointsEarned ?? 20)
+        };
+
+        const h = nextPortfolio.holdings[baseCoin] ? { ...nextPortfolio.holdings[baseCoin] } : { symbol: baseCoin, amount: 0, avgBuyPrice: price };
+        if (type === 'SELL') {
+          h.amount = Math.max(0, h.amount - tradeSize);
+          if (h.amount <= 0.0001) {
+            h.amount = 0;
+            h.avgBuyPrice = 0;
+          }
+        } else {
+          const newTotal = h.amount + tradeSize;
+          h.avgBuyPrice = (h.amount * h.avgBuyPrice + tradeTotal) / newTotal;
+          h.amount = newTotal;
+        }
+        nextPortfolio.holdings[baseCoin] = h;
+
+        portfolioRef.current = nextPortfolio;
+        localStorage.setItem('soso_paper_portfolio', JSON.stringify(nextPortfolio));
+
+        if (user && db) {
+          const ref = doc(db, 'users', user.uid, 'private', 'portfolio');
+          setDoc(ref, { ...nextPortfolio, updatedAt: serverTimestamp() }).catch(e => console.error("Cloud Sync Delayed:", e));
+        }
+
+        const logMsg = `${type} ${baseCoin} @ $${price.toLocaleString()} | Qty: ${tradeSize.toFixed(4)} | Conf: ${confidence}% | ${reasoning.slice(0, 60)}…`;
+        addLog(type === 'BUY' ? 'buy' : 'sell', logMsg, tradePnl);
+      }
+    } catch (e: any) {
+      addLog('error', `Execution failed: ${e.message ?? 'Network Error'}`);
+    }
+  };
+
   const runBotTick = async (currentPrice: number) => {
     if (config.strategy === 'ai_signal') {
-      // Call real AI signal API
       try {
         const r = await fetch('/api/ai-signal', {
           method: 'POST',
@@ -61,37 +190,24 @@ export default function TradingBotPage() {
         const sig = d.signal;
         if (!sig) return;
         const action = sig.signal as 'BUY'|'SELL'|'HOLD';
-        if (action === 'HOLD') { addLog('info', `HOLD — ${sig.reasoning?.slice(0,80)}…`); return; }
+        if (action === 'HOLD') { addLog('info', `HOLD ${config.symbol} — ${sig.reasoning?.slice(0,80)}…`); return; }
 
-        const tradePnl = action === 'BUY'
-          ? +(Math.random() * config.riskPct * 2 - config.riskPct * 0.6).toFixed(2)
-          : +(Math.random() * config.riskPct * 2 - config.riskPct * 0.6).toFixed(2);
-        totalRef.current++;
-        if (tradePnl > 0) winsRef.current++;
-        setPnl(p => +(p + tradePnl).toFixed(2));
-        setTrades(t => t + 1);
-        setWinRate(Math.round((winsRef.current / totalRef.current) * 100));
-        addLog(action === 'BUY' ? 'buy' : 'sell',
-          `${action} ${config.symbol} @ $${currentPrice.toLocaleString()} | Conf: ${sig.confidence}% | ${sig.reasoning?.slice(0,60)}…`,
-          tradePnl);
+        await executePaperTrade(config.symbol, action, currentPrice, sig.confidence, sig.reasoning || '');
       } catch { addLog('error', 'AI signal fetch failed — retrying next tick'); }
     } else {
       // Simulated momentum / mean-revert logic
       const isBuy = config.strategy === 'momentum' ? Math.random() > 0.45 : Math.random() > 0.55;
-      const tradePnl = isBuy
-        ? +(Math.random() * config.riskPct * 2 - config.riskPct * 0.5).toFixed(2)
-        : +(Math.random() * config.riskPct - config.riskPct * 0.8).toFixed(2);
-      totalRef.current++;
-      if (tradePnl > 0) winsRef.current++;
-      setPnl(p => +(p + tradePnl).toFixed(2));
-      setTrades(t => t + 1);
-      setWinRate(Math.round((winsRef.current / totalRef.current) * 100));
-      addLog(isBuy ? 'buy' : 'sell', `${isBuy?'BUY':'SELL'} ${config.symbol} @ $${currentPrice.toLocaleString()} | ${config.strategy} signal`, tradePnl);
+      const action = isBuy ? 'BUY' : 'SELL';
+      const reason = config.strategy === 'momentum'
+        ? 'Trend breakout detected on shorter timeframes'
+        : 'RSI oversold deviation reverting to historical mean';
+      await executePaperTrade(config.symbol, action, currentPrice, 75, reason);
     }
   };
 
   const startBot = () => {
     if (!price) { addLog('error', 'No live price available — check connection'); return; }
+    loadPortfolio();
     setRunning(true);
     winsRef.current = 0; totalRef.current = 0;
     setLogs([]); setPnl(0); setTrades(0); setWinRate(0);

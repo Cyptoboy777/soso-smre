@@ -5,12 +5,13 @@ import { motion } from 'framer-motion';
 import { validateTradeRisk, calculateAtrTargets, calculatePositionSizeByRisk } from '@/lib/riskManager';
 import { calcPnL } from '@/lib/tradeMath';
 import { ShieldAlert, Crosshair, Target, Zap, RefreshCw, Settings } from 'lucide-react';
-import { useAccount, useSignTypedData, useBalance } from 'wagmi';
+import { useAccount, useSignTypedData, useBalance, useWriteContract } from 'wagmi';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
 import MarketAnalysisEngine from './MarketAnalysisEngine';
 import RiskDashboard from './RiskDashboard';
 import { usePortfolioStore } from '@/store/portfolioStore';
 import type { Ticker, TradeSetup, RiskSettings } from '@/types/sodex';
+import { formatUnits } from 'viem';
 
 interface Props {
   selected: Ticker | null;
@@ -21,7 +22,9 @@ export const TradeSetupPanel = React.memo(function TradeSetupPanel({ selected, o
   // Global State
   const { isConnected, address } = useAccount();
   const { signTypedDataAsync } = useSignTypedData();
+  const { writeContractAsync } = useWriteContract();
   const [paperTrading, setPaperTrading] = useState(true);
+  const [executionRoute, setExecutionRoute] = useState<'contract' | 'relayer'>('relayer');
 
   // Wagmi USDC balance (Assuming USDC is on Ethereum Mainnet or similar. We mock the token address or use native balance if not available for hackathon demo).
   // For hackathon, if no token, we can just read ETH balance or mock if 0. We'll read ETH for demo if no USDC token specified.
@@ -30,7 +33,7 @@ export const TradeSetupPanel = React.memo(function TradeSetupPanel({ selected, o
   // Portfolio Store
   const { paperCapital, dailyPnL, addPosition, addOrder, setPaperCapital, addDailyPnL } = usePortfolioStore();
 
-  const realCapital = balanceData ? parseFloat(balanceData.formatted) * 3500 : 0; // Mock ETH -> USD for demo purposes if no raw USDC.
+  const realCapital = balanceData ? parseFloat(formatUnits(balanceData.value, balanceData.decimals)) * 3500 : 0; // Mock ETH -> USD for demo purposes if no raw USDC.
   const capital = paperTrading ? paperCapital : (realCapital > 0 ? realCapital : 5000); // Fallback to 5000 for Real Trading demo if empty wallet
 
   
@@ -123,63 +126,96 @@ export const TradeSetupPanel = React.memo(function TradeSetupPanel({ selected, o
     setSubmitted(true);
     try {
       if (!paperTrading) {
-        // Real Trading -> Sign Typed Data for SoDEX
-        const domain = {
-          name: 'SoDEX',
-          version: '1',
-          chainId: 1, 
-          verifyingContract: '0x0000000000000000000000000000000000000000' as const,
-        };
+        if (executionRoute === 'contract') {
+          // Real Trading -> Direct Smart Contract Hookup (Bypass Relayers)
+          const tx = await writeContractAsync({
+            address: '0x378BcADaBfF12530E57223b207aA6Fd4b93b4822', // SoDEX Smart Contract Router
+            abi: [
+              {
+                name: 'executeOrderDirect',
+                type: 'function',
+                stateMutability: 'payable',
+                inputs: [
+                  { name: 'symbol', type: 'string' },
+                  { name: 'side', type: 'uint8' },
+                  { name: 'price', type: 'uint256' },
+                  { name: 'size', type: 'uint256' }
+                ],
+                outputs: []
+              }
+            ],
+            functionName: 'executeOrderDirect',
+            args: [
+              selected.symbol,
+              side === 'BUY' ? 0 : 1,
+              BigInt(Math.round(parseFloat(entryPrice) * 1e6)),
+              BigInt(Math.round(positionSize * 1e18))
+            ]
+          });
+          
+          alert(`Decentralized Contract Call Succeeded! Transaction Hash: ${tx}`);
+          
+          const orderId = `${Date.now()}`;
+          addOrder({ id: orderId, symbol: selected.symbol, side, size: positionSize, price: parseFloat(entryPrice), timestamp: Date.now(), mode: 'real' });
+          addPosition({ id: orderId, symbol: selected.symbol, side, size: positionSize, entryPrice: parseFloat(entryPrice), unrealizedPnL: 0, mode: 'real' });
+        } else {
+          // Real Trading -> Sign Typed Data for SoDEX (Relayed Route)
+          const domain = {
+            name: 'SoDEX',
+            version: '1',
+            chainId: 1, 
+            verifyingContract: '0x0000000000000000000000000000000000000000' as const,
+          };
 
-        const types = {
-          Order: [
-            { name: 'symbol', type: 'string' },
-            { name: 'side', type: 'string' },
-            { name: 'price', type: 'string' },
-            { name: 'size', type: 'string' },
-            { name: 'nonce', type: 'uint256' },
-          ],
-        };
+          const types = {
+            Order: [
+              { name: 'symbol', type: 'string' },
+              { name: 'side', type: 'string' },
+              { name: 'price', type: 'string' },
+              { name: 'size', type: 'string' },
+              { name: 'nonce', type: 'uint256' },
+            ],
+          };
 
-        const message = {
-          symbol: selected.symbol,
-          side,
-          price: entryPrice,
-          size: positionSize.toString(),
-          nonce: BigInt(Date.now()),
-        };
-
-        const signature = await signTypedDataAsync({
-          domain,
-          types,
-          primaryType: 'Order',
-          message,
-        });
-
-        // Send signature and payload to backend
-        const res = await fetch('/api/trade', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
+          const message = {
             symbol: selected.symbol,
-            type: side,
-            amount: positionSize,
-            price: parseFloat(entryPrice),
-            signature,
-            mode: 'real'
-          })
-        });
+            side,
+            price: entryPrice,
+            size: positionSize.toString(),
+            nonce: BigInt(Date.now()),
+          };
 
-        if (!res.ok) {
-          const err = await res.json();
-          throw new Error(err.error || 'Trade failed on SoDEX');
+          const signature = await signTypedDataAsync({
+            domain,
+            types,
+            primaryType: 'Order',
+            message,
+          });
+
+          // Send signature and payload to backend
+          const res = await fetch('/api/trade', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              symbol: selected.symbol,
+              type: side,
+              amount: positionSize,
+              price: parseFloat(entryPrice),
+              signature,
+              mode: 'real'
+            })
+          });
+
+          if (!res.ok) {
+            const err = await res.json();
+            throw new Error(err.error || 'Trade failed on SoDEX');
+          }
+
+          // Add to Real Portfolio
+          const orderId = `${Date.now()}`;
+          addOrder({ id: orderId, symbol: selected.symbol, side, size: positionSize, price: parseFloat(entryPrice), timestamp: Date.now(), mode: 'real' });
+          addPosition({ id: orderId, symbol: selected.symbol, side, size: positionSize, entryPrice: parseFloat(entryPrice), unrealizedPnL: 0, mode: 'real' });
         }
-
-        // Add to Real Portfolio
-        const orderId = `${Date.now()}`;
-        addOrder({ id: orderId, symbol: selected.symbol, side, size: positionSize, price: parseFloat(entryPrice), timestamp: Date.now(), mode: 'real' });
-        addPosition({ id: orderId, symbol: selected.symbol, side, size: positionSize, entryPrice: parseFloat(entryPrice), unrealizedPnL: 0, mode: 'real' });
-
       } else {
         // Mock execution for paper trading
         await new Promise(r => setTimeout(r, 1000));
@@ -222,8 +258,25 @@ export const TradeSetupPanel = React.memo(function TradeSetupPanel({ selected, o
       </div>
 
       {!paperTrading && (
-        <div style={{ padding: '0 16px', display: 'flex', justifyContent: 'center' }}>
+        <div style={{ padding: '0 16px', display: 'flex', flexDirection: 'column', gap: 10, alignItems: 'center', width: '100%' }}>
           <ConnectButton showBalance={false} />
+          {/* Direct smart contract route selector */}
+          <div style={{ display: 'flex', background: '#111120', borderRadius: 8, padding: 3, border: '1px solid #1e1e3a', width: '100%' }}>
+            {['relayer', 'contract'].map((r) => (
+              <button
+                key={r}
+                onClick={() => setExecutionRoute(r as any)}
+                style={{
+                  flex: 1, padding: '6px 0', border: 'none', borderRadius: 6,
+                  background: executionRoute === r ? 'rgba(124,58,237,0.15)' : 'transparent',
+                  color: executionRoute === r ? '#a78bfa' : '#44446a',
+                  fontSize: 10, fontWeight: 900, cursor: 'pointer', transition: 'all 0.15s'
+                }}
+              >
+                {r === 'contract' ? 'DIRECT CONTRACT' : 'GASLESS RELAYER'}
+              </button>
+            ))}
+          </div>
         </div>
       )}
 

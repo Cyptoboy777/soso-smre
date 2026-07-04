@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation';
 import {
   LayoutDashboard, Newspaper, Brain, Bot, BarChart2, Wallet,
   BookOpen, History, Settings, Sun, Moon, ChevronLeft, ChevronRight,
-  TrendingUp, Wifi, WifiOff, Command,
+  TrendingUp, Wifi, WifiOff, Command, Trophy,
 } from 'lucide-react';
 import { useAuth } from '@/components/FirebaseProvider';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -22,6 +22,7 @@ const NAV = [
   { href: '/backtest',       label: 'Backtest AI',   Icon: History,         description: 'Strategy Test' },
   { href: '/etf-dashboard',  label: 'ETF Dashboard', Icon: TrendingUp,      description: 'ETF Flows' },
   { href: '/portfolio',      label: 'Portfolio',     Icon: Wallet,          description: 'Holdings & PnL' },
+  { href: '/leaderboard',    label: 'Leaderboard',   Icon: Trophy,          description: 'Global Rankings' },
   { href: '/settings',       label: 'Settings',      Icon: Settings,        description: 'Preferences' },
   { href: '/guidelines',     label: 'Guidelines',    Icon: BookOpen,        description: 'DYOR Rules' },
 ];

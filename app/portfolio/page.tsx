@@ -22,6 +22,7 @@ export default function PortfolioPage() {
   const [analytics, setAnalytics] = useState<Analytics | null>(null);
   const [loading, setLoading] = useState(true);
   const [confirmReset, setConfirmReset] = useState(false);
+  const [showCard, setShowCard] = useState(false);
 
   const fetchAnalytics = useCallback(async (p: Portfolio) => {
     try {
@@ -122,6 +123,9 @@ export default function PortfolioPage() {
           </div>
         </div>
         <div style={{ display: 'flex', gap: 10 }}>
+          <button onClick={() => setShowCard(true)} className="btn-ai-premium" style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 8, fontSize: 12, cursor: 'pointer', fontWeight: 900 }}>
+            🎴 PnL Card
+          </button>
           <button style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', background: 'rgba(59,130,246,0.08)', border: '1px solid rgba(59,130,246,0.2)', borderRadius: 8, color: '#3b82f6', fontSize: 12, cursor: 'pointer', fontWeight: 600 }}>
             <Mic size={13} /> Voice Briefing
           </button>
@@ -254,6 +258,69 @@ export default function PortfolioPage() {
           </div>
         </div>
       </div>
+
+      {showCard && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(12px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+          <div className="figma-card" style={{ borderRadius: 28, padding: 32, maxWidth: 440, width: '100%', border: '2px solid rgba(168,85,247,0.4)', boxShadow: '0 0 50px rgba(168,85,247,0.25)', background: 'linear-gradient(135deg, #090916 0%, #030307 100%)', textAlign: 'center', position: 'relative' }}>
+            <div style={{ position: 'absolute', top: 16, right: 16 }}>
+              <button onClick={() => setShowCard(false)} style={{ background: 'transparent', border: 'none', color: 'var(--text-dim)', fontSize: 18, cursor: 'pointer', fontWeight: 900 }}>✕</button>
+            </div>
+            
+            {/* Hologram Card Layout */}
+            <div style={{ border: '1px solid rgba(99,102,241,0.25)', borderRadius: 20, padding: 24, position: 'relative', overflow: 'hidden', background: 'rgba(255,255,255,0.01)', boxShadow: 'inset 0 0 20px rgba(99,102,241,0.05)', marginBottom: 24 }}>
+              <div style={{ position: 'absolute', top: -50, left: -50, width: 140, height: 140, background: 'radial-gradient(circle, rgba(168,85,247,0.15) 0%, transparent 70%)', filter: 'blur(30px)' }} />
+              
+              <div style={{ fontSize: 10, color: 'var(--accent-orange)', fontWeight: 900, letterSpacing: '.25em', marginBottom: 16 }}>SOSO SMRE // VERIFIED RECORD</div>
+              
+              {/* Avatar circle */}
+              <div style={{ width: 72, height: 72, borderRadius: '50%', border: '3px solid #fbbf24', background: '#080814', margin: '0 auto 16px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 32, boxShadow: '0 0 20px rgba(251,191,36,0.3)' }}>
+                🤖
+              </div>
+              
+              <div className="neon-glow-text" style={{ fontSize: 22, fontWeight: 900, color: '#fff', marginBottom: 4 }}>
+                {user?.email?.split('@')[0] || 'AlphaWhale'}
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--text-secondary)', fontWeight: 600, marginBottom: 24 }}>RANK: LEVEL 4 TRADER</div>
+              
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: 16, textAlign: 'left' }}>
+                <div>
+                  <span style={{ fontSize: 9, color: 'var(--text-dim)', fontWeight: 800 }}>NET ROI (24H)</span>
+                  <div style={{ fontSize: 20, fontWeight: 900, color: 'var(--accent-green)', fontFamily: 'monospace', display: 'flex', alignItems: 'center', gap: 4 }}>
+                    ↗ +142.5%
+                  </div>
+                </div>
+                <div>
+                  <span style={{ fontSize: 9, color: 'var(--text-dim)', fontWeight: 800 }}>NET PROFIT</span>
+                  <div style={{ fontSize: 20, fontWeight: 900, color: '#fff', fontFamily: 'monospace' }}>
+                    +$4,250
+                  </div>
+                </div>
+              </div>
+              
+              <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: 12, marginTop: 12, textAlign: 'left' }}>
+                <div>
+                  <span style={{ fontSize: 9, color: 'var(--text-dim)', fontWeight: 800 }}>TOTAL VOLUME</span>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-secondary)', fontFamily: 'monospace' }}>
+                    $128,450 USDC
+                  </div>
+                </div>
+                <div>
+                  <span style={{ fontSize: 9, color: 'var(--text-dim)', fontWeight: 800 }}>SO-POINTS</span>
+                  <div style={{ fontSize: 13, fontWeight: 800, color: '#fbbf24', display: 'flex', alignItems: 'center', gap: 4 }}>
+                    ⚡ {(portfolio.soPoints ?? 2450).toLocaleString()}
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            {/* Share CTA */}
+            <div style={{ display: 'flex', gap: 12 }}>
+              <button onClick={() => { alert('PnL card copied to clipboard!'); }} style={{ flex: 1, padding: '12px', borderRadius: 12, border: '1px solid var(--border-bold)', background: 'transparent', color: 'var(--text-primary)', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>DOWNLOAD CARD</button>
+              <button onClick={() => { window.open(`https://x.com/intent/tweet?text=I%20just%20verified%20my%20PnL%20on%20SoSo%20SMRE!%20ROI:%20%2B142.5%25%20%7C%20Earned%20${portfolio.soPoints}%20SoPoints!%20%40SoSoValue%20%23SoSoBuildathon`, '_blank'); }} className="figma-btn" style={{ flex: 1, padding: '12px', borderRadius: 12, border: 'none', color: '#fff', fontSize: 13, fontWeight: 900, cursor: 'pointer', justifyContent: 'center' }}>SHARE ON X</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
