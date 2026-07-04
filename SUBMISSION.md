@@ -7,11 +7,25 @@
 
 ---
 
-## 🏆 Declared Wave 3 Goals & Detailed Implementation Autopsy
+## 🏆 Core API Integrations (High-Value Engines)
 
-For this final wave, **SoSo SMRE** has evolved from an analytics-only tool into a fully autonomous, socially integrated Web3 powerhouse with decentralized execution options.
+Our platform leverages direct mainnet APIs to power live Web3 execution and AI analytics:
 
-### 1. Autonomous AI Trading (NLP Smart Triggers)
+### 🔴 1. SoDEX API Integration (Live Trading Execution)
+* **API Scope:** Uses `SODEX_API_KEY` and `SODEX_API_SECRET`.
+* **Application:** Authorizes cryptographic trade payloads, queries live orderbook imbalances, tracks real-time market trades, and executes on-chain and off-chain orders through our Next.js relay pipelines.
+* **Why it matters:** Gives traders low-latency access directly to the SoDEX matching engine, ensuring sub-second execution speeds.
+
+### 📊 2. SoSoValue API Integration (Alpha & ETF Stream)
+* **API Scope:** Uses `SOSOVALUE_API_KEY`.
+* **Application:** Ingests live institutional ETF flow metrics (US Spot BTC/ETH ETF inflows) and premium macroeconomic news feeds.
+* **AI Synergy:** These feeds directly feed the **SoDoggy AI news tagging model** (`/api/news/sentiment`) and the **SoEva AI debate script generator** (`/api/dog-chat`), producing institutional-grade daily summaries.
+
+---
+
+## 🚀 Delivered Against Declared Wave 3 Goals (Autonomous & Relayerless Web3 Execution)
+
+### ✅ Autonomous AI Trading (NLP Smart Triggers)
 * **Code Implementation:** [`app/ai-trade-agent/page.tsx`](file:///c:/Users/PRASHANTHI/Downloads/soso-smre/SMRE-FINAL-V/app/ai-trade-agent/page.tsx)
 * **How to view:** Go to [http://localhost:3000/ai-trade-agent](http://localhost:3000/ai-trade-agent).
 * **Detailed Execution Details:**
@@ -45,7 +59,7 @@ For this final wave, **SoSo SMRE** has evolved from an analytics-only tool into 
 ---
 
 ### 🏆 4. Alpha Leaderboard & Podium
-* **Code Implementation:** [`app/leaderboard/page.tsx`](file:///c:/Users/PRASHANTHI/Downloads/soso-smre/SMRE-FINAL-V/app/leaderboard/page.tsx)
+* **Code Implementation:** [`app/leaderboard/page.tsx`](file:///c:/Users/PRASHANTHI/Downloads/soso-smre/SMRE-FINAL-V/app/leaderboard/page.tsx) & [`components/Sidebar.tsx`](file:///c:/Users/PRASHANTHI/Downloads/soso-smre/SMRE-FINAL-V/components/Sidebar.tsx)
 * **How to view:** Visit [http://localhost:3000/leaderboard](http://localhost:3000/leaderboard).
 * **Detailed Execution Details:**
   * Displays a global Rankings board pulling from the `/api/leaderboard` Firestore database.

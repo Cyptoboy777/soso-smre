@@ -22,127 +22,74 @@
 
 ---
 
-## 🏆 Why SOSO SMRE Matters: The Ultimate Trading Terminal
-
-In modern crypto markets, retail traders are severely disadvantaged:
-1. **The Latency Trap:** Centralized search terminals display outdated data, causing traders to enter setups too late.
-2. **The Execution Gap:** Converting research insights into on-chain orders requires switching between separate DEX UIs, causing slippage.
-3. **The Data Silo:** Fundamental insights, technical parameters, and social momentum feeds are separated.
-
-**SOSO SMRE** bridges these gaps by offering a **one-person institutional trading desk in a single browser tab**. It combines a **live SoDEX orderbook WebSocket feed**, **NLP-driven autonomous trade execution (SoDoggy AI)**, **direct smart contract writes (Wagmi v2)**, and **real-time Gemini 2.5 Flash research** into a premium, animated glassmorphism interface.
+# Updates in this Wave ⚡ Wave 3 Final Edition
+🏆 Wave 2 → Wave 3 = superset.
+**Live Portal:** [https://soso-smre.vercel.app](https://soso-smre.vercel.app/login)
+**Repo:** [https://github.com/Cyptoboy777/soso-smre](https://github.com/Cyptoboy777/soso-smre)
+**Release:** [https://github.com/Cyptoboy777/soso-smre/releases/tag/wave-3-final](https://github.com/Cyptoboy777/soso-smre/releases/tag/wave-3-final)
 
 ---
 
-## ⚡ Wave 3 Final Additions: Operational Walkthrough
+## 🏆 Core API Integrations (High-Value Engines)
 
-For the Wave 3 Grand Finale, the platform has transitioned from an advisory dashboard into a **fully autonomous, relayerless Web3 execution engine**:
+Our platform leverages direct mainnet APIs to power live Web3 execution and AI analytics:
 
-### 🤖 1. Autonomous AI Execution (NLP Smart Triggers)
-* **Code Reference:** [`app/ai-trade-agent/page.tsx`](file:///c:/Users/PRASHANTHI/Downloads/soso-smre/SMRE-FINAL-V/app/ai-trade-agent/page.tsx)
+### 🔴 1. SoDEX API Integration (Live Trading Execution)
+* **API Scope:** Uses `SODEX_API_KEY` and `SODEX_API_SECRET`.
+* **Application:** Authorizes cryptographic trade payloads, queries live orderbook imbalances, tracks real-time market trades, and executes on-chain and off-chain orders through our Next.js relay pipelines.
+* **Why it matters:** Gives traders low-latency access directly to the SoDEX matching engine, ensuring sub-second execution speeds.
+
+### 📊 2. SoSoValue API Integration (Alpha & ETF Stream)
+* **API Scope:** Uses `SOSOVALUE_API_KEY`.
+* **Application:** Ingests live institutional ETF flow metrics (US Spot BTC/ETH ETF inflows) and premium macroeconomic news feeds.
+* **AI Synergy:** These feeds directly feed the **SoDoggy AI news tagging model** (`/api/news/sentiment`) and the **SoEva AI debate script generator** (`/api/dog-chat`), producing institutional-grade daily summaries.
+
+---
+
+## 🚀 Delivered Against Declared Wave 3 Goals (Autonomous & Relayerless Web3 Execution)
+
+### ✅ Autonomous AI Trading (NLP Smart Triggers)
 * Users can set NLP-driven smart trigger instructions (e.g., *"Buy 100 USDC of SOL if price drops below 140"* or *"Sell 50 USDC of BTC if price rises above 78000"*).
 * The **SoDoggy AI Executor** monitors the active orderbook price stream every 10 seconds.
 * Upon threshold crossing, the AI autonomously constructs, validates, and executes simulated paper trades, modifying active USDC reserves and token holdings, and logging success messages directly inside the terminal console feed.
 
-### 🛡️ 2. Direct Smart Contract Hookup (Relayerless Route)
-* **Code Reference:** [`components/TradeSetupPanel/TradeSetupPanel.tsx`](file:///c:/Users/PRASHANTHI/Downloads/soso-smre/SMRE-FINAL-V/components/TradeSetupPanel/TradeSetupPanel.tsx)
+### ✅ Direct Smart Contract Hookup (Relayerless Routes)
 * Bypasses centralized backend relayers entirely for Web3 execution.
 * Introduced a routing switch on the trade setup panel: `DIRECT CONTRACT` vs `GASLESS RELAYER`.
 * Selecting `DIRECT CONTRACT` utilizes Wagmi v2's `useWriteContract` to submit transactions directly to the SoDEX Router contract address (`0x378BcADaBfF12530E57223b207aA6Fd4b93b4822`), prompting wallets to sign raw on-chain smart contract transactions.
 
-### 🎴 3. Social "Proof of PnL" Trading Cards
-* **Code Reference:** [`app/portfolio/page.tsx`](file:///c:/Users/PRASHANTHI/Downloads/soso-smre/SMRE-FINAL-V/app/portfolio/page.tsx)
+### ✅ Social "Proof of PnL" (Cyberpunk Trading Cards)
 * Built a dynamic trading card generation engine inside `/portfolio`.
 * User can click **"🎴 PnL Card"** to generate a glowing holographic card snapshot showing verified ROI performance (+142.5%), net profit gains, and accumulated So-Points.
 * Seamlessly wired a **"Share on X"** action using X/Twitter intent links to draft tweets containing verified stats and Buildathon tags.
 
-### 🏆 4. Alpha Leaderboard
-* **Code Reference:** [`app/leaderboard/page.tsx`](file:///c:/Users/PRASHANTHI/Downloads/soso-smre/SMRE-FINAL-V/app/leaderboard/page.tsx)
+### ✅ Alpha Leaderboard
 * Integrated a global Rankings board displaying real-time platform performers.
 * Implemented a `framer-motion` staggered podium block showing Gold, Silver, and Bronze rankings avatars with glowing drop shadows.
 
 ---
 
-## ⚙️ Detailed System Architecture
+## 🎯 Bonus Features Beyond the Declared Goals
 
-```
-               [ LIVE DATA CHANNELS ]
-       SoDEX WebSockets     SoSoValue API Feeds
-              │                      │
-              ▼                      ▼
-       ┌────────────────────────────────┐
-       │   Zustand Store (sodexStore)   │ ◄─── Persistent State Cache
-       └──────────────┬─────────────────┘
-                      │
-            ┌─────────┴─────────┐
-            ▼                   ▼
-    ┌───────────────┐   ┌───────────────┐
-    │ Gemini Agent  │   │  Audio Studio │
-    │   (SoDoggy)   │   │   (SoEva)     │
-    └───────┬───────┘   └───────────────┘
-            │
-            ▼
-    ┌───────────────┐
-    │ Execution     │ ◄─── Relayer (EIP-712 Signature API)
-    │ Engine        │
-    │ (Wagmi v2)    │ ◄─── Direct (useWriteContract Router Write)
-    └───────────────┘
-```
+### 🎙️ AI Podcast Studio (SoEva)
+* A modular, animated conversation studio featuring animated hosts EVA and ECHO.
+* Ingests SoSoValue BTC/ETH ETF inflows and macroeconomic news, generating a dynamic debate script using Gemini 2.5 Flash.
+* Speaks out the script using localized TTS synthesizers with pause, resume, and emotion indicators.
+
+### 📊 Strategy Backtesting Sandbox (Backtest AI)
+* Allows traders to historical-backtest custom strategies (e.g., RSI, Mean Reversion, breakouts) against historical token candles.
+* Renders counterfactual ROI charts and yields, verified against actual historical parameters.
+
+### 📱 Telegram Daily Alpha
+* Users can configure their Telegram Chat IDs under `/settings` to hook up custom daily alert feeds.
+* AI compiles daily market analysis using Gemini and broadcasts 1-click alpha insights directly to users' mobile phones.
 
 ---
 
-## ✨ Winning Level Features
+## 🛠️ Stack
+* **Frontend/Core:** Next.js 16.2 (Turbopack) · TypeScript 5.7 · Tailwind CSS · Zustand (Persistent Storage)
+* **Web3 Integration:** Wagmi v2 · RainbowKit · Viem
+* **AI Pipelines:** Google GenAI SDK (Gemini 2.5 Flash) · Web Speech TTS Engine
+* **Backend Database:** Firebase Auth · Firestore Real-time Cloud Sync
 
-| Feature | Description |
-|---------|-------------|
-| 🔴 **Live SoDEX Data Hub** | Real-time WebSocket feed from SoDEX mainnet. Prices, order books, and spreads update sub-second across the entire UI. |
-| 🛡️ **Direct Web3 writes** | Full `wagmi` and `RainbowKit` integration. Support for direct contract writing bypassing relayers. |
-| 🤖 **Autonomous NLP triggers** | Set natural language alerts that monitor the price stream and auto-execute orders when conditions are met. |
-| 🎙️ **SoEva Podcast Studio** | Animated podcast hosts EVA & ECHO debate live ETF inflows and news with TTS speech synthesizers. |
-| 📊 **Backtest Sandbox** | Simulation environment that uses historical price logs to calculate counterfactual equity returns. |
-| 🎴 **Proof of PnL Cards** | Custom cyberpunk card generator that snapshots ROI and SoPoints stats for direct social sharing. |
-
----
-
-## 🚀 Quick Start
-
-```bash
-# 1. Clone the repository
-git clone https://github.com/Cyptoboy777/soso-smre.git
-cd soso-smre
-
-# 2. Install dependencies (Turbopack ready)
-npm install
-
-# 3. Configure environment variables
-cp .env.example .env.local
-
-# 4. Start the development server
-npm run dev
-```
-
-Open [http://localhost:3000](http://localhost:3000) and connect your wallet!
-
----
-
-## 🔑 Environment Variables (.env.local)
-
-```env
-# SoDEX API Configuration
-SODEX_API_KEY=...
-SODEX_API_SECRET=...
-
-# Essential AI Routing
-GEMINI_API_KEY=your_gemini_key
-GROQ_API_KEY=your_groq_key
-
-# SoSoValue APIs (Optional but recommended for News/ETF data)
-SOSOVALUE_API_KEY=your_sosovalue_key
-
-# Firebase & Telegram
-NEXT_PUBLIC_FIREBASE_API_KEY=...
-TELEGRAM_BOT_TOKEN=...
-```
-
----
-
-<p align="center"><b>Built to Win. Made with Next.js × SoDEX × Wagmi × Gemini AI</b></p>
+Built solo by **@Cyptoboy777**.
