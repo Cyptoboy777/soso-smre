@@ -2,7 +2,7 @@
   <img src="public/cybonk_dog.png" alt="SoDoggy — SOSO SMRE AI Mascot" width="120" />
 </p>
 
-<h1 align="center">SOSO SMRE ⚡ Wave 3 (Winner's Edition)</h1>
+<h1 align="center">SOSO SMRE ⚡ Wave 3 Final Edition</h1>
 <h3 align="center">Smart Money Research Engine — SoSoValue Buildathon Grand Finale Build</h3>
 
 <p align="center">
@@ -17,15 +17,39 @@
 
 <p align="center">
   <b>🌍 Live Demo: <a href="https://soso-smre.vercel.app/login">https://soso-smre.vercel.app/login</a></b><br/>
-  <i>Connect your Web3 wallet and experience the world's most advanced autonomous, relayerless execution workspace.</i>
+  <i>Connect your Web3 wallet and experience the autonomous, relayerless execution workspace.</i>
 </p>
+
+---
+
+# Updates in this Wave ⚡ Wave 3 Final Edition
+🏆 Wave 2 → Wave 3 = superset.
+**Live Portal:** [https://soso-smre.vercel.app](https://soso-smre.vercel.app/login)
+**Repo:** [https://github.com/Cyptoboy777/soso-smre](https://github.com/Cyptoboy777/soso-smre)
+**Release:** [https://github.com/Cyptoboy777/soso-smre/releases/tag/wave-3-final](https://github.com/Cyptoboy777/soso-smre/releases/tag/wave-3-final)
+
+---
+
+## 🔌 API Integrations: How We Utilized SoDEX & SoSoValue
+
+Our system integrates directly with mainnet data endpoints and Web3 execution APIs to drive the terminal:
+
+### 🔴 1. SoDEX API Integration (Live Execution & Orderbook Websockets)
+* **Websocket Connections:** Connects to `wss://` SoDEX streams to ingest real-time ticks, orderbook spreads, and matching logs. These feeds are written to a global Zustand cache (`sodexStore.ts`) to drive the TradingView charts.
+* **On-Chain Orders:** Leverages the user's Web3 wallet connection via Wagmi to write directly to the SoDEX Router smart contract address on-chain (`0x378BcADaBfF12530E57223b207aA6Fd4b93b4822`), prompting wallets to sign transactions.
+* **Relayer Signatures:** Uses the `SODEX_API_KEY` and `SODEX_API_SECRET` credentials in Next.js Edge APIs (`/api/trade`) to validate and submit user EIP-712 signed payloads to the matching engine.
+
+### 📊 2. SoSoValue API Integration (Macro Sentiment & ETF Streams)
+* **Real-time News Feeds:** Queries SoSoValue news endpoints to fetch real-time macroeconomic bulletins and coin narratives.
+* **ETF Inflow Stream:** Pulls net flow statistics (BTC/ETH ETF net inflows) directly into our server middleware.
+* **Gemini Pipelines:** Pipes this raw data context into the **SoDoggy sentiment analysis model** (`/api/news/sentiment`) and the **SoEva audio generation script** (`/api/dog-chat`) to produce summaries.
 
 ---
 
 ## 🏆 Core Philosophy: Why SOSO SMRE?
 
 In modern decentralized finance, retail traders face severe structural barriers that keep them behind institutions:
-1. **The Latency Trap:** Classic research terminals fetch stale database data. In volatile Web3 markets, entering a setup seconds late ruins the risk-to-reward ratio.
+1. **The Latency Trap:** Classic research terminals display outdated data. In volatile Web3 markets, entering a setup seconds late ruins the risk-to-reward ratio.
 2. **The Execution Friction:** Turning a research discovery into a DEX trade requires switching tabs, connecting wallets, calculating sizes, and managing slippage, leading to execution delay.
 3. **The Data Silo:** Fundamental news streams (ETF flows, macroeconomic updates), technical chart analysis, and social sentiment are separate, preventing clear decision-making.
 
