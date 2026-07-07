@@ -12,7 +12,7 @@ type Props = {
 
 const COLORS: Record<string, { primary: string; secondary: string; eye: string; bg: string }> = {
   excited: { primary: "#f59e0b", secondary: "#fcd34d", eye: "#fff7ed", bg: "#1a1000" },
-  happy:   { primary: "#00e676", secondary: "#69f0ae", eye: "#f0fff4", bg: "#001a0a" },
+  happy:   { primary: "#2bd9a8", secondary: "#69f0ae", eye: "#f0fff4", bg: "#001a0a" },
   alert:   { primary: "#ff1744", secondary: "#ff5252", eye: "#fff5f5", bg: "#1a0005" },
   sad:     { primary: "#3b82f6", secondary: "#60a5fa", eye: "#eff6ff", bg: "#00051a" },
   neutral: { primary: "#00e5ff", secondary: "#67e8f9", eye: "#f0fdff", bg: "#001a1a" },

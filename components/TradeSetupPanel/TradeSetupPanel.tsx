@@ -202,6 +202,8 @@ export const TradeSetupPanel = React.memo(function TradeSetupPanel({ selected, o
               amount: positionSize,
               price: parseFloat(entryPrice),
               signature,
+              walletAddress: address,
+              nonce: message.nonce.toString(),
               mode: 'real'
             })
           });
@@ -237,8 +239,8 @@ export const TradeSetupPanel = React.memo(function TradeSetupPanel({ selected, o
   };
 
   const isBuy = side === 'BUY';
-  const themeColor = isBuy ? '#00e676' : '#f43f5e';
-  const themeGradient = isBuy ? 'linear-gradient(135deg, #00e676, #00b0ff)' : 'linear-gradient(135deg, #f43f5e, #f97316)';
+  const themeColor = isBuy ? '#2bd9a8' : '#ff6b6b';
+  const themeGradient = isBuy ? 'linear-gradient(135deg, #2bd9a8, #00b0ff)' : 'linear-gradient(135deg, #ff6b6b, #f97316)';
 
   return (
     <div style={{ width: 340, flexShrink: 0, borderLeft: '1px solid #1a1a2e', display: 'flex', flexDirection: 'column', background: '#09090f', overflowY: 'auto' }} className="scroll-track">
@@ -248,10 +250,10 @@ export const TradeSetupPanel = React.memo(function TradeSetupPanel({ selected, o
         <span style={{ fontSize: 11, fontWeight: 800, color: '#fff', letterSpacing: '0.05em' }}>EXECUTION MODE</span>
         <button 
           onClick={() => setPaperTrading(!paperTrading)}
-          style={{ display: 'flex', alignItems: 'center', gap: 6, background: paperTrading ? 'rgba(249,115,22,0.1)' : 'rgba(0,230,118,0.1)', border: `1px solid ${paperTrading ? '#f97316' : '#00e676'}`, borderRadius: 20, padding: '4px 10px', cursor: 'pointer', transition: 'all 0.2s' }}
+          style={{ display: 'flex', alignItems: 'center', gap: 6, background: paperTrading ? 'rgba(249,115,22,0.1)' : 'rgba(43,217,168,0.1)', border: `1px solid ${paperTrading ? '#f97316' : '#2bd9a8'}`, borderRadius: 20, padding: '4px 10px', cursor: 'pointer', transition: 'all 0.2s' }}
         >
-          <div style={{ width: 6, height: 6, borderRadius: '50%', background: paperTrading ? '#f97316' : '#00e676', boxShadow: `0 0 8px ${paperTrading ? '#f97316' : '#00e676'}` }} />
-          <span style={{ fontSize: 9, fontWeight: 900, color: paperTrading ? '#f97316' : '#00e676' }}>
+          <div style={{ width: 6, height: 6, borderRadius: '50%', background: paperTrading ? '#f97316' : '#2bd9a8', boxShadow: `0 0 8px ${paperTrading ? '#f97316' : '#2bd9a8'}` }} />
+          <span style={{ fontSize: 9, fontWeight: 900, color: paperTrading ? '#f97316' : '#2bd9a8' }}>
             {paperTrading ? 'PAPER TRADING' : 'REAL TRADING (WEB3)'}
           </span>
         </button>
@@ -295,8 +297,8 @@ export const TradeSetupPanel = React.memo(function TradeSetupPanel({ selected, o
               onClick={() => setSide(s)}
               style={{
                 flex: 1, padding: '8px 0', border: 'none', borderRadius: 6,
-                background: side === s ? (s === 'BUY' ? 'rgba(0,230,118,0.15)' : 'rgba(244,63,94,0.15)') : 'transparent',
-                color: side === s ? (s === 'BUY' ? '#00e676' : '#f43f5e') : '#44446a',
+                background: side === s ? (s === 'BUY' ? 'rgba(43,217,168,0.15)' : 'rgba(255,107,107,0.15)') : 'transparent',
+                color: side === s ? (s === 'BUY' ? '#2bd9a8' : '#ff6b6b') : '#44446a',
                 fontSize: 12, fontWeight: 900, cursor: 'pointer', transition: 'all 0.2s'
               }}
             >
@@ -339,8 +341,8 @@ export const TradeSetupPanel = React.memo(function TradeSetupPanel({ selected, o
           {/* Entry */}
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
-              <Crosshair size={12} color="#38bdf8" />
-              <span style={{ fontSize: 9, color: '#38bdf8', fontWeight: 800, letterSpacing: '0.05em' }}>ENTRY PRICE</span>
+              <Crosshair size={12} color="#4f9cff" />
+              <span style={{ fontSize: 9, color: '#4f9cff', fontWeight: 800, letterSpacing: '0.05em' }}>ENTRY PRICE</span>
             </div>
             <input 
               type="number" 
@@ -353,10 +355,10 @@ export const TradeSetupPanel = React.memo(function TradeSetupPanel({ selected, o
           {/* Stop Loss */}
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
-              <ShieldAlert size={12} color="#f43f5e" />
-              <span style={{ fontSize: 9, color: '#f43f5e', fontWeight: 800, letterSpacing: '0.05em' }}>STOP LOSS</span>
+              <ShieldAlert size={12} color="#ff6b6b" />
+              <span style={{ fontSize: 9, color: '#ff6b6b', fontWeight: 800, letterSpacing: '0.05em' }}>STOP LOSS</span>
               {entry > 0 && sl > 0 && (
-                <span style={{ marginLeft: 'auto', fontSize: 9, color: '#f43f5e', fontFamily: 'monospace' }}>
+                <span style={{ marginLeft: 'auto', fontSize: 9, color: '#ff6b6b', fontFamily: 'monospace' }}>
                   -{Math.abs((entry - sl) / entry * 100).toFixed(2)}%
                 </span>
               )}
@@ -373,17 +375,17 @@ export const TradeSetupPanel = React.memo(function TradeSetupPanel({ selected, o
           <div>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <Target size={12} color="#00e676" />
-                <span style={{ fontSize: 9, color: '#00e676', fontWeight: 800, letterSpacing: '0.05em' }}>TAKE PROFIT</span>
+                <Target size={12} color="#2bd9a8" />
+                <span style={{ fontSize: 9, color: '#2bd9a8', fontWeight: 800, letterSpacing: '0.05em' }}>TAKE PROFIT</span>
               </div>
               {tpPrices.length < 3 && (
-                <button onClick={addTp} style={{ background: 'none', border: 'none', color: '#00e676', fontSize: 9, fontWeight: 900, cursor: 'pointer' }}>+ ADD TP</button>
+                <button onClick={addTp} style={{ background: 'none', border: 'none', color: '#2bd9a8', fontSize: 9, fontWeight: 900, cursor: 'pointer' }}>+ ADD TP</button>
               )}
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               {tpPrices.map((val, idx) => (
                 <div key={idx} style={{ display: 'flex', gap: 6 }}>
-                  <div style={{ width: 40, background: '#111120', border: '1px solid #2a2a4a', borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 900, color: '#00e676' }}>
+                  <div style={{ width: 40, background: '#111120', border: '1px solid #2a2a4a', borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 900, color: '#2bd9a8' }}>
                     TP{idx + 1}
                   </div>
                   <input 
@@ -391,7 +393,7 @@ export const TradeSetupPanel = React.memo(function TradeSetupPanel({ selected, o
                     style={{ flex: 1, background: '#141425', border: '1px solid #2a2a4a', borderRadius: 8, padding: '10px 12px', color: '#fff', fontSize: 14, outline: 'none', fontFamily: 'monospace' }}
                   />
                   {tpPrices.length > 1 && (
-                    <button onClick={() => removeTp(idx)} style={{ width: 36, background: 'rgba(244,63,94,0.1)', border: '1px solid rgba(244,63,94,0.3)', borderRadius: 8, color: '#f43f5e', fontSize: 14, cursor: 'pointer' }}>×</button>
+                    <button onClick={() => removeTp(idx)} style={{ width: 36, background: 'rgba(255,107,107,0.1)', border: '1px solid rgba(255,107,107,0.3)', borderRadius: 8, color: '#ff6b6b', fontSize: 14, cursor: 'pointer' }}>×</button>
                   )}
                 </div>
               ))}
@@ -427,7 +429,7 @@ export const TradeSetupPanel = React.memo(function TradeSetupPanel({ selected, o
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span style={{ fontSize: 10, color: '#8888aa', fontWeight: 700 }}>TOTAL RISK (USDC)</span>
-            <span style={{ fontSize: 12, color: '#f43f5e', fontWeight: 800, fontFamily: 'monospace' }}>
+            <span style={{ fontSize: 12, color: '#ff6b6b', fontWeight: 800, fontFamily: 'monospace' }}>
               -${riskAmountUsdc.toFixed(2)}
             </span>
           </div>
@@ -446,7 +448,7 @@ export const TradeSetupPanel = React.memo(function TradeSetupPanel({ selected, o
             style={{ 
               width: '100%', padding: '14px', borderRadius: 12, border: 'none', 
               fontSize: 13, fontWeight: 900, cursor: validation.valid ? 'pointer' : 'not-allowed', color: validation.valid ? '#000' : '#44446a', letterSpacing: '0.05em',
-              background: submitted ? '#00e676' : validation.valid ? themeGradient : '#111120',
+              background: submitted ? '#2bd9a8' : validation.valid ? themeGradient : '#111120',
               boxShadow: validation.valid ? `0 8px 24px ${themeColor}40` : 'none',
               display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8
             }}

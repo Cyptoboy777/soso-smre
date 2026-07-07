@@ -6,10 +6,10 @@ import { useAuth } from '@/components/FirebaseProvider';
 import type { WalletProvider } from '@/lib/walletConnectors';
 
 const FEATURES = [
-  { step: '01', label: 'DISCOVERY', color: '#38bdf8', rgb: '56,189,248', title: 'Data Ingestion', desc: 'Real-time WebSocket connection to SoSoValue data. Aggregating on-chain metrics and funding rates.' },
+  { step: '01', label: 'DISCOVERY', color: '#4f9cff', rgb: '79,156,255', title: 'Data Ingestion', desc: 'Real-time WebSocket connection to SoSoValue data. Aggregating on-chain metrics and funding rates.' },
   { step: '02', label: 'TELEGRAM', color: '#f97316', rgb: '249,115,22', title: 'Daily Alpha Alerts', desc: 'Gemini AI analyzes top gainers and breaking news to send personalized "Today\'s Alpha" directly to your Telegram.' },
-  { step: '03', label: 'ANALYSIS', color: '#a855f7', rgb: '168,85,247', title: 'Dual-AI Signals', desc: 'Groq LLaMA-3 handles lightning-fast momentum checks, while Gemini 2.5 Flash computes deep sentiment reasoning.' },
-  { step: '04', label: 'EXECUTION', color: '#00e676', rgb: '0,230,118', title: 'Auto Trading Bot', desc: 'AI-powered trading bot fires paper-trade payloads based on Entry/SL zones with real-time SoDEX market data.' },
+  { step: '03', label: 'ANALYSIS', color: '#9d7bff', rgb: '157,123,255', title: 'Dual-AI Signals', desc: 'Groq LLaMA-3 handles lightning-fast momentum checks, while Gemini 2.5 Flash computes deep sentiment reasoning.' },
+  { step: '04', label: 'EXECUTION', color: '#2bd9a8', rgb: '43,217,168', title: 'Auto Trading Bot', desc: 'AI-powered trading bot fires paper-trade payloads based on Entry/SL zones with real-time SoDEX market data.' },
 ];
 
 // ── Wallet Picker Modal ──────────────────────────────────────────────────────
@@ -53,7 +53,7 @@ function WalletPicker({ wallets, onSelect, onClose, loading }: {
                   color: '#fff', textAlign: 'left', transition: 'all 0.2s',
                   opacity: loading ? 0.6 : 1,
                 }}
-                onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = 'rgba(56,189,248,0.08)'; (e.currentTarget as HTMLButtonElement).style.borderColor = 'rgba(56,189,248,0.3)'; }}
+                onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = 'rgba(79,156,255,0.08)'; (e.currentTarget as HTMLButtonElement).style.borderColor = 'rgba(79,156,255,0.3)'; }}
                 onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'rgba(255,255,255,0.03)'; (e.currentTarget as HTMLButtonElement).style.borderColor = 'rgba(255,255,255,0.08)'; }}
               >
                 <span style={{ fontSize: 28, lineHeight: 1, flexShrink: 0 }}>{w.icon}</span>
@@ -122,22 +122,14 @@ export default function LoginPage() {
   if (loading || user || walletAddress) {
     return (
       <div style={{ minHeight: '100vh', background: '#020617', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <div className="spin" style={{ width: 32, height: 32, border: '2px solid #38bdf8', borderTopColor: 'transparent', borderRadius: '50%' }} />
+        <div className="spin" style={{ width: 32, height: 32, border: '2px solid #4f9cff', borderTopColor: 'transparent', borderRadius: '50%' }} />
       </div>
     );
   }
 
-  const cur = FEATURES[active];
-
   return (
-    <div style={{ minHeight: '100vh', background: '#020617', display: 'flex', alignItems: 'stretch', overflow: 'hidden', fontFamily: 'system-ui,sans-serif' }}>
+    <div style={{ minHeight: '100vh', background: '#05060b', display: 'flex', alignItems: 'stretch', overflow: 'hidden', fontFamily: 'system-ui,sans-serif' }}>
       <style dangerouslySetInnerHTML={{__html:`
-        @keyframes beamMove {
-          0%   { transform: translateY(0);   opacity:0; }
-          8%   { opacity:1; }
-          92%  { opacity:1; }
-          100% { transform: translateY(var(--track-h,300px)); opacity:0; }
-        }
         @keyframes ringPop {
           0%   { transform:translate(-50%,-50%) scale(0.6); opacity:0; }
           60%  { transform:translate(-50%,-50%) scale(1.15); opacity:1; }
@@ -146,10 +138,6 @@ export default function LoginPage() {
         @keyframes cardSlide {
           0%   { opacity:0; transform:translateX(32px); }
           100% { opacity:1; transform:translateX(0); }
-        }
-        @keyframes particleDrift {
-          0%   { transform:translateY(0) translateX(0); opacity:0.6; }
-          100% { transform:translateY(-120px) translateX(20px); opacity:0; }
         }
         @keyframes shimmer {
           0%  { background-position: -400px 0; }
@@ -160,7 +148,7 @@ export default function LoginPage() {
           50%      { opacity:0.7; transform:scale(1.06); }
         }
         .login-btn-google:hover { background:rgba(255,255,255,0.09)!important; }
-        .login-btn-wallet:hover { transform:translateY(-3px); box-shadow:0 16px 40px rgba(56,189,248,0.45)!important; }
+        .login-btn-wallet:hover { transform:translateY(-3px); box-shadow:0 16px 40px rgba(79,156,255,0.45)!important; }
         @media(max-width:860px){ .left-panel{ display:none!important; } }
       `}} />
 
@@ -176,22 +164,38 @@ export default function LoginPage() {
 
       {/* ── LEFT PANEL ── */}
       <div className="left-panel" style={{ flex:1, position:'relative', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', padding:'60px 40px', overflow:'hidden' }}>
-        <div style={{ position:'absolute', inset:0, background:'radial-gradient(ellipse 70% 60% at 50% 30%, rgba(56,189,248,0.07) 0%, transparent 70%), radial-gradient(ellipse 50% 50% at 20% 80%, rgba(168,85,247,0.06) 0%, transparent 60%)', pointerEvents:'none' }} />
-        {[...Array(18)].map((_,i) => (
-          <div key={i} style={{ position:'absolute', left:`${10+i*5}%`, bottom:`${10+(i%5)*15}%`, width: i%3===0?3:2, height: i%3===0?3:2, borderRadius:'50%', background: i%4===0?'#38bdf8':i%4===1?'#a855f7':i%4===2?'#f97316':'#00e676', opacity:0.4, animation:`particleDrift ${4+i*0.4}s ${i*0.3}s ease-in-out infinite alternate`, pointerEvents:'none' }} />
-        ))}
+        <div style={{ position:'absolute', inset:0, background:'radial-gradient(ellipse 60% 50% at 50% 20%, rgba(79,156,255,0.06) 0%, transparent 70%)', pointerEvents:'none' }} />
         <div style={{ textAlign:'center', marginBottom:56, zIndex:1 }}>
           <div style={{ fontSize:11, letterSpacing:'.3em', color:'#475569', fontWeight:800, marginBottom:16 }}>SOSOVALUE BUILDATHON</div>
           <h1 style={{ fontSize:42, fontWeight:900, color:'#fff', letterSpacing:'-0.04em', lineHeight:1, margin:0 }}>
-            One Platform.<br/>
-            <span style={{ background:'linear-gradient(90deg,#38bdf8,#a855f7,#f97316)', WebkitBackgroundClip:'text', WebkitTextFillColor:'transparent' }}>Infinite Alpha.</span>
+            One Signal.<br/>
+            <span style={{ background:'linear-gradient(90deg,#4f9cff,#9d7bff)', WebkitBackgroundClip:'text', WebkitTextFillColor:'transparent' }}>Total Control.</span>
           </h1>
           <p style={{ color:'#475569', fontSize:14, marginTop:16, fontWeight:500 }}>The journey from news to profit — automated.</p>
         </div>
         <div style={{ position:'relative', display:'flex', flexDirection:'column', gap:0, zIndex:1 }}>
-          <div style={{ position:'absolute', left:19, top:20, bottom:20, width:2, background:'rgba(255,255,255,0.06)', borderRadius:2 }}>
-            <div style={{ position:'absolute', left:-2, top:0, width:6, height:60, background:`linear-gradient(to bottom, transparent, ${cur.color}, #fff)`, borderRadius:4, boxShadow:`0 0 16px ${cur.color}, 0 0 32px ${cur.color}`, animation:`beamMove 2.8s ease-in-out infinite`, '--track-h': `${(FEATURES.length - 1) * 88}px` } as React.CSSProperties} />
-          </div>
+          {/* Signal Thread — self-draws once on load, then a light travels the path on loop */}
+          <svg
+            width="40"
+            height={FEATURES.length * 88}
+            style={{ position:'absolute', left:0, top:0, overflow:'visible', pointerEvents:'none' }}
+          >
+            <defs>
+              {/* userSpaceOnUse — a purely vertical path has zero bbox width, which
+                  makes the default objectBoundingBox gradient units degenerate to
+                  nothing. Explicit coordinates avoid that. */}
+              <linearGradient id="signalGradient" gradientUnits="userSpaceOnUse" x1="20" y1="20" x2="20" y2={FEATURES.length * 88 - 20}>
+                <stop offset="0%" stopColor="#4f9cff" />
+                <stop offset="100%" stopColor="#9d7bff" />
+              </linearGradient>
+            </defs>
+            <path
+              className="signal-thread-path"
+              d={`M20 20 L20 ${FEATURES.length * 88 - 20}`}
+              style={{ '--path-len': FEATURES.length * 88 - 40 } as React.CSSProperties}
+            />
+            <circle r="4" fill="#fff" className="signal-thread-pulse" style={{ offsetPath: `path('M20 20 L20 ${FEATURES.length * 88 - 20}')`, filter: 'drop-shadow(0 0 6px #9d7bff)' } as React.CSSProperties} />
+          </svg>
           {FEATURES.map((f, i) => {
             const isActive = i === active;
             return (
@@ -219,14 +223,14 @@ export default function LoginPage() {
 
       {/* ── RIGHT PANEL ── */}
       <div style={{ flex: 1, maxWidth: 460, minWidth: 320, display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '60px 48px', background: 'rgba(8,10,16,0.8)', borderLeft: '1px solid rgba(255,255,255,0.05)', backdropFilter: 'blur(40px)', position: 'relative', zIndex: 10 }}>
-        <div style={{ position:'absolute', top:0, left:0, right:0, height:2, background:'linear-gradient(90deg, transparent, #38bdf8, #a855f7, transparent)', backgroundSize:'400px 2px', animation:'shimmer 3s linear infinite' }} />
+        <div style={{ position:'absolute', top:0, left:0, right:0, height:2, background:'linear-gradient(90deg, transparent, #4f9cff, #9d7bff, transparent)', backgroundSize:'400px 2px', animation:'shimmer 3s linear infinite' }} />
 
         <div style={{ textAlign:'center', marginBottom: 48 }}>
           <div style={{ position:'relative', display:'inline-block', margin:'0 auto 8px' }}>
-            <div style={{ position:'absolute', inset:-8, borderRadius:28, border:'1px solid rgba(56,189,248,0.2)', animation:'pulse 3s ease-in-out infinite', pointerEvents:'none' }} />
-            <div style={{ position:'absolute', inset:-16, borderRadius:34, border:'1px solid rgba(168,85,247,0.12)', animation:'pulse 3s ease-in-out infinite 1.2s', pointerEvents:'none' }} />
-            <div style={{ background:'linear-gradient(135deg, rgba(56,189,248,0.1), rgba(168,85,247,0.1))', borderRadius:22, border:'1px solid rgba(255,255,255,0.07)', boxShadow:'0 0 60px rgba(56,189,248,0.15)', padding:14, position:'relative', overflow:'hidden' }}>
-              <div style={{ position:'absolute', inset:0, backgroundImage:'linear-gradient(rgba(56,189,248,0.04) 1px, transparent 1px),linear-gradient(90deg, rgba(56,189,248,0.04) 1px, transparent 1px)', backgroundSize:'12px 12px' }} />
+            <div style={{ position:'absolute', inset:-8, borderRadius:28, border:'1px solid rgba(79,156,255,0.2)', animation:'pulse 3s ease-in-out infinite', pointerEvents:'none' }} />
+            <div style={{ position:'absolute', inset:-16, borderRadius:34, border:'1px solid rgba(157,123,255,0.12)', animation:'pulse 3s ease-in-out infinite 1.2s', pointerEvents:'none' }} />
+            <div style={{ background:'linear-gradient(135deg, rgba(79,156,255,0.1), rgba(157,123,255,0.1))', borderRadius:22, border:'1px solid rgba(255,255,255,0.07)', boxShadow:'0 0 60px rgba(79,156,255,0.15)', padding:14, position:'relative', overflow:'hidden' }}>
+              <div style={{ position:'absolute', inset:0, backgroundImage:'linear-gradient(rgba(79,156,255,0.04) 1px, transparent 1px),linear-gradient(90deg, rgba(79,156,255,0.04) 1px, transparent 1px)', backgroundSize:'12px 12px' }} />
               <Logo mode="full" style={{ width: 52, height: 52, position:'relative', zIndex:1 }} />
             </div>
           </div>
@@ -234,7 +238,7 @@ export default function LoginPage() {
         </div>
 
         {error && (
-          <div style={{ background:'rgba(244,63,94,0.1)', border:'1px solid rgba(244,63,94,0.3)', color:'#fda4af', borderRadius:10, padding:'12px 16px', fontSize:12, marginBottom:24 }}>{error}</div>
+          <div style={{ background:'rgba(255,107,107,0.1)', border:'1px solid rgba(255,107,107,0.3)', color:'#fda4af', borderRadius:10, padding:'12px 16px', fontSize:12, marginBottom:24 }}>{error}</div>
         )}
 
         <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
@@ -252,7 +256,7 @@ export default function LoginPage() {
 
           {/* Wallet — shows picker */}
           <button className="login-btn-wallet" onClick={handleWalletButtonClick} disabled={isSigningIn}
-            style={{ width:'100%', minHeight:52, borderRadius:12, border:'none', background:'linear-gradient(135deg, #0ea5e9, #2563eb)', color:'#fff', fontWeight:800, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:12, fontSize:14, boxShadow:'0 8px 24px rgba(56,189,248,0.25)', transition:'all 0.3s cubic-bezier(0.16,1,0.3,1)' }}>
+            style={{ width:'100%', minHeight:52, borderRadius:12, border:'none', background:'linear-gradient(135deg, #0ea5e9, #2563eb)', color:'#fff', fontWeight:800, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:12, fontSize:14, boxShadow:'0 8px 24px rgba(79,156,255,0.25)', transition:'all 0.3s cubic-bezier(0.16,1,0.3,1)' }}>
             <span style={{ fontSize: 20 }}>🔐</span>
             Connect Web3 Wallet
             {availableWallets.length > 0 && (
@@ -273,7 +277,7 @@ export default function LoginPage() {
         {availableWallets.length > 0 && (
           <div style={{ display:'flex', flexWrap:'wrap', gap:8, marginBottom:20 }}>
             {availableWallets.map(w => (
-              <button key={w.id} onClick={() => { setShowPicker(true); }} style={{ display:'flex', alignItems:'center', gap:6, padding:'6px 12px', borderRadius:99, background:'rgba(56,189,248,0.06)', border:'1px solid rgba(56,189,248,0.2)', color:'#38bdf8', fontSize:11, fontWeight:700, cursor:'pointer' }}>
+              <button key={w.id} onClick={() => { setShowPicker(true); }} style={{ display:'flex', alignItems:'center', gap:6, padding:'6px 12px', borderRadius:99, background:'rgba(79,156,255,0.06)', border:'1px solid rgba(79,156,255,0.2)', color:'#4f9cff', fontSize:11, fontWeight:700, cursor:'pointer' }}>
                 <span>{w.icon}</span> {w.name}
               </button>
             ))}
@@ -282,7 +286,7 @@ export default function LoginPage() {
 
         {/* Trust badges */}
         <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8 }}>
-          {[['🔐','EIP-712 Sign-In'],['⚡','Any EVM Wallet'],['🤖','Gemini + Groq AI'],['🔒','Firebase Auth']].map(([icon,label]) => (
+          {[['🔐','Signature Verified'],['⚡','Any EVM Wallet'],['🤖','Gemini + Groq AI'],['🔒','Firebase Auth']].map(([icon,label]) => (
             <div key={label as string} style={{ background:'rgba(255,255,255,0.02)', border:'1px solid rgba(255,255,255,0.04)', borderRadius:10, padding:'10px 12px', display:'flex', alignItems:'center', gap:8 }}>
               <span style={{ fontSize:14 }}>{icon}</span>
               <span style={{ fontSize:10, color:'#475569', fontWeight:700 }}>{label}</span>

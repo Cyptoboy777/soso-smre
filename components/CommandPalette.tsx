@@ -120,7 +120,7 @@ export default function CommandPalette({ open, onClose }: Props) {
               border: '1px solid var(--border-glow)',
               borderRadius: 20,
               overflow: 'hidden',
-              boxShadow: '0 32px 80px rgba(0,0,0,0.7), 0 0 0 1px rgba(99,102,241,0.15)',
+              boxShadow: '0 32px 80px rgba(0,0,0,0.7), 0 0 0 1px rgba(79,156,255,0.15)',
             }}
           >
             {/* Search Input */}
@@ -178,7 +178,7 @@ export default function CommandPalette({ open, onClose }: Props) {
                           display: 'flex', alignItems: 'center', gap: 12,
                           padding: '10px 18px',
                           cursor: 'pointer',
-                          background: isActive ? 'rgba(99,102,241,0.1)' : 'transparent',
+                          background: isActive ? 'rgba(79,156,255,0.1)' : 'transparent',
                           borderLeft: isActive ? '2px solid var(--accent-blue)' : '2px solid transparent',
                           transition: 'all 0.12s ease',
                         }}
@@ -187,7 +187,7 @@ export default function CommandPalette({ open, onClose }: Props) {
                         <div style={{
                           width: 34, height: 34,
                           borderRadius: 10,
-                          background: isActive ? 'rgba(99,102,241,0.12)' : 'rgba(255,255,255,0.04)',
+                          background: isActive ? 'rgba(79,156,255,0.12)' : 'rgba(255,255,255,0.04)',
                           border: '1px solid var(--border-subtle)',
                           display: 'flex', alignItems: 'center', justifyContent: 'center',
                           flexShrink: 0,

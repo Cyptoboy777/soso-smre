@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { GoogleGenAI } from '@google/genai';
 import Groq from 'groq-sdk';
 import { GET as getPrices } from '../prices/route';
+import { checkRateLimit, getClientKey } from '@/lib/rateLimit';
+
+const CHAT_ID_RE = /^-?\d{5,15}$/;
 
 interface Body {
   token: string;
@@ -120,6 +123,11 @@ async function runGroq(prompt: string): Promise<AISignal> {
 
 export async function POST(req: NextRequest) {
   try {
+    const rl = checkRateLimit(`ai-signal:${getClientKey(req)}`, 15, 60_000);
+    if (!rl.allowed) {
+      return NextResponse.json({ error: 'Rate limit exceeded. Please slow down.' }, { status: 429 });
+    }
+
     const body = await req.json() as Body;
     if (!body.token) return NextResponse.json({ error: 'token required' }, { status: 400 });
 
@@ -200,8 +208,9 @@ export async function POST(req: NextRequest) {
       signal.reasoning = `[Low Conviction — ${signal.confidence}%] ` + signal.reasoning;
     }
 
-    // NEW: SEND TELEGRAM ALERT IF CHAT ID PROVIDED
-    if (body.chatId && process.env.TELEGRAM_BOT_TOKEN) {
+    // SEND TELEGRAM ALERT IF A VALID CHAT ID WAS PROVIDED
+    if (body.chatId && CHAT_ID_RE.test(String(body.chatId).trim()) && process.env.TELEGRAM_BOT_TOKEN) {
+      const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
       const msg = `🚀 <b>NEW AI SIGNAL</b>\n\n` +
                   `Asset: <b>${body.token.toUpperCase()}/USDT</b>\n` +
                   `Action: ${signal.signal === 'BUY' ? '🟢 <b>BUY</b>' : signal.signal === 'SELL' ? '🔴 <b>SELL</b>' : '🟡 <b>HOLD</b>'}\n` +
@@ -209,13 +218,13 @@ export async function POST(req: NextRequest) {
                   `Target: <b>${signal.target}</b>\n` +
                   `Stop Loss: <b>${signal.stopLoss}</b>\n\n` +
                   `<i>Reasoning: ${signal.reasoning}</i>\n\n` +
-                  `<a href="http://localhost:3000/ai-analysis">Open Terminal →</a>`;
-      
+                  `<a href="${appUrl}/ai-analysis">Open Terminal →</a>`;
+
       try {
         await fetch(`https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/sendMessage`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ chat_id: body.chatId, text: msg, parse_mode: 'HTML' })
+          body: JSON.stringify({ chat_id: String(body.chatId).trim(), text: msg, parse_mode: 'HTML' })
         });
       } catch (e) {
         console.error('Telegram Signal Send Error:', e);

@@ -79,16 +79,51 @@ export async function connectToWallet(provider: any): Promise<string> {
   return accounts[0];
 }
 
+const SESSION_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
+
+export interface AuthProof {
+  address: string;
+  message: string;
+  signature: string;
+  timestamp: number;
+}
+
+function buildAuthMessage(address: string, ts: number): string {
+  return `Welcome to SoSo SMRE!\n\nSign to authenticate your wallet — no funds will move.\nAddress: ${address}\nTimestamp: ${ts}`;
+}
+
 /** Sign a SIWE-style message for authentication proof */
-export async function signAuthMessage(provider: any, address: string): Promise<string> {
+export async function signAuthMessage(provider: any, address: string): Promise<AuthProof> {
   const ts      = Date.now();
-  const message = `Welcome to SoSo SMRE!\n\nSign to authenticate your wallet — no funds will move.\nAddress: ${address}\nTimestamp: ${ts}`;
+  const message = buildAuthMessage(address, ts);
   const hexMsg  = '0x' + Buffer.from(message, 'utf8').toString('hex');
-  const sig: string = await provider.request({
+  const signature: string = await provider.request({
     method: 'personal_sign',
     params: [hexMsg, address],
   });
-  return sig;
+  return { address, message, signature, timestamp: ts };
+}
+
+/**
+ * Verify a wallet's signature over its auth message. Without this, "login" was just
+ * whatever address the client claimed — anyone could spoof a session by setting
+ * localStorage directly. Also rejects stale/expired sessions.
+ */
+export async function verifyAuthProof(proof: AuthProof): Promise<boolean> {
+  if (!proof?.address || !proof.message || !proof.signature || !proof.timestamp) return false;
+  if (Date.now() - proof.timestamp > SESSION_MAX_AGE_MS) return false;
+  if (proof.message !== buildAuthMessage(proof.address, proof.timestamp)) return false;
+
+  try {
+    const { verifyMessage } = await import('viem');
+    return await verifyMessage({
+      address: proof.address as `0x${string}`,
+      message: proof.message,
+      signature: proof.signature as `0x${string}`,
+    });
+  } catch {
+    return false;
+  }
 }
 
 /** Get current chain ID */

@@ -66,7 +66,7 @@ export default function ETFDashboardPage() {
         </button>
       </div>
 
-      {error && <div style={{ marginBottom: 18, color: '#f43f5e', fontSize: 13 }}>{error}</div>}
+      {error && <div style={{ marginBottom: 18, color: '#ff6b6b', fontSize: 13 }}>{error}</div>}
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 16, marginBottom: 32 }}>
         {[

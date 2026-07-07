@@ -28,10 +28,10 @@ export function Logo({ className = '', style, variant = 'default', mode = 'icon'
         </radialGradient>
         <linearGradient id="hexBorder" x1="0%" y1="0%" x2="100%" y2="100%">
           <stop offset="0%"   stopColor="#00e5ff">
-            <animate attributeName="stop-color" values="#00e5ff;#a855f7;#38bdf8;#00e5ff" dur="4s" repeatCount="indefinite" />
+            <animate attributeName="stop-color" values="#00e5ff;#9d7bff;#4f9cff;#00e5ff" dur="4s" repeatCount="indefinite" />
           </stop>
-          <stop offset="100%" stopColor="#a855f7">
-            <animate attributeName="stop-color" values="#a855f7;#00e5ff;#a855f7;#a855f7" dur="4s" repeatCount="indefinite" />
+          <stop offset="100%" stopColor="#9d7bff">
+            <animate attributeName="stop-color" values="#9d7bff;#00e5ff;#9d7bff;#9d7bff" dur="4s" repeatCount="indefinite" />
           </stop>
         </linearGradient>
         <filter id="accentGlow" x="-60%" y="-60%" width="220%" height="220%">
@@ -119,10 +119,10 @@ export function Logo({ className = '', style, variant = 'default', mode = 'icon'
           </radialGradient>
           <linearGradient id="hexBorder2" x1="0%" y1="0%" x2="100%" y2="100%">
             <stop offset="0%"   stopColor="#00e5ff">
-              <animate attributeName="stop-color" values="#00e5ff;#a855f7;#38bdf8;#00e5ff" dur="4s" repeatCount="indefinite" />
+              <animate attributeName="stop-color" values="#00e5ff;#9d7bff;#4f9cff;#00e5ff" dur="4s" repeatCount="indefinite" />
             </stop>
-            <stop offset="100%" stopColor="#a855f7">
-              <animate attributeName="stop-color" values="#a855f7;#00e5ff;#a855f7;#a855f7" dur="4s" repeatCount="indefinite" />
+            <stop offset="100%" stopColor="#9d7bff">
+              <animate attributeName="stop-color" values="#9d7bff;#00e5ff;#9d7bff;#9d7bff" dur="4s" repeatCount="indefinite" />
             </stop>
           </linearGradient>
           <filter id="accentGlow2" x="-60%" y="-60%" width="220%" height="220%">
@@ -169,12 +169,12 @@ export function Logo({ className = '', style, variant = 'default', mode = 'icon'
         <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', whiteSpace: 'nowrap' }}>
           <span style={{
             fontSize: 15, fontWeight: 900, letterSpacing: '-0.03em', lineHeight: 1.1,
-            background: 'linear-gradient(135deg, #ffffff 40%, #a855f7 100%)',
+            background: 'linear-gradient(135deg, #ffffff 40%, #9d7bff 100%)',
             WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
           }}>
             SoSo SMRE
           </span>
-          <span style={{ fontSize: 7.5, fontWeight: 800, color: '#38bdf8', letterSpacing: '0.16em', opacity: 0.9, marginTop: 1 }}>
+          <span style={{ fontSize: 7.5, fontWeight: 800, color: '#4f9cff', letterSpacing: '0.16em', opacity: 0.9, marginTop: 1 }}>
             SMART MONEY RESEARCH ENGINE
           </span>
         </div>
@@ -189,14 +189,14 @@ export function Logo({ className = '', style, variant = 'default', mode = 'icon'
       <div style={{ textAlign: 'center' }}>
         <div style={{
           fontSize: 26, fontWeight: 900, letterSpacing: '-0.04em', lineHeight: 1,
-          background: 'linear-gradient(135deg, #ffffff 20%, #38bdf8 55%, #a855f7 100%)',
+          background: 'linear-gradient(135deg, #ffffff 20%, #4f9cff 55%, #9d7bff 100%)',
           WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
         }}>
           SoSo SMRE
         </div>
         <div style={{
           marginTop: 5, fontSize: 8, fontWeight: 800, letterSpacing: '0.22em',
-          color: '#38bdf8', opacity: 0.75,
+          color: '#4f9cff', opacity: 0.75,
         }}>
           SMART MONEY RESEARCH ENGINE
         </div>

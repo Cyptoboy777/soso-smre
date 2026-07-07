@@ -89,7 +89,7 @@ export default function DashboardPage() {
   return (
     <div className="fade-up" style={{ padding: '32px 24px', maxWidth: 1200, margin: '0 auto', minHeight: '100%' }}>
       {/* Header Section */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 32 }}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'flex-end', gap: 16, marginBottom: 32 }}>
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
             <div className="smart-status-indicator" style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--accent-orange)' }} />
@@ -110,7 +110,7 @@ export default function DashboardPage() {
                style={{
                  fontSize: 12, fontWeight: 900, cursor: alphaStatus !== 'idle' ? 'not-allowed' : 'pointer',
                  display: 'flex', alignItems: 'center', gap: 8,
-                 background: alphaStatus === 'done' ? 'var(--accent-green)' : alphaStatus === 'error' ? '#f43f5e' : undefined,
+                 background: alphaStatus === 'done' ? 'var(--accent-green)' : alphaStatus === 'error' ? 'var(--accent-red)' : undefined,
                  boxShadow: alphaStatus !== 'idle' ? 'none' : undefined,
                }}
              >
@@ -125,7 +125,7 @@ export default function DashboardPage() {
              <div className="figma-badge">LIVE SYNC</div>
            </div>
            {alphaMsg && (
-             <div style={{ fontSize: 11, color: alphaStatus === 'error' ? '#f43f5e' : '#94a3b8', fontWeight: 600, textAlign: 'right' }}>
+             <div style={{ fontSize: 11, color: alphaStatus === 'error' ? 'var(--accent-red)' : 'var(--text-secondary)', fontWeight: 600, textAlign: 'right' }}>
                {alphaMsg}
              </div>
            )}
@@ -133,11 +133,11 @@ export default function DashboardPage() {
 
       </div>
 
-      {error && <div style={{ marginBottom: 24, color: 'var(--accent-red)', fontSize: 13, background: 'rgba(244,63,94,0.05)', padding: '12px 16px', borderRadius: 12, border: '1px solid rgba(244,63,94,0.1)' }}>{error}</div>}
+      {error && <div style={{ marginBottom: 24, color: 'var(--accent-red)', fontSize: 13, background: 'rgba(255,107,107,0.05)', padding: '12px 16px', borderRadius: 12, border: '1px solid rgba(255,107,107,0.1)' }}>{error}</div>}
 
 
       {/* TOP ROW: Price Cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 20, marginBottom: 32 }}>
+      <div className="grid-responsive-3" style={{ marginBottom: 32 }}>
         {cards.map(c => (
           <div key={c.label} className="figma-card" style={{ borderRadius: 20, padding: '24px', position: 'relative', overflow: 'hidden' }}>
             <div style={{ position: 'absolute', top: -20, right: -20, width: 80, height: 80, background: c.color, filter: 'blur(50px)', opacity: 0.1 }} />
@@ -149,7 +149,7 @@ export default function DashboardPage() {
       </div>
 
       {/* NEW: CAPITAL FLOW + ETF SUMMARY */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: 20, marginBottom: 40 }}>
+      <div className="grid-responsive-2" style={{ marginBottom: 40 }}>
         
         {/* Advance Flow Chart */}
         <div className="neon-border glass" style={{ borderRadius: 24, overflow: 'hidden' }}>
@@ -179,15 +179,15 @@ export default function DashboardPage() {
             ))}
           </div>
 
-          <div style={{ marginTop: 24, padding: 16, background: 'rgba(168, 85, 247, 0.05)', border: '1px solid rgba(168, 85, 247, 0.1)', borderRadius: 12 }}>
-             <div style={{ fontSize: 10, color: '#a855f7', fontWeight: 800, marginBottom: 4 }}>TOTAL NET FLOW (24H)</div>
+          <div style={{ marginTop: 24, padding: 16, background: 'rgba(157, 123, 255, 0.05)', border: '1px solid rgba(157, 123, 255, 0.1)', borderRadius: 12 }}>
+             <div style={{ fontSize: 10, color: 'var(--accent-purple)', fontWeight: 800, marginBottom: 4 }}>TOTAL NET FLOW (24H)</div>
              <div style={{ fontSize: 24, fontWeight: 900, color: '#fff' }}>+$213.9M <span style={{ fontSize: 12, color: 'var(--accent-green)' }}>↗</span></div>
           </div>
         </div>
       </div>
 
       {/* MAIN CONTENT GRID */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr 1fr', gap: 20, marginBottom: 40 }}>
+      <div className="grid-responsive-3-uneven" style={{ marginBottom: 40 }}>
         
         {/* Market Sentiment */}
         <div className="neon-border glass" style={{ borderRadius: 20, overflow: 'hidden' }}>
@@ -228,13 +228,13 @@ export default function DashboardPage() {
       {/* COMMAND CENTER SECTION */}
       <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: 40 }}>
         <div style={{ fontSize: 10, color: 'var(--text-secondary)', fontWeight: 800, letterSpacing: '.15em', marginBottom: 24 }}>NEURAL COMMAND CENTER</div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16 }}>
+        <div className="grid-responsive-3" style={{ gap: 16 }}>
           {[
             { href: '/breaking-news',  label: 'BREAKING NEWS',  color: 'var(--accent-blue)', icon: '📰', desc: 'Real-time market alpha' },
             { href: '/ai-analysis',    label: 'AI ANALYSIS',    color: 'var(--accent-orange)', icon: '🤖', desc: 'Gemini + Groq signals' },
             { href: '/ai-trade-agent', label: 'TRADE AGENT',    color: 'var(--accent-green)', icon: '💱', desc: 'Execute paper trades' },
-            { href: '/etf-dashboard',  label: 'ETF FLOWS',      color: '#a855f7', icon: '📊', desc: 'US Spot ETF dynamics' },
-            { href: '/portfolio',      label: 'PORTFOLIO',      color: '#f59e0b', icon: '💼', desc: 'PnL & holdings tracker' },
+            { href: '/etf-dashboard',  label: 'ETF FLOWS',      color: 'var(--accent-purple)', icon: '📊', desc: 'US Spot ETF dynamics' },
+            { href: '/portfolio',      label: 'PORTFOLIO',      color: 'var(--accent-orange2)', icon: '💼', desc: 'PnL & holdings tracker' },
             { href: '/guidelines',     label: 'GUIDELINES',     color: 'var(--text-secondary)', icon: '📋', desc: 'Platform protocol' },
           ].map(item => (
             <Link key={item.href} href={item.href} className="neon-border glass" style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '20px', borderRadius: 20, textDecoration: 'none', transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)' }}>

@@ -58,11 +58,16 @@ export default function LeaderboardPage() {
       .catch(() => setLoading(false));
   }, []);
 
-  const topPodium = [
-    { rank: 2, name: 'SosoMaster', roi: '+89.2%', color: '#94a3b8', avatar: '🥈' },
-    { rank: 1, name: 'AlphaWhale', roi: '+142.5%', color: '#fbbf24', avatar: '👑' },
-    { rank: 3, name: 'CryptoKing', roi: '+67.8%', color: '#b45309', avatar: '🥉' },
-  ].sort((a, b) => a.rank - b.rank);
+  // Podium reflects the actual top 3 from /api/leaderboard (already sorted by points
+  // desc) instead of a hardcoded list, so rank #1 here always matches the table below.
+  const PODIUM_STYLE = [
+    { rank: 1, color: '#fbbf24', avatar: '👑' },
+    { rank: 2, color: '#94a3b8', avatar: '🥈' },
+    { rank: 3, color: '#b45309', avatar: '🥉' },
+  ];
+  const topPodium = PODIUM_STYLE
+    .map((style, i) => performers[i] ? { ...style, name: performers[i].name, roi: performers[i].roi } : null)
+    .filter((p): p is typeof PODIUM_STYLE[number] & { name: string; roi: string } => p !== null);
 
   return (
     <div className="scroll-track" style={{ padding: '40px 32px', maxWidth: 1100, margin: '0 auto', overflowY: 'auto', height: '100%' }}>
@@ -85,7 +90,7 @@ export default function LeaderboardPage() {
       </div>
 
       {/* Podium */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.05fr 1fr', gap: 24, marginBottom: 54, alignItems: 'end' }}>
+      <div className="grid-responsive-podium" style={{ marginBottom: 54, alignItems: 'end' }}>
         {topPodium.map((top, idx) => (
           <motion.div
             key={top.rank}
@@ -150,8 +155,9 @@ export default function LeaderboardPage() {
           <Sparkles size={14} color="var(--accent-orange)" />
           <span style={{ fontSize: 10, fontWeight: 900, color: 'var(--text-secondary)', letterSpacing: '.18em' }}>TOP TRADING PERFORMANCES</span>
         </div>
-        
-        <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+
+        <div className="scroll-x-mobile">
+        <table style={{ width: '100%', minWidth: 460, borderCollapse: 'collapse', textAlign: 'left' }}>
           <thead>
             <tr style={{ borderBottom: '1px solid var(--border-subtle)' }}>
               <th style={{ padding: '18px 24px', fontSize: 10, color: 'var(--text-secondary)', fontWeight: 800, letterSpacing: '.08em' }}>TRADER</th>
@@ -208,6 +214,7 @@ export default function LeaderboardPage() {
             )}
           </tbody>
         </table>
+        </div>
       </motion.div>
     </div>
   );

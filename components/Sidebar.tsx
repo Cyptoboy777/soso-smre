@@ -239,8 +239,8 @@ export default function Sidebar({ theme, setTheme, collapsed, setCollapsed, onCm
               padding: collapsed ? '10px 0' : '8px 12px',
               justifyContent: collapsed ? 'center' : 'flex-start',
               borderRadius: 10,
-              background: 'rgba(99,102,241,0.06)',
-              border: '1px solid rgba(99,102,241,0.1)',
+              background: 'rgba(79,156,255,0.06)',
+              border: '1px solid rgba(79,156,255,0.1)',
               color: 'var(--accent-blue2)',
               marginBottom: 6,
               transition: 'all 0.2s',
@@ -344,8 +344,8 @@ export default function Sidebar({ theme, setTheme, collapsed, setCollapsed, onCm
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {!collapsed && walletAddress && (
               <div style={{
-                background: 'rgba(99,102,241,0.06)',
-                border: '1px solid rgba(99,102,241,0.12)',
+                background: 'rgba(79,156,255,0.06)',
+                border: '1px solid rgba(79,156,255,0.12)',
                 padding: '8px 10px', borderRadius: 10,
               }}>
                 <div style={{ fontSize: 9, color: 'var(--accent-blue2)', fontWeight: 800, marginBottom: 3, letterSpacing: '.1em' }}>WALLET</div>

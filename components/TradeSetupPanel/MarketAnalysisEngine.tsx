@@ -21,7 +21,7 @@ export default function MarketAnalysisEngine({ selected }: Props) {
 
   const { bias, confidence, reasoning, expectedRR, winProbability } = generateAIBias(selected.priceChangePct, selected.quoteVolume);
   
-  const biasColor = bias === 'BULLISH' ? '#00e676' : bias === 'BEARISH' ? '#f43f5e' : '#f59e0b';
+  const biasColor = bias === 'BULLISH' ? '#2bd9a8' : bias === 'BEARISH' ? '#ff6b6b' : '#f59e0b';
   const BiasIcon = bias === 'BULLISH' ? TrendingUp : bias === 'BEARISH' ? TrendingDown : Activity;
 
   return (
@@ -30,10 +30,10 @@ export default function MarketAnalysisEngine({ selected }: Props) {
       {/* 24H STATS GRID */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1, background: '#1e1e3a' }}>
         {[
-          ['24H High', `$${fmtPrice(selected.high)}`, '#00e676'],
-          ['24H Low', `$${fmtPrice(selected.low)}`, '#f43f5e'],
+          ['24H High', `$${fmtPrice(selected.high)}`, '#2bd9a8'],
+          ['24H Low', `$${fmtPrice(selected.low)}`, '#ff6b6b'],
           ['24H Vol', fmtVol(selected.quoteVolume), '#8888aa'],
-          ['24H Change', `${selected.priceChangePct >= 0 ? '+' : ''}${selected.priceChangePct.toFixed(2)}%`, selected.priceChangePct >= 0 ? '#00e676' : '#f43f5e']
+          ['24H Change', `${selected.priceChangePct >= 0 ? '+' : ''}${selected.priceChangePct.toFixed(2)}%`, selected.priceChangePct >= 0 ? '#2bd9a8' : '#ff6b6b']
         ].map(([lbl, val, col]) => (
           <div key={lbl} style={{ background: '#0a0a14', padding: '10px 16px' }}>
             <div style={{ fontSize: 9, color: '#44446a', fontWeight: 800, letterSpacing: '0.05em', marginBottom: 2 }}>{lbl}</div>
@@ -69,11 +69,11 @@ export default function MarketAnalysisEngine({ selected }: Props) {
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 4 }}>
           <div style={{ background: 'rgba(255,255,255,0.02)', padding: '6px 8px', borderRadius: 6, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span style={{ fontSize: 9, color: '#44446a', fontWeight: 800 }}>EXPECTED R:R</span>
-            <span style={{ fontSize: 11, color: '#38bdf8', fontWeight: 900, fontFamily: 'monospace' }}>{expectedRR}</span>
+            <span style={{ fontSize: 11, color: '#4f9cff', fontWeight: 900, fontFamily: 'monospace' }}>{expectedRR}</span>
           </div>
           <div style={{ background: 'rgba(255,255,255,0.02)', padding: '6px 8px', borderRadius: 6, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span style={{ fontSize: 9, color: '#44446a', fontWeight: 800 }}>WIN PROB</span>
-            <span style={{ fontSize: 11, color: '#00e676', fontWeight: 900, fontFamily: 'monospace' }}>{winProbability}</span>
+            <span style={{ fontSize: 11, color: '#2bd9a8', fontWeight: 900, fontFamily: 'monospace' }}>{winProbability}</span>
           </div>
         </div>
 
@@ -86,7 +86,7 @@ export default function MarketAnalysisEngine({ selected }: Props) {
           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, fontFamily: 'monospace', fontWeight: 700 }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
               <span style={{ color: '#44446a' }}>SUP</span>
-              <span style={{ color: '#00e676' }}>${fmtPrice(selected.low + (selected.high - selected.low) * 0.2)}</span>
+              <span style={{ color: '#2bd9a8' }}>${fmtPrice(selected.low + (selected.high - selected.low) * 0.2)}</span>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 2, alignItems: 'center' }}>
               <span style={{ color: '#44446a' }}>POC</span>
@@ -94,7 +94,7 @@ export default function MarketAnalysisEngine({ selected }: Props) {
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 2, alignItems: 'flex-end' }}>
               <span style={{ color: '#44446a' }}>RES</span>
-              <span style={{ color: '#f43f5e' }}>${fmtPrice(selected.high - (selected.high - selected.low) * 0.2)}</span>
+              <span style={{ color: '#ff6b6b' }}>${fmtPrice(selected.high - (selected.high - selected.low) * 0.2)}</span>
             </div>
           </div>
         </div>

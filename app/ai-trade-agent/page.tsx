@@ -20,7 +20,7 @@ function Toast({ msg, onClose }: { msg: string; onClose: () => void }) {
   useEffect(() => { const id = setTimeout(onClose, 4500); return () => clearTimeout(id); }, [onClose]);
   return (
     <div className="toast-in" style={{ position: 'fixed', bottom: 24, right: 24, zIndex: 200, background: '#161616', border: '1px solid #2a2a2a', borderRadius: 12, padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 10, maxWidth: 340, boxShadow: '0 8px 32px rgba(0,0,0,0.7)' }}>
-      <CheckCircle size={18} color="#00e676" style={{ flexShrink: 0 }} />
+      <CheckCircle size={18} color="#2bd9a8" style={{ flexShrink: 0 }} />
       <span style={{ fontSize: 13, color: '#ccc', lineHeight: 1.4 }}>{msg}</span>
     </div>
   );
@@ -581,7 +581,7 @@ export default function AITradeAgentPage() {
                 <h3 style={{ fontSize: 10, fontWeight: 900, color: '#444', margin: 0, letterSpacing: '.1em' }}>PLACE ORDER</h3>
                 <div style={{ display: 'flex', background: '#111', padding: 3, borderRadius: 8 }}>
                   {['BUY', 'SELL'].map(s => (
-                    <button key={s} onClick={() => setSpotSide(s as any)} style={{ padding: '4px 10px', borderRadius: 5, border: 'none', background: spotSide === s ? (s === 'BUY' ? '#00e676' : '#f43f5e') : 'transparent', color: spotSide === s ? '#000' : '#555', fontSize: 10, fontWeight: 900, cursor: 'pointer' }}>{s}</button>
+                    <button key={s} onClick={() => setSpotSide(s as any)} style={{ padding: '4px 10px', borderRadius: 5, border: 'none', background: spotSide === s ? (s === 'BUY' ? '#2bd9a8' : '#ff6b6b') : 'transparent', color: spotSide === s ? '#000' : '#555', fontSize: 10, fontWeight: 900, cursor: 'pointer' }}>{s}</button>
                   ))}
                 </div>
               </div>
@@ -600,15 +600,15 @@ export default function AITradeAgentPage() {
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
                   <div>
-                    <label style={{ fontSize: 9, color: '#f43f5e', fontWeight: 800, display: 'block', marginBottom: 4 }}>STOP LOSS</label>
-                    <input value={stopLoss} onChange={e => setStopLoss(e.target.value)} style={{ width: '100%', padding: '8px', borderRadius: 7, background: '#111', border: '1px solid #2a1a1a', color: '#f43f5e', fontSize: 12, fontWeight: 700, outline: 'none', boxSizing: 'border-box' }} />
+                    <label style={{ fontSize: 9, color: '#ff6b6b', fontWeight: 800, display: 'block', marginBottom: 4 }}>STOP LOSS</label>
+                    <input value={stopLoss} onChange={e => setStopLoss(e.target.value)} style={{ width: '100%', padding: '8px', borderRadius: 7, background: '#111', border: '1px solid #2a1a1a', color: '#ff6b6b', fontSize: 12, fontWeight: 700, outline: 'none', boxSizing: 'border-box' }} />
                   </div>
                   <div>
-                    <label style={{ fontSize: 9, color: '#00e676', fontWeight: 800, display: 'block', marginBottom: 4 }}>TAKE PROFIT</label>
-                    <input value={takeProfit} onChange={e => setTakeProfit(e.target.value)} style={{ width: '100%', padding: '8px', borderRadius: 7, background: '#111', border: '1px solid #1a2a1a', color: '#00e676', fontSize: 12, fontWeight: 700, outline: 'none', boxSizing: 'border-box' }} />
+                    <label style={{ fontSize: 9, color: '#2bd9a8', fontWeight: 800, display: 'block', marginBottom: 4 }}>TAKE PROFIT</label>
+                    <input value={takeProfit} onChange={e => setTakeProfit(e.target.value)} style={{ width: '100%', padding: '8px', borderRadius: 7, background: '#111', border: '1px solid #1a2a1a', color: '#2bd9a8', fontSize: 12, fontWeight: 700, outline: 'none', boxSizing: 'border-box' }} />
                   </div>
                 </div>
-                <button onClick={confirmBuy} disabled={tradeStatus !== 'IDLE'} style={{ width: '100%', padding: '14px', borderRadius: 10, background: spotSide === 'BUY' ? 'linear-gradient(135deg,#00e676,#00c853)' : 'linear-gradient(135deg,#f43f5e,#e11d48)', color: '#000', border: 'none', fontSize: 13, fontWeight: 900, cursor: 'pointer', boxShadow: spotSide === 'BUY' ? '0 6px 20px rgba(0,230,118,0.25)' : '0 6px 20px rgba(244,63,94,0.25)' }}>
+                <button onClick={confirmBuy} disabled={tradeStatus !== 'IDLE'} style={{ width: '100%', padding: '14px', borderRadius: 10, background: spotSide === 'BUY' ? 'linear-gradient(135deg,#2bd9a8,#00c853)' : 'linear-gradient(135deg,#ff6b6b,#e11d48)', color: '#000', border: 'none', fontSize: 13, fontWeight: 900, cursor: 'pointer', boxShadow: spotSide === 'BUY' ? '0 6px 20px rgba(43,217,168,0.25)' : '0 6px 20px rgba(255,107,107,0.25)' }}>
                   {tradeStatus === 'SUBMITTING' ? 'EXECUTING...' : `CONFIRM ${spotSide}`}
                 </button>
               </div>
@@ -693,7 +693,7 @@ export default function AITradeAgentPage() {
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                        <div>
                           <label style={{ fontSize: 9, color: '#94a3b8', fontWeight: 700, display: 'block', marginBottom: 6 }}>TARGET EXCHANGE</label>
-                          <select value={exchange} onChange={e => setExchange(e.target.value)} disabled={aiActive} style={{ width: '100%', padding: '8px', borderRadius: 6, background: '#020617', border: '1px solid #1e293b', color: '#38bdf8', fontSize: 12, outline: 'none' }}>
+                          <select value={exchange} onChange={e => setExchange(e.target.value)} disabled={aiActive} style={{ width: '100%', padding: '8px', borderRadius: 6, background: '#020617', border: '1px solid #1e293b', color: '#4f9cff', fontSize: 12, outline: 'none' }}>
                             <option>SoDEX</option>
                             <option>Binance</option>
                             <option>Bybit</option>
@@ -702,12 +702,12 @@ export default function AITradeAgentPage() {
                        </div>
                        <div>
                           <label style={{ fontSize: 9, color: '#94a3b8', fontWeight: 700, display: 'block', marginBottom: 6 }}>MAX OPEN TRADES</label>
-                          <input type="number" value={maxTrades} onChange={e => setMaxTrades(e.target.value)} disabled={aiActive} style={{ width: '100%', padding: '8px', borderRadius: 6, background: '#020617', border: '1px solid #1e293b', color: '#38bdf8', fontSize: 12, outline: 'none' }} />
+                          <input type="number" value={maxTrades} onChange={e => setMaxTrades(e.target.value)} disabled={aiActive} style={{ width: '100%', padding: '8px', borderRadius: 6, background: '#020617', border: '1px solid #1e293b', color: '#4f9cff', fontSize: 12, outline: 'none' }} />
                        </div>
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#020617', padding: '8px 12px', borderRadius: 6, border: '1px solid #1e293b' }}>
                        <span style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600 }}>DYNAMIC TRAILING STOP-LOSS</span>
-                       <button onClick={() => !aiActive && setTrailingStop(!trailingStop)} style={{ width: 36, height: 20, borderRadius: 10, background: trailingStop ? '#00e676' : '#333', border: 'none', position: 'relative', cursor: aiActive ? 'not-allowed' : 'pointer', transition: '0.2s' }}>
+                       <button onClick={() => !aiActive && setTrailingStop(!trailingStop)} style={{ width: 36, height: 20, borderRadius: 10, background: trailingStop ? '#2bd9a8' : '#333', border: 'none', position: 'relative', cursor: aiActive ? 'not-allowed' : 'pointer', transition: '0.2s' }}>
                           <div style={{ width: 16, height: 16, borderRadius: '50%', background: '#fff', position: 'absolute', top: 2, left: trailingStop ? 18 : 2, transition: '0.2s' }} />
                        </button>
                     </div>
@@ -716,14 +716,14 @@ export default function AITradeAgentPage() {
             </div>
 
             {/* Terminal / Logs */}
-            <div style={{ background: '#020617', border: '1px solid #0f172a', borderRadius: 10, padding: 14, height: 210, overflowY: 'auto', marginBottom: 20, fontFamily: 'monospace', fontSize: 11, color: '#38bdf8', display: 'flex', flexDirection: 'column', gap: 8, boxShadow: 'inset 0 0 20px rgba(0,0,0,0.5)' }}>
+            <div style={{ background: '#020617', border: '1px solid #0f172a', borderRadius: 10, padding: 14, height: 210, overflowY: 'auto', marginBottom: 20, fontFamily: 'monospace', fontSize: 11, color: '#4f9cff', display: 'flex', flexDirection: 'column', gap: 8, boxShadow: 'inset 0 0 20px rgba(0,0,0,0.5)' }}>
               {aiLogs.map((log, i) => (
                 <div key={i} style={{ opacity: i === aiLogs.length - 1 ? 1 : 0.6, lineHeight: 1.4 }}>
                   <span style={{ color: '#475569', marginRight: 6 }}>[{new Date().toLocaleTimeString()}]</span>
                   {log}
                 </div>
               ))}
-              {aiActive && <div className="blink" style={{ width: 6, height: 12, background: '#38bdf8', marginTop: 4 }} />}
+              {aiActive && <div className="blink" style={{ width: 6, height: 12, background: '#4f9cff', marginTop: 4 }} />}
             </div>
 
             <button onClick={() => {
@@ -766,8 +766,8 @@ export default function AITradeAgentPage() {
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
             <span style={{ fontSize: 13, fontWeight: 700, color: '#fff', letterSpacing: '.04em' }}>LIVE PORTFOLIO SIMULATION</span>
             <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-              <div className="sync" style={{ width: 7, height: 7, borderRadius: '50%', background: '#00e676', boxShadow: '0 0 5px #00e676' }} />
-              <span style={{ fontSize: 10, color: '#00e676', fontWeight: 600, letterSpacing: '.08em' }}>SYNCING</span>
+              <div className="sync" style={{ width: 7, height: 7, borderRadius: '50%', background: '#2bd9a8', boxShadow: '0 0 5px #2bd9a8' }} />
+              <span style={{ fontSize: 10, color: '#2bd9a8', fontWeight: 600, letterSpacing: '.08em' }}>SYNCING</span>
             </div>
           </div>
 
@@ -787,7 +787,7 @@ export default function AITradeAgentPage() {
               </div>
               <span style={{ fontSize: 11, color: '#888', fontFamily: 'monospace' }}>{h.amount.toFixed(4)}</span>
               <span style={{ fontSize: 11, color: '#fff', fontFamily: 'monospace' }}>${h.currentValue.toLocaleString('en-US', { maximumFractionDigits: 2 })}</span>
-              <span style={{ fontSize: 11, color: h.pnl >= 0 ? '#00e676' : '#f43f5e', fontWeight: 600 }}>
+              <span style={{ fontSize: 11, color: h.pnl >= 0 ? '#2bd9a8' : '#ff6b6b', fontWeight: 600 }}>
                 {h.pnl >= 0 ? '↗' : '↘'} {h.pnl >= 0 ? '+' : ''}{h.pnlPct.toFixed(2)}%
               </span>
             </div>

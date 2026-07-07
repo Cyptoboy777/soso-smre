@@ -1,12 +1,12 @@
 import { BookOpen } from 'lucide-react';
 
 const SECTIONS = [
-  { icon: '💼', title: 'Account & Portfolio Sync',  color: '#00e676', text: 'Every user starts with $10,000 USDC in paper funds. We use a Dual-Sync architecture: localStorage for zero-latency UI updates, and Firebase Firestore for permanent cloud backup. Reset anytime in the Portfolio tab.' },
+  { icon: '💼', title: 'Account & Portfolio Sync',  color: '#2bd9a8', text: 'Every user starts with $10,000 USDC in paper funds. We use a Dual-Sync architecture: localStorage for zero-latency UI updates, and Firebase Firestore for permanent cloud backup. Reset anytime in the Portfolio tab.' },
   { icon: '🤖', title: 'SoSo AI-Trader & Freqtrade', color: '#f97316', text: 'The autonomous trading agent uses Gemini 2.5 Flash & Groq LLaMA 3. It features Freqtrade-inspired advanced controls: Multi-Exchange Routing (SoDEX default), Max Open Trades, and Dynamic Trailing Stop-Losses.' },
   { icon: '🐕', title: 'SoDoggy Assistant & Audio', color: '#ec4899', text: 'Our Cyberpunk Dog acts as your personal AI copilot. He reacts dynamically to markets. Turn on the "Quick Market Podcast" for an endless, background audio stream summarizing top crypto news and live metrics while you browse.' },
   { icon: '📈', title: 'Top 50 Assets & SoDEX',   color: '#3b82f6', text: 'We natively support the Top 50 global crypto pairs with real-time pricing sourced from CoinGecko. The dedicated SoDEX Markets dashboard routes high-performance spot tickers via api.sodex.xyz.' },
-  { icon: '⚠️', title: 'Risk Warning (Simulation)', color: '#f43f5e', text: 'SoSo SMRE is a trading simulation platform built for the SoSoValue Buildathon. All AI signals and automated executions are simulated and for educational/research purposes only. DYOR.' },
-  { icon: '✈️', title: 'Telegram Social Alpha',     color: '#38bdf8', text: 'Get real-time push notifications straight to your Telegram. The system instantly broadcasts AI trade executions, dynamic target shifts, and breaking SoSoValue news alerts to your mobile device.' },
+  { icon: '⚠️', title: 'Risk Warning (Simulation)', color: '#ff6b6b', text: 'SoSo SMRE is a trading simulation platform built for the SoSoValue Buildathon. All AI signals and automated executions are simulated and for educational/research purposes only. DYOR.' },
+  { icon: '✈️', title: 'Telegram Social Alpha',     color: '#4f9cff', text: 'Get real-time push notifications straight to your Telegram. The system instantly broadcasts AI trade executions, dynamic target shifts, and breaking SoSoValue news alerts to your mobile device.' },
 ];
 
 export default function GuidelinesPage() {
@@ -20,7 +20,7 @@ export default function GuidelinesPage() {
 
       <div style={{ background: 'linear-gradient(135deg, #0f172a 0%, #020617 100%)', border: '1px solid #1e293b', borderRadius: 16, padding: '20px 24px', marginBottom: 24, boxShadow: '0 8px 32px rgba(0,0,0,0.4)' }}>
         <p style={{ fontSize: 13, fontWeight: 600, color: '#94a3b8', lineHeight: 1.65 }}>
-          Welcome to <span style={{ color: '#38bdf8', fontWeight: 800 }}>SoSo SMRE</span> — the ultimate Single-Person Agentic Finance Business. Built to bridge the gap between institutional market intelligence (SoSoValue) and autonomous execution (SoDEX / Freqtrade), this platform allows anyone to run a completely automated, AI-driven quantitative fund.
+          Welcome to <span style={{ color: '#4f9cff', fontWeight: 800 }}>SoSo SMRE</span> — the ultimate Single-Person Agentic Finance Business. Built to bridge the gap between institutional market intelligence (SoSoValue) and autonomous execution (SoDEX / Freqtrade), this platform allows anyone to run a completely automated, AI-driven quantitative fund.
         </p>
       </div>
 

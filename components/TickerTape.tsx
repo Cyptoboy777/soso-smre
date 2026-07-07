@@ -100,7 +100,7 @@ export default function TickerTape() {
               <div className="ticker-item" key={`${item.symbol}-${i}`}>
                 <span style={{ color: '#94a3b8' }}>{sym}</span>
                 <span style={{ color: '#fff' }}>{priceStr}</span>
-                <span style={{ color: up ? '#00e676' : '#f43f5e' }}>
+                <span style={{ color: up ? '#2bd9a8' : '#ff6b6b' }}>
                   {up ? '▲' : '▼'} {Math.abs(change).toFixed(2)}%
                 </span>
               </div>

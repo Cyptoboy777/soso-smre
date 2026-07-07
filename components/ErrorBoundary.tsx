@@ -46,12 +46,12 @@ export default class ErrorBoundary extends Component<Props, State> {
         <div style={{
           display: 'flex', flexDirection: 'column', alignItems: 'center',
           justifyContent: 'center', gap: 12, padding: 32, minHeight: 180,
-          background: 'rgba(244,63,94,0.04)', border: '1px solid rgba(244,63,94,0.15)',
+          background: 'rgba(255,107,107,0.04)', border: '1px solid rgba(255,107,107,0.15)',
           borderRadius: 16, color: '#888',
         }}>
           <span style={{ fontSize: 28 }}>⚠️</span>
           <div style={{ textAlign: 'center' }}>
-            <div style={{ fontSize: 13, fontWeight: 700, color: '#f43f5e', marginBottom: 4 }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: '#ff6b6b', marginBottom: 4 }}>
               {this.props.label ? `${this.props.label} crashed` : 'Something went wrong'}
             </div>
             <div style={{ fontSize: 11, color: '#555', maxWidth: 280 }}>{this.state.message}</div>
@@ -60,9 +60,9 @@ export default class ErrorBoundary extends Component<Props, State> {
             onClick={this.reset}
             style={{
               padding: '6px 18px', borderRadius: 8,
-              border: '1px solid rgba(244,63,94,0.3)',
-              background: 'rgba(244,63,94,0.08)',
-              color: '#f43f5e', fontSize: 11, fontWeight: 700, cursor: 'pointer',
+              border: '1px solid rgba(255,107,107,0.3)',
+              background: 'rgba(255,107,107,0.08)',
+              color: '#ff6b6b', fontSize: 11, fontWeight: 700, cursor: 'pointer',
             }}
           >
             Retry

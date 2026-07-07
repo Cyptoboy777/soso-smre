@@ -2,31 +2,46 @@ import { NextResponse } from 'next/server';
 import { db } from '@/lib/firebase';
 import { collection, getDocs, query, limit, orderBy } from 'firebase/firestore';
 
+// Shown only when Firestore isn't configured or the public `leaderboard` collection
+// is still empty (fresh deploy) — keeps the page non-empty for a first-run demo.
+const DEMO_PERFORMERS = [
+  { name: 'AlphaWhale', roi: '+142.5%', balance: '$24,250', points: 4500 },
+  { name: 'SosoMaster', roi: '+89.2%', balance: '$18,920', points: 3200 },
+  { name: 'CryptoKing', roi: '+67.8%', balance: '$16,780', points: 2800 },
+  { name: 'BullRun99', roi: '+45.1%', balance: '$14,510', points: 1900 },
+  { name: 'PaperHands', roi: '-12.4%', balance: '$8,760', points: 450 },
+];
+
 export async function GET() {
   if (!db) {
-    return NextResponse.json({ error: 'Database not initialized' }, { status: 500 });
+    return NextResponse.json({ performers: DEMO_PERFORMERS, demo: true });
   }
 
   try {
-    // Note: In a real app, you might want to pre-calculate total values or use a collection group query
-    // For this simulation, we'll try to get top performers based on their saved portfolio value
-    // Since each user has a private/portfolio doc, we might need a more indexed approach for a real leaderboard
-    // But for now, let's return some mock data that feels real if we can't fetch everything easily
-    
-    // In this specific Firebase structure, user portfolios are in /users/{uid}/private/portfolio
-    // This makes global ranking hard without a dedicated "rankings" collection.
-    
-    // Let's provide a mix of real data (if possible) and realistic mock performers for the demo feel
-    const mockPerformers = [
-      { name: 'AlphaWhale', roi: '+142.5%', balance: '$24,250', points: 4500 },
-      { name: 'SosoMaster', roi: '+89.2%', balance: '$18,920', points: 3200 },
-      { name: 'CryptoKing', roi: '+67.8%', balance: '$16,780', points: 2800 },
-      { name: 'BullRun99', roi: '+45.1%', balance: '$14,510', points: 1900 },
-      { name: 'PaperHands', roi: '-12.4%', balance: '$8,760', points: 450 },
-    ];
+    // Ranking is read from a dedicated public `leaderboard` collection (one doc per
+    // user, written client-side from app/portfolio/page.tsx whenever their portfolio
+    // analytics refresh) — NOT from the private per-user portfolio docs, which stay
+    // locked down to owner-only access.
+    const rankingsQuery = query(collection(db, 'leaderboard'), orderBy('points', 'desc'), limit(10));
+    const snap = await getDocs(rankingsQuery);
 
-    return NextResponse.json({ performers: mockPerformers });
+    if (snap.empty) {
+      return NextResponse.json({ performers: DEMO_PERFORMERS, demo: true });
+    }
+
+    const performers = snap.docs.map(d => {
+      const data = d.data() as { name?: string; roi?: string; balance?: string; points?: number };
+      return {
+        name: data.name ?? 'Anonymous Trader',
+        roi: data.roi ?? '0%',
+        balance: data.balance ?? '$0',
+        points: data.points ?? 0,
+      };
+    });
+
+    return NextResponse.json({ performers, demo: false });
   } catch (e) {
-    return NextResponse.json({ error: String(e) }, { status: 500 });
+    console.error('Leaderboard fetch error:', e);
+    return NextResponse.json({ performers: DEMO_PERFORMERS, demo: true });
   }
 }

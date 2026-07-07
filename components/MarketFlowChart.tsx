@@ -3,17 +3,17 @@ import { motion } from 'framer-motion';
 
 export default function MarketFlowChart() {
   const nodes = [
-    { id: 'stables', label: 'STABLECOINS', color: '#00e676', x: 50, y: 150 },
+    { id: 'stables', label: 'STABLECOINS', color: '#2bd9a8', x: 50, y: 150 },
     { id: 'btc', label: 'BITCOIN', color: '#f7931a', x: 300, y: 70 },
     { id: 'eth', label: 'ETHEREUM', color: '#627eea', x: 300, y: 230 },
-    { id: 'alts', label: 'ALTCOINS', color: '#a855f7', x: 550, y: 150 },
+    { id: 'alts', label: 'ALTCOINS', color: '#9d7bff', x: 550, y: 150 },
   ];
 
   const paths = [
     { from: 'stables', to: 'btc', label: 'Liquidity Inflow', color: '#f7931a' },
     { from: 'stables', to: 'eth', label: 'Capital Flow', color: '#627eea' },
-    { from: 'btc', to: 'alts', label: 'Risk Rotation', color: '#a855f7' },
-    { from: 'eth', to: 'alts', label: 'Yield Seeking', color: '#a855f7' },
+    { from: 'btc', to: 'alts', label: 'Risk Rotation', color: '#9d7bff' },
+    { from: 'eth', to: 'alts', label: 'Yield Seeking', color: '#9d7bff' },
   ];
 
   return (
@@ -77,13 +77,13 @@ export default function MarketFlowChart() {
       </svg>
       
       <div style={{ marginTop: 20, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-         <div style={{ background: 'rgba(0,230,118,0.05)', border: '1px solid rgba(0,230,118,0.1)', padding: 10, borderRadius: 10 }}>
-            <div style={{ fontSize: 9, color: '#00e676', fontWeight: 800 }}>STABLECOIN DOMINANCE</div>
-            <div style={{ fontSize: 16, fontWeight: 900, color: '#fff' }}>14.2% <span style={{ fontSize: 10, color: '#f43f5e' }}>↘</span></div>
+         <div style={{ background: 'rgba(43,217,168,0.05)', border: '1px solid rgba(43,217,168,0.1)', padding: 10, borderRadius: 10 }}>
+            <div style={{ fontSize: 9, color: '#2bd9a8', fontWeight: 800 }}>STABLECOIN DOMINANCE</div>
+            <div style={{ fontSize: 16, fontWeight: 900, color: '#fff' }}>14.2% <span style={{ fontSize: 10, color: '#ff6b6b' }}>↘</span></div>
          </div>
          <div style={{ background: 'rgba(247,147,26,0.05)', border: '1px solid rgba(247,147,26,0.1)', padding: 10, borderRadius: 10 }}>
             <div style={{ fontSize: 9, color: '#f7931a', fontWeight: 800 }}>BTC DOMINANCE</div>
-            <div style={{ fontSize: 16, fontWeight: 900, color: '#fff' }}>58.4% <span style={{ fontSize: 10, color: '#00e676' }}>↗</span></div>
+            <div style={{ fontSize: 16, fontWeight: 900, color: '#fff' }}>58.4% <span style={{ fontSize: 10, color: '#2bd9a8' }}>↗</span></div>
          </div>
       </div>
     </div>

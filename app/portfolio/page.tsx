@@ -12,7 +12,7 @@ interface Holding { symbol: string; amount: number; avgBuyPrice: number; }
 interface Trade  { id: string; symbol: string; type: 'BUY'|'SELL'; amount: number; price: number; total: number; timestamp: number; }
 interface Portfolio { usdc: number; holdings: Record<string,Holding>; trades: Trade[]; initialBalance: number; soPoints: number; }
 interface HoldingAnalytic extends Holding { currentPrice: number; currentValue: number; pnl: number; pnlPct: number; }
-interface Analytics { totalValue: number; holdingsValue: number; totalPnl: number; totalPnlPct: number; holdings: HoldingAnalytic[]; tradeCount: number; soPoints: number; }
+interface Analytics { totalValue: number; holdingsValue: number; totalPnl: number; totalPnlPct: number; holdings: HoldingAnalytic[]; tradeCount: number; soPoints: number; rankPoints: number; }
 
 const DEFAULT: Portfolio = { usdc: 10000, holdings: {}, trades: [], initialBalance: 10000, soPoints: 0 };
 
@@ -34,10 +34,28 @@ export default function PortfolioPage() {
       if (r.ok) {
         const d = await r.json() as { analytics: Analytics };
         setAnalytics(d.analytics);
+
+        // Publish rank-safe stats to the public `leaderboard` collection so
+        // /api/leaderboard can show real rankings instead of only demo data.
+        // Server-derived numbers only — never the raw client `portfolio` object —
+        // since that's exactly what a user could tamper with to fake a rank.
+        if (user && db) {
+          try {
+            await setDoc(doc(db, 'leaderboard', user.uid), {
+              name: user.displayName || 'Anonymous Trader',
+              roi: `${d.analytics.totalPnlPct >= 0 ? '+' : ''}${d.analytics.totalPnlPct.toFixed(1)}%`,
+              balance: `$${d.analytics.totalValue.toFixed(2)}`,
+              points: d.analytics.rankPoints,
+              updatedAt: serverTimestamp(),
+            });
+          } catch (e) {
+            console.warn('Leaderboard publish failed:', e);
+          }
+        }
       }
     } catch {}
     setLoading(false);
-  }, []);
+  }, [user]);
 
   useEffect(() => {
     const load = async () => {
@@ -129,7 +147,7 @@ export default function PortfolioPage() {
           <button style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', background: 'rgba(59,130,246,0.08)', border: '1px solid rgba(59,130,246,0.2)', borderRadius: 8, color: '#3b82f6', fontSize: 12, cursor: 'pointer', fontWeight: 600 }}>
             <Mic size={13} /> Voice Briefing
           </button>
-          <button onClick={() => setConfirmReset(true)} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', background: 'rgba(244,63,94,0.08)', border: '1px solid rgba(244,63,94,0.2)', borderRadius: 8, color: '#f43f5e', fontSize: 12, cursor: 'pointer', fontWeight: 600 }}>
+          <button onClick={() => setConfirmReset(true)} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', background: 'rgba(255,107,107,0.08)', border: '1px solid rgba(255,107,107,0.2)', borderRadius: 8, color: '#ff6b6b', fontSize: 12, cursor: 'pointer', fontWeight: 600 }}>
             <RotateCcw size={13} />Reset Portfolio
           </button>
         </div>
@@ -158,7 +176,7 @@ export default function PortfolioPage() {
       <PerformanceChart initialBalance={portfolio.initialBalance} currentValue={analytics?.totalValue ?? portfolio.usdc} />
 
       {/* Stats */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 16, marginBottom: 32 }}>
+      <div className="grid-responsive-3" style={{ gap: 16, marginBottom: 32 }}>
         {[
           { label: 'TOTAL VALUE',   value: `$${(analytics?.totalValue ?? portfolio.usdc).toLocaleString('en-US',{maximumFractionDigits:2})}`, color: 'var(--text-primary)' },
           { label: 'TOTAL PNL',     value: `${pnlPos?'+':''}$${(analytics?.totalPnl ?? 0).toFixed(2)}`,  color: pnlPos ? 'var(--accent-green)' : 'var(--accent-red)' },
@@ -171,7 +189,7 @@ export default function PortfolioPage() {
         ))}
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: 20 }}>
+      <div className="grid-fixed-side">
         {/* Left column: Holdings + Achievements */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
           {/* Holdings table */}
@@ -241,7 +259,7 @@ export default function PortfolioPage() {
             ) : portfolio.trades.slice(0, 50).map(t => (
               <div key={t.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 0', borderBottom: '1px solid var(--border-subtle)' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <div style={{ width: 28, height: 28, borderRadius: 8, background: t.type === 'BUY' ? 'rgba(0,230,118,0.1)' : 'rgba(244,63,94,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <div style={{ width: 28, height: 28, borderRadius: 8, background: t.type === 'BUY' ? 'rgba(43,217,168,0.1)' : 'rgba(255,107,107,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                     {t.type === 'BUY' ? <TrendingUp size={14} color="var(--accent-green)" /> : <TrendingDown size={14} color="var(--accent-red)" />}
                   </div>
                   <div>
@@ -261,14 +279,14 @@ export default function PortfolioPage() {
 
       {showCard && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(12px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
-          <div className="figma-card" style={{ borderRadius: 28, padding: 32, maxWidth: 440, width: '100%', border: '2px solid rgba(168,85,247,0.4)', boxShadow: '0 0 50px rgba(168,85,247,0.25)', background: 'linear-gradient(135deg, #090916 0%, #030307 100%)', textAlign: 'center', position: 'relative' }}>
+          <div className="figma-card" style={{ borderRadius: 28, padding: 32, maxWidth: 440, width: '100%', border: '2px solid rgba(157,123,255,0.4)', boxShadow: '0 0 50px rgba(157,123,255,0.25)', background: 'linear-gradient(135deg, #090916 0%, #030307 100%)', textAlign: 'center', position: 'relative' }}>
             <div style={{ position: 'absolute', top: 16, right: 16 }}>
               <button onClick={() => setShowCard(false)} style={{ background: 'transparent', border: 'none', color: 'var(--text-dim)', fontSize: 18, cursor: 'pointer', fontWeight: 900 }}>✕</button>
             </div>
             
             {/* Hologram Card Layout */}
-            <div style={{ border: '1px solid rgba(99,102,241,0.25)', borderRadius: 20, padding: 24, position: 'relative', overflow: 'hidden', background: 'rgba(255,255,255,0.01)', boxShadow: 'inset 0 0 20px rgba(99,102,241,0.05)', marginBottom: 24 }}>
-              <div style={{ position: 'absolute', top: -50, left: -50, width: 140, height: 140, background: 'radial-gradient(circle, rgba(168,85,247,0.15) 0%, transparent 70%)', filter: 'blur(30px)' }} />
+            <div style={{ border: '1px solid rgba(79,156,255,0.25)', borderRadius: 20, padding: 24, position: 'relative', overflow: 'hidden', background: 'rgba(255,255,255,0.01)', boxShadow: 'inset 0 0 20px rgba(79,156,255,0.05)', marginBottom: 24 }}>
+              <div style={{ position: 'absolute', top: -50, left: -50, width: 140, height: 140, background: 'radial-gradient(circle, rgba(157,123,255,0.15) 0%, transparent 70%)', filter: 'blur(30px)' }} />
               
               <div style={{ fontSize: 10, color: 'var(--accent-orange)', fontWeight: 900, letterSpacing: '.25em', marginBottom: 16 }}>SOSO SMRE // VERIFIED RECORD</div>
               
@@ -278,36 +296,36 @@ export default function PortfolioPage() {
               </div>
               
               <div className="neon-glow-text" style={{ fontSize: 22, fontWeight: 900, color: '#fff', marginBottom: 4 }}>
-                {user?.email?.split('@')[0] || 'AlphaWhale'}
+                {user?.email?.split('@')[0] || 'Anonymous Trader'}
               </div>
               <div style={{ fontSize: 11, color: 'var(--text-secondary)', fontWeight: 600, marginBottom: 24 }}>RANK: LEVEL 4 TRADER</div>
-              
+
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: 16, textAlign: 'left' }}>
                 <div>
-                  <span style={{ fontSize: 9, color: 'var(--text-dim)', fontWeight: 800 }}>NET ROI (24H)</span>
-                  <div style={{ fontSize: 20, fontWeight: 900, color: 'var(--accent-green)', fontFamily: 'monospace', display: 'flex', alignItems: 'center', gap: 4 }}>
-                    ↗ +142.5%
+                  <span style={{ fontSize: 9, color: 'var(--text-dim)', fontWeight: 800 }}>NET ROI</span>
+                  <div style={{ fontSize: 20, fontWeight: 900, color: pnlPos ? 'var(--accent-green)' : 'var(--accent-red)', fontFamily: 'monospace', display: 'flex', alignItems: 'center', gap: 4 }}>
+                    {pnlPos ? '↗' : '↘'} {(analytics?.totalPnlPct ?? 0) >= 0 ? '+' : ''}{(analytics?.totalPnlPct ?? 0).toFixed(1)}%
                   </div>
                 </div>
                 <div>
                   <span style={{ fontSize: 9, color: 'var(--text-dim)', fontWeight: 800 }}>NET PROFIT</span>
                   <div style={{ fontSize: 20, fontWeight: 900, color: '#fff', fontFamily: 'monospace' }}>
-                    +$4,250
+                    {(analytics?.totalPnl ?? 0) >= 0 ? '+' : '-'}${Math.abs(analytics?.totalPnl ?? 0).toFixed(2)}
                   </div>
                 </div>
               </div>
-              
+
               <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: 12, marginTop: 12, textAlign: 'left' }}>
                 <div>
-                  <span style={{ fontSize: 9, color: 'var(--text-dim)', fontWeight: 800 }}>TOTAL VOLUME</span>
+                  <span style={{ fontSize: 9, color: 'var(--text-dim)', fontWeight: 800 }}>TOTAL VALUE</span>
                   <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-secondary)', fontFamily: 'monospace' }}>
-                    $128,450 USDC
+                    ${(analytics?.totalValue ?? 0).toFixed(2)} USDC
                   </div>
                 </div>
                 <div>
                   <span style={{ fontSize: 9, color: 'var(--text-dim)', fontWeight: 800 }}>SO-POINTS</span>
                   <div style={{ fontSize: 13, fontWeight: 800, color: '#fbbf24', display: 'flex', alignItems: 'center', gap: 4 }}>
-                    ⚡ {(portfolio.soPoints ?? 2450).toLocaleString()}
+                    ⚡ {(portfolio.soPoints ?? 0).toLocaleString()}
                   </div>
                 </div>
               </div>
@@ -316,7 +334,12 @@ export default function PortfolioPage() {
             {/* Share CTA */}
             <div style={{ display: 'flex', gap: 12 }}>
               <button onClick={() => { alert('PnL card copied to clipboard!'); }} style={{ flex: 1, padding: '12px', borderRadius: 12, border: '1px solid var(--border-bold)', background: 'transparent', color: 'var(--text-primary)', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>DOWNLOAD CARD</button>
-              <button onClick={() => { window.open(`https://x.com/intent/tweet?text=I%20just%20verified%20my%20PnL%20on%20SoSo%20SMRE!%20ROI:%20%2B142.5%25%20%7C%20Earned%20${portfolio.soPoints}%20SoPoints!%20%40SoSoValue%20%23SoSoBuildathon`, '_blank'); }} className="figma-btn" style={{ flex: 1, padding: '12px', borderRadius: 12, border: 'none', color: '#fff', fontSize: 13, fontWeight: 900, cursor: 'pointer', justifyContent: 'center' }}>SHARE ON X</button>
+              <button onClick={() => {
+                const pct = analytics?.totalPnlPct ?? 0;
+                const roiText = `${pct >= 0 ? '+' : ''}${pct.toFixed(1)}%`;
+                const tweetText = `I just verified my PnL on SoSo SMRE! ROI: ${roiText} | Earned ${portfolio.soPoints} SoPoints! @SoSoValue #SoSoBuildathon`;
+                window.open(`https://x.com/intent/tweet?text=${encodeURIComponent(tweetText)}`, '_blank');
+              }} className="figma-btn" style={{ flex: 1, padding: '12px', borderRadius: 12, border: 'none', color: '#fff', fontSize: 13, fontWeight: 900, cursor: 'pointer', justifyContent: 'center' }}>SHARE ON X</button>
             </div>
           </div>
         </div>

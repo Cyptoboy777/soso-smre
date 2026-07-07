@@ -62,8 +62,8 @@ export default function SoEva() {
               transition={{ repeat: Infinity, duration: 0.8 }}
               style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 5 }}
             >
-              <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#f43f5e' }} />
-              <span style={{ fontSize: 9, fontWeight: 900, color: '#f43f5e', letterSpacing: '0.1em' }}>ON AIR</span>
+              <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#ff6b6b' }} />
+              <span style={{ fontSize: 9, fontWeight: 900, color: '#ff6b6b', letterSpacing: '0.1em' }}>ON AIR</span>
             </motion.div>
           )}
         </div>
@@ -83,7 +83,7 @@ export default function SoEva() {
         </select>
 
         {error && (
-          <div style={{ marginTop: 8, padding: '6px 10px', borderRadius: 8, background: 'rgba(244,63,94,0.08)', border: '1px solid rgba(244,63,94,0.2)', fontSize: 11, color: '#f43f5e' }}>
+          <div style={{ marginTop: 8, padding: '6px 10px', borderRadius: 8, background: 'rgba(255,107,107,0.08)', border: '1px solid rgba(255,107,107,0.2)', fontSize: 11, color: '#ff6b6b' }}>
             ⚠️ {error}
           </div>
         )}

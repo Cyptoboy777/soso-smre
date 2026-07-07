@@ -21,7 +21,7 @@ const PAGE_GUIDANCE: Record<string, string> = {
 };
 
 const COLOR_MAP: Record<string, string> = {
-  excited: '#f59e0b', happy: '#00e676', alert: '#ff1744', sad: '#3b82f6', neutral: '#00e5ff',
+  excited: '#f59e0b', happy: '#2bd9a8', alert: '#ff1744', sad: '#3b82f6', neutral: '#00e5ff',
 };
 
 // 5-min wave = SILENT handshake only — no message, no speech
@@ -383,9 +383,9 @@ export default function SoDoggyAssistant() {
                             }}
                             style={{
                               marginTop: 4, padding: '4px 10px',
-                              background: side === 'BUY' ? 'rgba(0,230,118,0.1)' : 'rgba(244,63,94,0.1)',
-                              border: `1px solid ${side === 'BUY' ? '#00e676' : '#f43f5e'}`,
-                              borderRadius: 4, color: side === 'BUY' ? '#00e676' : '#f43f5e',
+                              background: side === 'BUY' ? 'rgba(43,217,168,0.1)' : 'rgba(255,107,107,0.1)',
+                              border: `1px solid ${side === 'BUY' ? '#2bd9a8' : '#ff6b6b'}`,
+                              borderRadius: 4, color: side === 'BUY' ? '#2bd9a8' : '#ff6b6b',
                               fontSize: 9, fontWeight: 900, cursor: 'pointer', fontFamily: 'var(--font-mono)'
                             }}
                           >

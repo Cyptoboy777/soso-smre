@@ -1,23 +1,53 @@
 import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
+import { verifyTypedData } from 'viem';
+import { checkRateLimit, getClientKey } from '@/lib/rateLimit';
 
 const ENDPOINTS = {
   mainnet: 'https://mainnet-gw.sodex.dev/api/v1/spot/orders',
   testnet: 'https://testnet-gw.sodex.dev/api/v1/spot/orders',
 };
 
+// Must exactly match the typed-data struct signed client-side in
+// components/TradeSetupPanel/TradeSetupPanel.tsx so the signature can be verified.
+const ORDER_DOMAIN = {
+  name: 'SoDEX',
+  version: '1',
+  chainId: 1,
+  verifyingContract: '0x0000000000000000000000000000000000000000' as const,
+};
+const ORDER_TYPES = {
+  Order: [
+    { name: 'symbol', type: 'string' },
+    { name: 'side', type: 'string' },
+    { name: 'price', type: 'string' },
+    { name: 'size', type: 'string' },
+    { name: 'nonce', type: 'uint256' },
+  ],
+} as const;
+
 export async function POST(req: NextRequest) {
   try {
+    // Rate limit first — cheap to check, protects both the simulated and real paths
+    // from being hammered (this endpoint has no other auth gate for paper trades).
+    const clientKey = getClientKey(req);
+    const rl = checkRateLimit(`trade:${clientKey}`, 20, 60_000);
+    if (!rl.allowed) {
+      return NextResponse.json({ error: 'Rate limit exceeded. Please slow down.' }, { status: 429 });
+    }
+
     const payload = await req.json() as {
       symbol: string;
       type: 'BUY' | 'SELL';
       amount: number;
       price: number;
       signature?: string;
+      walletAddress?: `0x${string}`;
+      nonce?: string;
       mode: 'real' | 'paper';
     };
 
-    const { symbol, type, amount, price, signature, mode } = payload;
+    const { symbol, type, amount, price, signature, walletAddress, nonce, mode } = payload;
 
     if (!symbol || !type || !amount || !price) {
       return NextResponse.json({ error: 'Missing critical trade fields' }, { status: 400 });
@@ -25,6 +55,39 @@ export async function POST(req: NextRequest) {
 
     if (amount <= 0 || price <= 0) {
       return NextResponse.json({ error: 'Amount and price must be strictly positive' }, { status: 400 });
+    }
+
+    // Real-money mainnet execution must prove the caller actually controls a wallet —
+    // otherwise anyone with the deployed URL could fire trades funded by our own
+    // SODEX_API_KEY/SODEX_API_SECRET.
+    if (mode === 'real') {
+      if (!signature || !walletAddress || !nonce) {
+        return NextResponse.json({ error: 'Real trades require a signed order (signature, walletAddress, nonce).' }, { status: 401 });
+      }
+
+      let signatureValid = false;
+      try {
+        signatureValid = await verifyTypedData({
+          address: walletAddress,
+          domain: ORDER_DOMAIN,
+          types: ORDER_TYPES,
+          primaryType: 'Order',
+          message: {
+            symbol,
+            side: type,
+            price: price.toString(),
+            size: amount.toString(),
+            nonce: BigInt(nonce),
+          },
+          signature: signature as `0x${string}`,
+        });
+      } catch {
+        signatureValid = false;
+      }
+
+      if (!signatureValid) {
+        return NextResponse.json({ error: 'Order signature verification failed.' }, { status: 401 });
+      }
     }
 
     const apiKey = process.env.SODEX_API_KEY;

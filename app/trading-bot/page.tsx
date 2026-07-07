@@ -227,13 +227,13 @@ export default function TradingBotPage() {
   };
 
   const logColor = (t: BotLog['type']) =>
-    t === 'buy' ? '#00e676' : t === 'sell' ? '#f43f5e' : t === 'error' ? '#f97316' : '#94a3b8';
+    t === 'buy' ? '#2bd9a8' : t === 'sell' ? '#ff6b6b' : t === 'error' ? '#f97316' : '#94a3b8';
 
   return (
     <div className="page-in" style={{ padding: '28px 32px', maxWidth: 1100, margin: '0 auto' }}>
       {/* Header */}
       <div style={{ display:'flex', alignItems:'center', gap:14, marginBottom:28 }}>
-        <div style={{ width:40, height:40, borderRadius:12, background:'linear-gradient(135deg,#6366f1,#a855f7)', display:'flex', alignItems:'center', justifyContent:'center' }}>
+        <div style={{ width:40, height:40, borderRadius:12, background:'linear-gradient(135deg,#4f9cff,#9d7bff)', display:'flex', alignItems:'center', justifyContent:'center' }}>
           <Bot size={20} color="#fff"/>
         </div>
         <div>
@@ -242,8 +242,8 @@ export default function TradingBotPage() {
         </div>
         <div style={{ marginLeft:'auto', display:'flex', alignItems:'center', gap:8 }}>
           <motion.div animate={{ opacity: running ? [1,0.3,1] : 0.3 }} transition={{ repeat:Infinity, duration:1 }}
-            style={{ width:8, height:8, borderRadius:'50%', background: running ? '#00e676' : '#555' }}/>
-          <span style={{ fontSize:11, fontWeight:900, color: running ? '#00e676' : 'var(--text-dim)' }}>{running ? 'BOT ACTIVE' : 'IDLE'}</span>
+            style={{ width:8, height:8, borderRadius:'50%', background: running ? '#2bd9a8' : '#555' }}/>
+          <span style={{ fontSize:11, fontWeight:900, color: running ? '#2bd9a8' : 'var(--text-dim)' }}>{running ? 'BOT ACTIVE' : 'IDLE'}</span>
         </div>
       </div>
 
@@ -263,10 +263,10 @@ export default function TradingBotPage() {
           {/* PnL Stats */}
           <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
             {[
-              { label:'PnL',      val: `${pnl >= 0 ? '+' : ''}$${pnl}`,  color: pnl >= 0 ? '#00e676' : '#f43f5e' },
+              { label:'PnL',      val: `${pnl >= 0 ? '+' : ''}$${pnl}`,  color: pnl >= 0 ? '#2bd9a8' : '#ff6b6b' },
               { label:'Trades',   val: trades.toString(),                  color: '#fff' },
-              { label:'Win Rate', val: `${winRate}%`,                      color: winRate >= 55 ? '#00e676' : winRate >= 40 ? '#ffd740' : '#f43f5e' },
-              { label:'Status',   val: running ? 'LIVE' : 'IDLE',          color: running ? '#00e676' : 'var(--text-dim)' },
+              { label:'Win Rate', val: `${winRate}%`,                      color: winRate >= 55 ? '#2bd9a8' : winRate >= 40 ? '#ffd740' : '#ff6b6b' },
+              { label:'Status',   val: running ? 'LIVE' : 'IDLE',          color: running ? '#2bd9a8' : 'var(--text-dim)' },
             ].map(s => (
               <div key={s.label} style={{ background:'var(--bg-card)', border:'1px solid var(--border-subtle)', borderRadius:12, padding:'12px 14px' }}>
                 <div style={{ fontSize:8, color:'var(--text-dim)', fontWeight:800, letterSpacing:'.1em', marginBottom:4 }}>{s.label}</div>
@@ -294,8 +294,8 @@ export default function TradingBotPage() {
               <label style={{ fontSize:9, color:'var(--text-dim)', fontWeight:800, display:'block', marginBottom:6 }}>STRATEGY</label>
               <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
                 {STRATEGIES.map(st => (
-                  <button key={st.id} onClick={() => setConfig(c => ({...c, strategy:st.id as any}))} disabled={running} style={{ padding:'10px 12px', borderRadius:10, border:`1px solid ${config.strategy===st.id ? '#6366f1' : 'var(--border-bold)'}`, background: config.strategy===st.id ? 'rgba(99,102,241,0.12)' : 'transparent', color:'#fff', textAlign:'left', cursor:'pointer', transition:'all 0.2s' }}>
-                    <div style={{ fontSize:11, fontWeight:800, color: config.strategy===st.id ? '#818cf8' : '#fff' }}>{st.label}</div>
+                  <button key={st.id} onClick={() => setConfig(c => ({...c, strategy:st.id as any}))} disabled={running} style={{ padding:'10px 12px', borderRadius:10, border:`1px solid ${config.strategy===st.id ? '#4f9cff' : 'var(--border-bold)'}`, background: config.strategy===st.id ? 'rgba(79,156,255,0.12)' : 'transparent', color:'#fff', textAlign:'left', cursor:'pointer', transition:'all 0.2s' }}>
+                    <div style={{ fontSize:11, fontWeight:800, color: config.strategy===st.id ? '#7db4ff' : '#fff' }}>{st.label}</div>
                     <div style={{ fontSize:9, color:'var(--text-dim)', marginTop:2 }}>{st.desc}</div>
                   </button>
                 ))}
@@ -316,8 +316,8 @@ export default function TradingBotPage() {
             {/* Start/Stop */}
             <motion.button whileTap={{ scale:0.97 }} onClick={running ? stopBot : startBot}
               style={{ width:'100%', padding:'13px', borderRadius:12, border:'none', cursor:'pointer', fontSize:13, fontWeight:900, letterSpacing:'.04em', display:'flex', alignItems:'center', justifyContent:'center', gap:10,
-                background: running ? 'linear-gradient(135deg,#f43f5e,#be123c)' : 'linear-gradient(135deg,#6366f1,#a855f7)',
-                color:'#fff', boxShadow: running ? '0 8px 24px rgba(244,63,94,0.3)' : '0 8px 24px rgba(99,102,241,0.3)' }}>
+                background: running ? 'linear-gradient(135deg,#ff6b6b,#be123c)' : 'linear-gradient(135deg,#4f9cff,#9d7bff)',
+                color:'#fff', boxShadow: running ? '0 8px 24px rgba(255,107,107,0.3)' : '0 8px 24px rgba(79,156,255,0.3)' }}>
               {running ? <><Square size={14} fill="#fff"/> STOP BOT</> : <><Play size={14} fill="#fff"/> START BOT</>}
             </motion.button>
           </div>
@@ -328,11 +328,11 @@ export default function TradingBotPage() {
           {/* Terminal header */}
           <div style={{ padding:'14px 20px', borderBottom:'1px solid var(--border-subtle)', display:'flex', alignItems:'center', gap:10, background:'rgba(0,0,0,0.3)' }}>
             <div style={{ display:'flex', gap:6 }}>
-              {['#f43f5e','#fbbf24','#00e676'].map(c => <div key={c} style={{ width:10, height:10, borderRadius:'50%', background:c }}/>)}
+              {['#ff6b6b','#fbbf24','#2bd9a8'].map(c => <div key={c} style={{ width:10, height:10, borderRadius:'50%', background:c }}/>)}
             </div>
             <span style={{ fontSize:10, fontWeight:900, color:'var(--text-dim)', letterSpacing:'.12em', marginLeft:6 }}>BOT EXECUTION LOG</span>
             {running && (
-              <motion.div animate={{ opacity:[1,0,1] }} transition={{ repeat:Infinity, duration:1 }} style={{ marginLeft:'auto', fontSize:9, color:'#00e676', fontWeight:900 }}>
+              <motion.div animate={{ opacity:[1,0,1] }} transition={{ repeat:Infinity, duration:1 }} style={{ marginLeft:'auto', fontSize:9, color:'#2bd9a8', fontWeight:900 }}>
                 ● LIVE
               </motion.div>
             )}
@@ -346,13 +346,13 @@ export default function TradingBotPage() {
                 <span style={{ fontSize:13, fontWeight:700 }}>Configure and start the bot to see execution logs</span>
               </div>
             ) : logs.map(log => (
-              <div key={log.id} style={{ display:'flex', gap:10, alignItems:'flex-start', padding:'5px 8px', borderRadius:7, background: log.type === 'buy' ? 'rgba(0,230,118,0.05)' : log.type === 'sell' ? 'rgba(244,63,94,0.05)' : 'transparent' }}>
+              <div key={log.id} style={{ display:'flex', gap:10, alignItems:'flex-start', padding:'5px 8px', borderRadius:7, background: log.type === 'buy' ? 'rgba(43,217,168,0.05)' : log.type === 'sell' ? 'rgba(255,107,107,0.05)' : 'transparent' }}>
                 <span style={{ color:'var(--text-dim)', fontSize:9, flexShrink:0, marginTop:1 }}>
                   {new Date(log.ts).toLocaleTimeString('en-US', { hour:'2-digit', minute:'2-digit', second:'2-digit' })}
                 </span>
                 <span style={{ color: logColor(log.type), fontWeight: log.type !== 'info' ? 800 : 400, flex:1, lineHeight:1.5 }}>{log.msg}</span>
                 {log.pnl !== undefined && (
-                  <span style={{ color: log.pnl >= 0 ? '#00e676' : '#f43f5e', fontWeight:900, fontSize:10, flexShrink:0 }}>
+                  <span style={{ color: log.pnl >= 0 ? '#2bd9a8' : '#ff6b6b', fontWeight:900, fontSize:10, flexShrink:0 }}>
                     {log.pnl >= 0 ? '+' : ''}${log.pnl}
                   </span>
                 )}
@@ -367,7 +367,7 @@ export default function TradingBotPage() {
               {[
                 { l:'Total Trades', v:trades.toString() },
                 { l:'Win Rate',     v:`${winRate}%` },
-                { l:'Net PnL',      v:`${pnl>=0?'+':''}$${pnl}`, c: pnl>=0?'#00e676':'#f43f5e' },
+                { l:'Net PnL',      v:`${pnl>=0?'+':''}$${pnl}`, c: pnl>=0?'#2bd9a8':'#ff6b6b' },
               ].map(s => (
                 <div key={s.l}>
                   <div style={{ fontSize:8, color:'var(--text-dim)', fontWeight:800 }}>{s.l}</div>

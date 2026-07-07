@@ -54,7 +54,7 @@ const TokenListSidebar = memo(function TokenListSidebar({ onSelectTicker }: Prop
           onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <div style={{ width: 20, height: 20, borderRadius: '50%', background: `linear-gradient(135deg, ${color}, #6366f1)`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 7, fontWeight: 900, color: '#fff' }}>
+            <div style={{ width: 20, height: 20, borderRadius: '50%', background: `linear-gradient(135deg, ${color}, #4f9cff)`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 7, fontWeight: 900, color: '#fff' }}>
               {t.base.slice(0, 2)}
             </div>
             <span style={{ fontSize: 12, fontWeight: 700, color: '#e0e0f0' }}>{t.base}</span>
@@ -88,7 +88,7 @@ const TokenListSidebar = memo(function TokenListSidebar({ onSelectTicker }: Prop
               <span style={{ fontSize: 8, color: '#8888aa' }}>{f.name}</span>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
-              <span style={{ fontSize: 10, color: f.pos ? '#00e676' : '#f43f5e', fontWeight: 900, fontFamily: 'monospace' }}>
+              <span style={{ fontSize: 10, color: f.pos ? '#2bd9a8' : '#ff6b6b', fontWeight: 900, fontFamily: 'monospace' }}>
                 {f.pos && f.inflow ? '+' : ''}{f.inflow !== null ? `$${f.inflow}M` : '--'}
               </span>
               <span style={{ fontSize: 8, color: '#666688' }}>INFLOW</span>
@@ -126,9 +126,9 @@ const TokenListSidebar = memo(function TokenListSidebar({ onSelectTicker }: Prop
       </div>
 
       <div style={{ flex: 1, overflowY: 'auto', padding: 12 }} className="scroll-track">
-        {activeTab === 'vol' && renderList('VOLUME LEADERS', <BarChart2 size={12} color="#38bdf8" />, volLeaders, '#38bdf8')}
-        {activeTab === 'gainers' && renderList('TOP GAINERS', <TrendingUp size={12} color="#00e676" />, gainers, '#00e676')}
-        {activeTab === 'losers' && renderList('TOP LOSERS', <TrendingDown size={12} color="#f43f5e" />, losers, '#f43f5e')}
+        {activeTab === 'vol' && renderList('VOLUME LEADERS', <BarChart2 size={12} color="#4f9cff" />, volLeaders, '#4f9cff')}
+        {activeTab === 'gainers' && renderList('TOP GAINERS', <TrendingUp size={12} color="#2bd9a8" />, gainers, '#2bd9a8')}
+        {activeTab === 'losers' && renderList('TOP LOSERS', <TrendingDown size={12} color="#ff6b6b" />, losers, '#ff6b6b')}
         {activeTab === 'etf' && renderEtfList()}
       </div>
     </div>

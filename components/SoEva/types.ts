@@ -16,8 +16,8 @@ export interface EmotionConfig {
 export const EMOTION_CFG: Record<Emotion, EmotionConfig> = {
   divine:  { label: 'DIVINE',  color: '#a78bfa', glow: 'rgba(167,139,250,0.5)', emoji: '✨', desc: 'Calm & Insightful' },
   joy:     { label: 'JOY',     color: '#fbbf24', glow: 'rgba(251,191,36,0.5)',  emoji: '🚀', desc: 'Bullish & Energetic' },
-  alert:   { label: 'ALERT',   color: '#f43f5e', glow: 'rgba(244,63,94,0.5)',   emoji: '⚠️', desc: 'Bearish & Urgent' },
-  serious: { label: 'SERIOUS', color: '#38bdf8', glow: 'rgba(56,189,248,0.5)',  emoji: '📊', desc: 'Analytical & Deep' },
+  alert:   { label: 'ALERT',   color: '#ff6b6b', glow: 'rgba(255,107,107,0.5)',   emoji: '⚠️', desc: 'Bearish & Urgent' },
+  serious: { label: 'SERIOUS', color: '#4f9cff', glow: 'rgba(79,156,255,0.5)',  emoji: '📊', desc: 'Analytical & Deep' },
 };
 
 export interface ScriptLine {

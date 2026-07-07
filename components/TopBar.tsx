@@ -13,11 +13,11 @@ interface PriceTick {
 }
 
 const FG_LABELS: Record<string, { label: string; color: string }> = {
-  'Extreme Fear':  { label: 'Extreme Fear',  color: '#f43f5e' },
+  'Extreme Fear':  { label: 'Extreme Fear',  color: '#ff6b6b' },
   'Fear':          { label: 'Fear',           color: '#f97316' },
   'Neutral':       { label: 'Neutral',        color: '#eab308' },
   'Greed':         { label: 'Greed',          color: '#00c853' },
-  'Extreme Greed': { label: 'Extreme Greed',  color: '#00e676' },
+  'Extreme Greed': { label: 'Extreme Greed',  color: '#2bd9a8' },
 };
 
 function fgClass(value: number): string {
@@ -40,7 +40,7 @@ function PriceBadge({
   accent?: string;
 }) {
   const isPos = change && !change.startsWith('-');
-  const changeColor = isPos ? 'var(--accent-green)' : '#f43f5e';
+  const changeColor = isPos ? 'var(--accent-green)' : '#ff6b6b';
   return (
     <div style={{
       padding: '0 16px', flexShrink: 0,
@@ -83,7 +83,7 @@ function FearGreedWidget({ value, label }: { value: number; label: string }) {
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         {/* Compact arc or pill */}
         <div style={{ width: 56, height: 6, borderRadius: 99, position: 'relative', overflow: 'visible',
-          background: 'linear-gradient(to right, #f43f5e, #f97316, #eab308, #00e676)',
+          background: 'linear-gradient(to right, #ff6b6b, #f97316, #eab308, #2bd9a8)',
           boxShadow: '0 0 8px rgba(0,0,0,0.3)',
         }}>
           <motion.div
@@ -265,34 +265,38 @@ export default function TopBar({ onCmdOpen }: TopBarProps) {
         change={ethChange}
       />
 
-      {/* ─── SOSO ─── */}
-      <PriceBadge
-        label={source === 'sodex' ? 'WSOSO/vUSDC' : 'SOSO/USDT'}
-        price={soso !== null ? `$${soso.toLocaleString('en-US', { minimumFractionDigits: 4, maximumFractionDigits: 4 })}` : null}
-        change={sosoChange}
-        accent="var(--accent-orange)"
-      />
+      {/* ─── SOSO ─── (hidden on phones — BTC/ETH cover the essentials) */}
+      <div className="hide-mobile" style={{ display: 'flex' }}>
+        <PriceBadge
+          label={source === 'sodex' ? 'WSOSO/vUSDC' : 'SOSO/USDT'}
+          price={soso !== null ? `$${soso.toLocaleString('en-US', { minimumFractionDigits: 4, maximumFractionDigits: 4 })}` : null}
+          change={sosoChange}
+          accent="var(--accent-orange)"
+        />
+      </div>
 
-      {/* ─── MCAP ─── */}
-      <div style={{ padding: '0 16px', flexShrink: 0, borderRight: '1px solid var(--border-subtle)' }}>
+      {/* ─── MCAP ─── (hidden on phones) */}
+      <div className="hide-mobile" style={{ padding: '0 16px', flexShrink: 0, borderRight: '1px solid var(--border-subtle)' }}>
         <div style={{ fontSize: 9, color: 'var(--text-dim)', fontWeight: 800, letterSpacing: '.14em', marginBottom: 3 }}>GLOBAL MCAP</div>
         <div style={{ fontSize: 13, fontWeight: 800, color: 'var(--accent-green)', fontFamily: 'var(--font-mono)' }}>
           {mcap ? `$${mcap}` : '---'}
         </div>
       </div>
 
-      {/* ─── FEAR & GREED ─── */}
-      {fgValue !== null ? (
-        <FearGreedWidget value={fgValue} label={fgLabel} />
-      ) : (
-        <div style={{ padding: '0 16px', flexShrink: 0 }}>
-          <div style={{ fontSize: 9, color: 'var(--text-dim)', fontWeight: 800, letterSpacing: '.14em', marginBottom: 4 }}>FEAR & GREED</div>
-          <div className="skeleton" style={{ width: 80, height: 20 }} />
-        </div>
-      )}
+      {/* ─── FEAR & GREED ─── (hidden on phones) */}
+      <div className="hide-mobile" style={{ display: 'flex' }}>
+        {fgValue !== null ? (
+          <FearGreedWidget value={fgValue} label={fgLabel} />
+        ) : (
+          <div style={{ padding: '0 16px', flexShrink: 0 }}>
+            <div style={{ fontSize: 9, color: 'var(--text-dim)', fontWeight: 800, letterSpacing: '.14em', marginBottom: 4 }}>FEAR & GREED</div>
+            <div className="skeleton" style={{ width: 80, height: 20 }} />
+          </div>
+        )}
+      </div>
 
       {priceError && (
-        <div style={{ padding: '0 12px', color: 'var(--accent-red)', fontSize: 9, fontWeight: 900, letterSpacing: '.1em' }}>
+        <div className="hide-mobile" style={{ padding: '0 12px', color: 'var(--accent-red)', fontSize: 9, fontWeight: 900, letterSpacing: '.1em' }}>
           {priceError}
         </div>
       )}
@@ -302,8 +306,9 @@ export default function TopBar({ onCmdOpen }: TopBarProps) {
       {/* ─── RIGHT SECTION ─── */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
 
-        {/* Command palette shortcut */}
+        {/* Command palette shortcut — hidden on phones (⌘K has no meaning without a keyboard) */}
         <motion.button
+          className="hide-mobile"
           whileTap={{ scale: 0.95 }}
           onClick={onCmdOpen}
           style={{
@@ -327,19 +332,20 @@ export default function TopBar({ onCmdOpen }: TopBarProps) {
           }}>⌘K</span>
         </motion.button>
 
-        {/* Telegram Signals */}
+        {/* Telegram Signals — hidden on phones, reachable from Settings instead */}
         <motion.a
           href="https://t.me/sodexAI_bot"
           target="_blank" rel="noopener noreferrer"
+          className="hide-mobile"
           whileHover={{ scale: 1.04 }}
           whileTap={{ scale: 0.96 }}
           style={{
             display: 'flex', alignItems: 'center', gap: 7,
             padding: '6px 12px',
-            background: 'linear-gradient(135deg, #2563eb, #6366f1)',
+            background: 'linear-gradient(135deg, #2563eb, #4f9cff)',
             borderRadius: 10, textDecoration: 'none',
             color: '#fff',
-            boxShadow: '0 0 16px rgba(99,102,241,0.3)',
+            boxShadow: '0 0 16px rgba(79,156,255,0.3)',
           }}
         >
           <Send size={14} fill="#fff" />
@@ -349,7 +355,7 @@ export default function TopBar({ onCmdOpen }: TopBarProps) {
           </div>
         </motion.a>
 
-        {/* User badge */}
+        {/* User badge — avatar always visible, name/address text hidden on phones */}
         <div style={{
           display: 'flex', alignItems: 'center', gap: 8,
           padding: '6px 12px',
@@ -365,11 +371,12 @@ export default function TopBar({ onCmdOpen }: TopBarProps) {
               : 'linear-gradient(135deg, var(--accent-orange), var(--accent-orange2))',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             fontSize: 11, fontWeight: 900, color: '#fff',
-            boxShadow: '0 0 8px rgba(99,102,241,0.3)',
+            boxShadow: '0 0 8px rgba(79,156,255,0.3)',
+            flexShrink: 0,
           }}>
             {walletAddress ? 'W' : (user?.displayName ?? user?.email ?? 'U').slice(0, 1).toUpperCase()}
           </div>
-          <span style={{
+          <span className="hide-mobile" style={{
             fontSize: 12, color: 'var(--text-secondary)', fontWeight: 700,
             maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
             fontFamily: walletAddress ? 'var(--font-mono)' : 'inherit',

@@ -12,7 +12,7 @@ type Props = {
 
 const COLOR_MAP: Record<string, string> = {
   excited: "#f59e0b",
-  happy:   "#00e676",
+  happy:   "#2bd9a8",
   alert:   "#ff1744",
   sad:     "#3b82f6",
   neutral: "#00e5ff",

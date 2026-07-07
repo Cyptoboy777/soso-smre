@@ -12,7 +12,7 @@ interface Props {
 export default function RiskDashboard({ validation, dailyPnL, maxDailyLoss }: Props) {
   const { riskMeter, errors, warnings } = validation;
 
-  const meterColor = riskMeter === 'GREEN' ? '#00e676' : riskMeter === 'YELLOW' ? '#f59e0b' : '#f43f5e';
+  const meterColor = riskMeter === 'GREEN' ? '#2bd9a8' : riskMeter === 'YELLOW' ? '#f59e0b' : '#ff6b6b';
   const MeterIcon = riskMeter === 'GREEN' ? ShieldCheck : riskMeter === 'YELLOW' ? AlertTriangle : ShieldAlert;
 
   const dailyPct = (dailyPnL / maxDailyLoss) * 100;
@@ -36,7 +36,7 @@ export default function RiskDashboard({ validation, dailyPnL, maxDailyLoss }: Pr
       <div>
         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
           <span style={{ fontSize: 9, color: '#44446a', fontWeight: 800 }}>DAILY PNL EXPOSURE</span>
-          <span style={{ fontSize: 9, color: dailyPnL >= 0 ? '#00e676' : isNearDailyLimit ? '#f43f5e' : '#f59e0b', fontWeight: 800, fontFamily: 'monospace' }}>
+          <span style={{ fontSize: 9, color: dailyPnL >= 0 ? '#2bd9a8' : isNearDailyLimit ? '#ff6b6b' : '#f59e0b', fontWeight: 800, fontFamily: 'monospace' }}>
             {dailyPnL >= 0 ? '+' : ''}${dailyPnL.toFixed(2)} / -${maxDailyLoss.toFixed(2)}
           </span>
         </div>
@@ -45,7 +45,7 @@ export default function RiskDashboard({ validation, dailyPnL, maxDailyLoss }: Pr
             style={{ 
               height: '100%', 
               width: `${Math.min(100, Math.abs(dailyPct))}%`, 
-              background: dailyPnL >= 0 ? '#00e676' : isNearDailyLimit ? '#f43f5e' : '#f59e0b',
+              background: dailyPnL >= 0 ? '#2bd9a8' : isNearDailyLimit ? '#ff6b6b' : '#f59e0b',
               transition: 'width 0.3s'
             }} 
           />
@@ -56,9 +56,9 @@ export default function RiskDashboard({ validation, dailyPnL, maxDailyLoss }: Pr
       {(errors.length > 0 || warnings.length > 0) && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 4 }}>
           {errors.map((err, i) => (
-            <div key={`err-${i}`} style={{ display: 'flex', alignItems: 'flex-start', gap: 6, background: 'rgba(244,63,94,0.05)', padding: '6px 8px', borderRadius: 4 }}>
-              <ShieldAlert size={12} color="#f43f5e" style={{ flexShrink: 0, marginTop: 1 }} />
-              <span style={{ fontSize: 10, color: '#f43f5e', fontWeight: 700, lineHeight: 1.3 }}>{err}</span>
+            <div key={`err-${i}`} style={{ display: 'flex', alignItems: 'flex-start', gap: 6, background: 'rgba(255,107,107,0.05)', padding: '6px 8px', borderRadius: 4 }}>
+              <ShieldAlert size={12} color="#ff6b6b" style={{ flexShrink: 0, marginTop: 1 }} />
+              <span style={{ fontSize: 10, color: '#ff6b6b', fontWeight: 700, lineHeight: 1.3 }}>{err}</span>
             </div>
           ))}
           {warnings.map((warn, i) => (
@@ -71,9 +71,9 @@ export default function RiskDashboard({ validation, dailyPnL, maxDailyLoss }: Pr
       )}
 
       {errors.length === 0 && warnings.length === 0 && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(0,230,118,0.05)', padding: '6px 8px', borderRadius: 4 }}>
-          <ShieldCheck size={12} color="#00e676" />
-          <span style={{ fontSize: 10, color: '#00e676', fontWeight: 700 }}>All Risk Management Rules satisfied.</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(43,217,168,0.05)', padding: '6px 8px', borderRadius: 4 }}>
+          <ShieldCheck size={12} color="#2bd9a8" />
+          <span style={{ fontSize: 10, color: '#2bd9a8', fontWeight: 700 }}>All Risk Management Rules satisfied.</span>
         </div>
       )}
 

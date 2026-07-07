@@ -94,13 +94,13 @@ export default function SodexMarketsPage() {
         {displayedTicker && <>
           <div>
             <div style={{fontSize:20,fontWeight:900,color:'#fff',letterSpacing:'-0.03em'}}>{displayedTicker.lastPrice.toLocaleString()}</div>
-            <div style={{fontSize:10,fontWeight:800,color:displayedTicker.priceChangePct>=0?'#00e676':'#f43f5e'}}>
+            <div style={{fontSize:10,fontWeight:800,color:displayedTicker.priceChangePct>=0?'#2bd9a8':'#ff6b6b'}}>
               {displayedTicker.priceChangePct>=0?'+':''}{displayedTicker.priceChangePct.toFixed(2)}%
             </div>
           </div>
-          {[['24H Change',`${displayedTicker.priceChangePct>=0?'+':''}${displayedTicker.priceChangePct.toFixed(2)}%`,displayedTicker.priceChangePct>=0?'#00e676':'#f43f5e'],
-            ['24H High',`$${fmtPrice(displayedTicker.high)}`,'#00e676'],
-            ['24H Low', `$${fmtPrice(displayedTicker.low)}`,'#f43f5e'],
+          {[['24H Change',`${displayedTicker.priceChangePct>=0?'+':''}${displayedTicker.priceChangePct.toFixed(2)}%`,displayedTicker.priceChangePct>=0?'#2bd9a8':'#ff6b6b'],
+            ['24H High',`$${fmtPrice(displayedTicker.high)}`,'#2bd9a8'],
+            ['24H Low', `$${fmtPrice(displayedTicker.low)}`,'#ff6b6b'],
             ['24H Vol(USDC)',fmtVol(displayedTicker.quoteVolume),'#8888aa']
           ].map(([l,v,c])=>(
             <div key={l as string} style={{padding:'0 10px',borderLeft:'1px solid #1e1e3a'}}>
@@ -120,10 +120,10 @@ export default function SodexMarketsPage() {
             ))}
           </div>
           {/* Live dot */}
-          <div style={{display:'flex',alignItems:'center',gap:5,background:isConnected?'rgba(0,230,118,0.08)':'rgba(244,63,94,0.08)',border:`1px solid ${isConnected?'rgba(0,230,118,0.2)':'rgba(244,63,94,0.2)'}`,borderRadius:99,padding:'4px 10px'}}>
+          <div style={{display:'flex',alignItems:'center',gap:5,background:isConnected?'rgba(43,217,168,0.08)':'rgba(255,107,107,0.08)',border:`1px solid ${isConnected?'rgba(43,217,168,0.2)':'rgba(255,107,107,0.2)'}`,borderRadius:99,padding:'4px 10px'}}>
             <motion.div animate={{opacity:isConnected?[1,0.3,1]:1}} transition={{repeat:Infinity,duration:1.2}}
-              style={{width:6,height:6,borderRadius:'50%',background:isConnected?'#00e676':'#f43f5e'}}/>
-            <span style={{fontSize:9,fontWeight:900,color:isConnected?'#00e676':'#f43f5e'}}>{isConnected?'LIVE':'OFFLINE'}</span>
+              style={{width:6,height:6,borderRadius:'50%',background:isConnected?'#2bd9a8':'#ff6b6b'}}/>
+            <span style={{fontSize:9,fontWeight:900,color:isConnected?'#2bd9a8':'#ff6b6b'}}>{isConnected?'LIVE':'OFFLINE'}</span>
           </div>
         </div>
       </div>
@@ -147,7 +147,7 @@ export default function SodexMarketsPage() {
                   <div style={{ fontSize: 72, fontWeight: 900, color: '#fff', fontFamily: 'monospace', lineHeight: 1, textShadow: '0 0 40px rgba(255,255,255,0.1)' }}>
                     {fmtPrice(displayedTicker.lastPrice)}
                   </div>
-                  <div style={{ fontSize: 24, fontWeight: 900, color: displayedTicker.priceChangePct >= 0 ? '#00e676' : '#f43f5e', fontFamily: 'monospace' }}>
+                  <div style={{ fontSize: 24, fontWeight: 900, color: displayedTicker.priceChangePct >= 0 ? '#2bd9a8' : '#ff6b6b', fontFamily: 'monospace' }}>
                     {displayedTicker.priceChangePct >= 0 ? '+' : ''}{displayedTicker.priceChangePct.toFixed(2)}%
                   </div>
                 </div>
@@ -169,10 +169,10 @@ export default function SodexMarketsPage() {
                 </div>
 
                 {/* AI Insight Snippet */}
-                <div style={{ background: 'rgba(0, 230, 118, 0.05)', border: '1px solid rgba(0, 230, 118, 0.2)', padding: 16, borderRadius: 12, display: 'flex', alignItems: 'flex-start', gap: 12 }}>
-                  <div style={{ color: '#00e676', marginTop: 2 }}>⚡</div>
+                <div style={{ background: 'rgba(43,217,168, 0.05)', border: '1px solid rgba(43,217,168, 0.2)', padding: 16, borderRadius: 12, display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+                  <div style={{ color: '#2bd9a8', marginTop: 2 }}>⚡</div>
                   <div>
-                    <div style={{ fontSize: 10, fontWeight: 900, color: '#00e676', marginBottom: 4, letterSpacing: '.1em' }}>AI AGENT INSIGHT</div>
+                    <div style={{ fontSize: 10, fontWeight: 900, color: '#2bd9a8', marginBottom: 4, letterSpacing: '.1em' }}>AI AGENT INSIGHT</div>
                     <div style={{ fontSize: 12, color: '#888', lineHeight: 1.5 }}>
                       Detecting strong accumulation in {displayedTicker.base} over the last 4 hours. Order book imbalance suggests upward pressure. Recommended strategy: Momentum entries on micro-dips.
                     </div>
@@ -216,10 +216,10 @@ export default function SodexMarketsPage() {
                       <span style={{ fontWeight: 900, color: '#fff' }}>{p.symbol}</span>
                       <span style={{ fontSize: 8, color: p.mode === 'real' ? '#00b0ff' : '#a78bfa', fontWeight: 800 }}>{p.mode.toUpperCase()}</span>
                     </div>
-                    <span style={{ color: p.side === 'BUY' ? '#00e676' : '#f43f5e', fontWeight: 900 }}>{p.side}</span>
+                    <span style={{ color: p.side === 'BUY' ? '#2bd9a8' : '#ff6b6b', fontWeight: 900 }}>{p.side}</span>
                     <span style={{ color: '#8888aa' }}>{p.size.toFixed(4)}</span>
                     <span style={{ color: '#8888aa' }}>${p.entryPrice.toFixed(4)}</span>
-                    <span style={{ textAlign: 'right', color: p.unrealizedPnL >= 0 ? '#00e676' : '#f43f5e', fontWeight: 900 }}>
+                    <span style={{ textAlign: 'right', color: p.unrealizedPnL >= 0 ? '#2bd9a8' : '#ff6b6b', fontWeight: 900 }}>
                       {p.unrealizedPnL >= 0 ? '+' : ''}{p.unrealizedPnL.toFixed(2)} USDC
                     </span>
                   </div>
@@ -233,7 +233,7 @@ export default function SodexMarketsPage() {
                 {orders.map(o => (
                   <div key={o.id} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr 1.5fr', padding: '6px 16px', fontSize: 11, fontFamily: 'monospace', borderBottom: '1px solid rgba(255,255,255,0.02)' }}>
                     <span style={{ fontWeight: 900, color: '#fff' }}>{o.symbol}</span>
-                    <span style={{ color: o.side === 'BUY' ? '#00e676' : '#f43f5e', fontWeight: 900 }}>{o.side}</span>
+                    <span style={{ color: o.side === 'BUY' ? '#2bd9a8' : '#ff6b6b', fontWeight: 900 }}>{o.side}</span>
                     <span style={{ color: '#8888aa' }}>{o.size.toFixed(4)}</span>
                     <span style={{ color: '#8888aa' }}>${o.price.toFixed(4)}</span>
                     <span style={{ textAlign: 'right', color: '#666', fontSize: 10 }}>{new Date(o.timestamp).toLocaleString()}</span>
@@ -270,7 +270,7 @@ export default function SodexMarketsPage() {
                 <div key={tr.id} style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',padding:'3px 12px',fontSize:10,fontFamily:'monospace',borderBottom:'1px solid rgba(255,255,255,0.02)', background: tr.isMine ? 'rgba(249, 115, 22, 0.1)' : 'transparent'}}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                     {tr.isMine && <span style={{fontSize: 8, color: '#f97316'}}>YOU</span>}
-                    <span style={{color:tr.side==='buy'?'#00e676':'#f43f5e',fontWeight:700}}>{fmtPrice(tr.price)}</span>
+                    <span style={{color:tr.side==='buy'?'#2bd9a8':'#ff6b6b',fontWeight:700}}>{fmtPrice(tr.price)}</span>
                   </div>
                   <span style={{textAlign:'center',color: tr.isMine ? '#fff' : '#8888aa'}}>{tr.qty}</span>
                   <span style={{textAlign:'right',color:'#44446a',fontSize:9}}>{new Date(tr.ts).toLocaleTimeString('en',{hour:'2-digit',minute:'2-digit',second:'2-digit'})}</span>

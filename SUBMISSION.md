@@ -41,29 +41,40 @@ Our platform leverages direct mainnet APIs to power live Web3 execution and AI a
 ---
 
 ### 2. Direct Smart Contract Hookup (Relayerless Routes)
-* **Code Implementation:** [`components/TradeSetupPanel/TradeSetupPanel.tsx`](file:///c:/Users/PRASHANTHI/Downloads/soso-smre/SMRE-FINAL-V/components/TradeSetupPanel/TradeSetupPanel.tsx)
+* **Code Implementation:** [`components/TradeSetupPanel/TradeSetupPanel.tsx`](components/TradeSetupPanel/TradeSetupPanel.tsx), [`app/api/trade/route.ts`](app/api/trade/route.ts)
 * **How to view:** Connect your wallet at [http://localhost:3000/sodex-markets](http://localhost:3000/sodex-markets) and toggle the **Execution Route** button.
 * **Detailed Execution Details:**
-  * **Relayer Route:** Uses EIP-712 structured messages (`signTypedDataAsync`) signed by the connected wallet, then posts the payload to our relayer API `/api/trade`.
+  * **Relayer Route:** Uses EIP-712 structured messages (`signTypedDataAsync`) signed by the connected wallet, then posts the payload to our relayer API `/api/trade` — which independently reconstructs the same typed-data struct and calls `viem.verifyTypedData` before forwarding anything to SoDEX. A `mode: "real"` request without a valid matching signature is rejected with `401`.
   * **Direct Contract Route:** Bypasses the backend API relayers. It imports Wagmi v2's `useWriteContract` to submit transactions directly to the SoDEX Router contract address on-chain (`0x378BcADaBfF12530E57223b207aA6Fd4b93b4822`), prompting Web3 wallets to sign raw smart contract transactions.
 
 ---
 
-### 🎴 3. Social "Proof of PnL" (Cyberpunk Trading Cards)
-* **Code Implementation:** [`app/portfolio/page.tsx`](file:///c:/Users/PRASHANTHI/Downloads/soso-smre/SMRE-FINAL-V/app/portfolio/page.tsx)
+### 🎴 3. Social "Proof of PnL" (Trading Cards)
+* **Code Implementation:** [`app/portfolio/page.tsx`](app/portfolio/page.tsx), [`app/api/portfolio/route.ts`](app/api/portfolio/route.ts)
 * **How to view:** Open the portfolio tracker at [http://localhost:3000/portfolio](http://localhost:3000/portfolio) and click the **"🎴 PnL Card"** button.
 * **Detailed Execution Details:**
-  * Generates a glowing cyberpunk overlay trading card containing live verified portfolio metrics: Trader Rank, 24h ROI (+142.5%), Net Profit, and accrued SoPoints.
-  * Includes a **"Share on X"** trigger that uses X/Twitter intent links to draft tweets containing verified stats and Buildathon tags.
+  * `/api/portfolio` replays the account's trade log server-side to derive cash balance, holdings, and P&L — the card renders these server-computed numbers, not whatever the client happens to hold locally.
+  * Shows live Trader Rank, ROI, Net Profit, Total Value, and accrued SoPoints, all sourced from that same server response.
+  * Includes a **"Share on X"** trigger that uses X/Twitter intent links to draft tweets containing the trader's actual current stats and Buildathon tags.
 
 ---
 
 ### 🏆 4. Alpha Leaderboard & Podium
-* **Code Implementation:** [`app/leaderboard/page.tsx`](file:///c:/Users/PRASHANTHI/Downloads/soso-smre/SMRE-FINAL-V/app/leaderboard/page.tsx) & [`components/Sidebar.tsx`](file:///c:/Users/PRASHANTHI/Downloads/soso-smre/SMRE-FINAL-V/components/Sidebar.tsx)
+* **Code Implementation:** [`app/leaderboard/page.tsx`](app/leaderboard/page.tsx), [`app/api/leaderboard/route.ts`](app/api/leaderboard/route.ts), [`app/api/portfolio/route.ts`](app/api/portfolio/route.ts)
 * **How to view:** Visit [http://localhost:3000/leaderboard](http://localhost:3000/leaderboard).
 * **Detailed Execution Details:**
-  * Displays a global Rankings board pulling from the `/api/leaderboard` Firestore database.
-  * Staggered Framer Motion slide-up animations reveal the ranking profiles in order, highlighting the top 3 on a custom animated podium using gold, silver, and bronze ambient shadows.
+  * Displays a global Rankings board reading from a public `leaderboard` Firestore collection, ranked by a **server-computed** score (`rankPoints`, derived from the replayed trade log) rather than a client-submitted counter.
+  * Falls back to clearly-labeled demo data only when the collection is empty or Firestore isn't configured — it never silently swaps in fake rankings once real data exists.
+  * Staggered Framer Motion slide-up animations reveal the ranking profiles in order; the top-3 podium is derived from the same live data as the table below it, so they can't disagree.
+
+---
+
+## 🔐 Security & Data Integrity (Beyond the Declared Goals)
+
+* **Signature-gated real-money execution:** `/api/trade` rejects any `mode: "real"` order that doesn't carry a valid EIP-712 signature, verified server-side with `viem.verifyTypedData` against the exact signed payload.
+* **Verified wallet sessions:** connecting a wallet signs a challenge message verified with `viem.verifyMessage`, both at connect time and on every session restore — a spoofed address in `localStorage` can't pass verification.
+* **Server-derived ledger:** `/api/portfolio` replays the trade log rather than trusting client-submitted balances, so PnL cards and leaderboard scores can't be forged client-side.
+* **Rate limiting & input validation** on `/api/trade`, `/api/telegram-alert`, `/api/ai-signal`, and `/api/sodex` (endpoint allowlisted, no arbitrary path pass-through).
 
 ---
 

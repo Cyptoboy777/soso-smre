@@ -12,9 +12,9 @@ const ICONS: Record<ToastType, string> = {
   success: '✅', error: '❌', info: '⚡', warning: '⚠️',
 };
 const COLORS: Record<ToastType, { bg: string; border: string; glow: string }> = {
-  success: { bg: 'rgba(0,230,118,0.1)', border: 'rgba(0,230,118,0.3)', glow: '#00e676' },
-  error:   { bg: 'rgba(244,63,94,0.1)',  border: 'rgba(244,63,94,0.3)',  glow: '#f43f5e' },
-  info:    { bg: 'rgba(56,189,248,0.1)', border: 'rgba(56,189,248,0.3)', glow: '#38bdf8' },
+  success: { bg: 'rgba(43,217,168,0.1)', border: 'rgba(43,217,168,0.3)', glow: '#2bd9a8' },
+  error:   { bg: 'rgba(255,107,107,0.1)',  border: 'rgba(255,107,107,0.3)',  glow: '#ff6b6b' },
+  info:    { bg: 'rgba(79,156,255,0.1)', border: 'rgba(79,156,255,0.3)', glow: '#4f9cff' },
   warning: { bg: 'rgba(249,115,22,0.1)', border: 'rgba(249,115,22,0.3)', glow: '#f97316' },
 };
 

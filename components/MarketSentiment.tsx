@@ -6,11 +6,11 @@ import { TrendingUp, TrendingDown, Minus } from 'lucide-react';
 type SentimentLabel = 'Extreme Greed' | 'Greed' | 'Neutral' | 'Fear' | 'Extreme Fear';
 
 const LABEL_CFG: Record<SentimentLabel, { color: string; bg: string; icon: any }> = {
-  'Extreme Greed': { color: '#00e676', bg: 'rgba(0,230,118,0.1)',  icon: TrendingUp   },
+  'Extreme Greed': { color: '#2bd9a8', bg: 'rgba(43,217,168,0.1)',  icon: TrendingUp   },
   'Greed':         { color: '#69f0ae', bg: 'rgba(105,240,174,0.1)', icon: TrendingUp   },
   'Neutral':       { color: '#ffd740', bg: 'rgba(255,215,64,0.1)', icon: Minus        },
   'Fear':          { color: '#f97316', bg: 'rgba(249,115,22,0.1)', icon: TrendingDown },
-  'Extreme Fear':  { color: '#f43f5e', bg: 'rgba(244,63,94,0.1)',  icon: TrendingDown },
+  'Extreme Fear':  { color: '#ff6b6b', bg: 'rgba(255,107,107,0.1)',  icon: TrendingDown },
 };
 
 function getLabel(score: number): SentimentLabel {
@@ -147,9 +147,9 @@ export default function MarketSentiment() {
 
       {/* Scale labels */}
       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 8, color: 'var(--text-dim)', fontWeight: 700, letterSpacing: '.06em' }}>
-        <span style={{ color: '#f43f5e' }}>FEAR</span>
+        <span style={{ color: '#ff6b6b' }}>FEAR</span>
         <span style={{ color: '#ffd740' }}>NEUTRAL</span>
-        <span style={{ color: '#00e676' }}>GREED</span>
+        <span style={{ color: '#2bd9a8' }}>GREED</span>
       </div>
 
       {/* Source tag */}

@@ -5,7 +5,7 @@ export default function Achievements({ soPoints = 0, tradeCount = 0 }) {
   const list = [
     { label: 'Fast Starter', desc: 'Complete 5 trades', icon: Zap, unlocked: tradeCount >= 5, color: '#3b82f6' },
     { label: 'Point Grinder', desc: 'Earn 1000 SoPoints', icon: Award, unlocked: soPoints >= 1000, color: '#f59e0b' },
-    { label: 'Risk Manager', desc: 'First profitable trade', icon: ShieldCheck, unlocked: tradeCount > 0, color: '#00e676' },
+    { label: 'Risk Manager', desc: 'First profitable trade', icon: ShieldCheck, unlocked: tradeCount > 0, color: '#2bd9a8' },
     { label: 'Alpha Seeker', desc: 'Perform AI Analysis', icon: Target, unlocked: true, color: '#f97316' },
   ];
 

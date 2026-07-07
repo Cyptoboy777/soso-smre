@@ -60,10 +60,10 @@ const CHART_THEME = {
   grid: '#111120',
   text: '#6b7280',
   border: '#1e1e3a',
-  upColor: '#00e676',
-  downColor: '#f43f5e',
-  wickUpColor: '#00e676',
-  wickDownColor: '#f43f5e',
+  upColor: '#2bd9a8',
+  downColor: '#ff6b6b',
+  wickUpColor: '#2bd9a8',
+  wickDownColor: '#ff6b6b',
   crosshair: '#f97316',
 };
 
@@ -216,7 +216,7 @@ const SodexProfessionalChart = memo(function SodexProfessionalChart({ initialSym
     });
 
     const volume = chart.addSeries(HistogramSeries, {
-      color: '#00e67644',
+      color: '#2bd9a844',
       priceFormat: { type: 'volume' as const },
       priceScaleId: 'volume',
     });
@@ -275,7 +275,7 @@ const SodexProfessionalChart = memo(function SodexProfessionalChart({ initialSym
       const lwVolumes = candles.map((c) => ({
         time:  Math.floor(c.time / 1000) as Time,
         value: c.volume,
-        color: c.close >= c.open ? '#00e67633' : '#f43f5e33',
+        color: c.close >= c.open ? '#2bd9a833' : '#ff6b6b33',
       }));
 
       candleSeriesRef.current.setData(lwCandles);
@@ -398,7 +398,7 @@ const SodexProfessionalChart = memo(function SodexProfessionalChart({ initialSym
       if (entry > 0) {
         entryLineRef.current = candleSeriesRef.current.createPriceLine({
           price: entry,
-          color: '#38bdf8',
+          color: '#4f9cff',
           lineWidth: 2,
           lineStyle: 0, // Solid
           axisLabelVisible: true,
@@ -409,7 +409,7 @@ const SodexProfessionalChart = memo(function SodexProfessionalChart({ initialSym
       if (sl > 0) {
         slLineRef.current = candleSeriesRef.current.createPriceLine({
           price: sl,
-          color: '#f43f5e',
+          color: '#ff6b6b',
           lineWidth: 2,
           lineStyle: 1, // Dotted
           axisLabelVisible: true,
@@ -422,7 +422,7 @@ const SodexProfessionalChart = memo(function SodexProfessionalChart({ initialSym
           if (tpVal > 0) {
             const line = candleSeriesRef.current?.createPriceLine({
               price: tpVal,
-              color: '#00e676',
+              color: '#2bd9a8',
               lineWidth: 2,
               lineStyle: 1, // Dotted
               axisLabelVisible: true,
@@ -468,7 +468,7 @@ const SodexProfessionalChart = memo(function SodexProfessionalChart({ initialSym
               onClick={() => { setShowSearch((v) => !v); setTimeout(() => searchRef.current?.focus(), 60); }}
               style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#141425', border: '1px solid #2a2a4a', borderRadius: 10, padding: '6px 12px', cursor: 'pointer', color: '#fff' }}
             >
-              <div style={{ width: 22, height: 22, borderRadius: '50%', background: 'linear-gradient(135deg, #f97316, #6366f1)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 8, fontWeight: 900, color: '#fff', flexShrink: 0 }}>
+              <div style={{ width: 22, height: 22, borderRadius: '50%', background: 'linear-gradient(135deg, #f97316, #4f9cff)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 8, fontWeight: 900, color: '#fff', flexShrink: 0 }}>
                 {selected?.base.slice(0, 2) ?? '..'}
               </div>
               <span style={{ fontSize: 14, fontWeight: 800, letterSpacing: '-0.02em' }}>{selected?.base ?? '…'}/USDC</span>
@@ -491,7 +491,7 @@ const SodexProfessionalChart = memo(function SodexProfessionalChart({ initialSym
                       onMouseLeave={(e) => { e.currentTarget.style.background = selected?.base === t.base ? 'rgba(249,115,22,0.06)' : 'transparent'; }}
                     >
                       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                        <div style={{ width: 30, height: 30, borderRadius: '50%', background: 'linear-gradient(135deg, #f97316, #6366f1)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 900, color: '#fff', flexShrink: 0 }}>
+                        <div style={{ width: 30, height: 30, borderRadius: '50%', background: 'linear-gradient(135deg, #f97316, #4f9cff)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 900, color: '#fff', flexShrink: 0 }}>
                           {t.base.slice(0, 2)}
                         </div>
                         <div style={{ textAlign: 'left' }}>
@@ -501,7 +501,7 @@ const SodexProfessionalChart = memo(function SodexProfessionalChart({ initialSym
                       </div>
                       <div style={{ textAlign: 'right' }}>
                         <div style={{ fontSize: 13, fontWeight: 700, color: '#fff' }}>${formatPrice(t.price)}</div>
-                        <div style={{ fontSize: 10, fontWeight: 700, color: t.change >= 0 ? '#00e676' : '#f43f5e' }}>{t.change >= 0 ? '+' : ''}{t.change.toFixed(2)}%</div>
+                        <div style={{ fontSize: 10, fontWeight: 700, color: t.change >= 0 ? '#2bd9a8' : '#ff6b6b' }}>{t.change >= 0 ? '+' : ''}{t.change.toFixed(2)}%</div>
                       </div>
                     </button>
                   ))}
@@ -514,7 +514,7 @@ const SodexProfessionalChart = memo(function SodexProfessionalChart({ initialSym
           {selected && (
             <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
               <span style={{ fontSize: 20, fontWeight: 900, color: '#fff', fontFamily: 'monospace', letterSpacing: '-0.03em' }}>${formatPrice(selected.price)}</span>
-              <span style={{ fontSize: 12, fontWeight: 700, color: isUp ? '#00e676' : '#f43f5e', display: 'flex', alignItems: 'center', gap: 2 }}>
+              <span style={{ fontSize: 12, fontWeight: 700, color: isUp ? '#2bd9a8' : '#ff6b6b', display: 'flex', alignItems: 'center', gap: 2 }}>
                 {isUp ? <TrendingUp size={12} /> : <TrendingDown size={12} />}
                 {isUp ? '+' : ''}{selected.change.toFixed(2)}%
               </span>
@@ -524,7 +524,7 @@ const SodexProfessionalChart = memo(function SodexProfessionalChart({ initialSym
           {/* 24H stats */}
           {selected && (
             <div style={{ display: 'flex', gap: 14 }}>
-              {([['H', selected.high, '#00e676'], ['L', selected.low, '#f43f5e']] as [string, number, string][]).map(([l, v, c]) => (
+              {([['H', selected.high, '#2bd9a8'], ['L', selected.low, '#ff6b6b']] as [string, number, string][]).map(([l, v, c]) => (
                 <div key={l} style={{ display: 'flex', flexDirection: 'column' }}>
                   <span style={{ fontSize: 9, color: '#444', fontWeight: 700 }}>24h {l}</span>
                   <span style={{ fontSize: 11, color: c, fontFamily: 'monospace', fontWeight: 700 }}>${formatPrice(v)}</span>
@@ -538,8 +538,8 @@ const SodexProfessionalChart = memo(function SodexProfessionalChart({ initialSym
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           {/* LIVE badge */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 4, background: '#0f1e12', border: '1px solid #1a3d20', borderRadius: 6, padding: '3px 8px' }}>
-            <div style={{ width: 5, height: 5, borderRadius: '50%', background: '#00e676', boxShadow: '0 0 6px #00e676', animation: 'pulse 1.5s infinite' }} />
-            <span style={{ fontSize: 9, color: '#00e676', fontWeight: 900 }}>LIVE</span>
+            <div style={{ width: 5, height: 5, borderRadius: '50%', background: '#2bd9a8', boxShadow: '0 0 6px #2bd9a8', animation: 'pulse 1.5s infinite' }} />
+            <span style={{ fontSize: 9, color: '#2bd9a8', fontWeight: 900 }}>LIVE</span>
           </div>
 
           {/* Interval selector */}
@@ -582,9 +582,9 @@ const SodexProfessionalChart = memo(function SodexProfessionalChart({ initialSym
         {fetchError && !loading && (
           <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8, zIndex: 10 }}>
             <span style={{ fontSize: 24 }}>⚠️</span>
-            <span style={{ fontSize: 12, color: '#f43f5e', fontWeight: 700 }}>{fetchError}</span>
+            <span style={{ fontSize: 12, color: '#ff6b6b', fontWeight: 700 }}>{fetchError}</span>
             <button onClick={() => selected && loadCandles(selected, iv)}
-              style={{ padding: '6px 16px', borderRadius: 8, background: 'rgba(244,63,94,0.12)', border: '1px solid rgba(244,63,94,0.3)', color: '#f43f5e', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}
+              style={{ padding: '6px 16px', borderRadius: 8, background: 'rgba(255,107,107,0.12)', border: '1px solid rgba(255,107,107,0.3)', color: '#ff6b6b', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}
             >Retry</button>
           </div>
         )}

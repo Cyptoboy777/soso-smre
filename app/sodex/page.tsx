@@ -107,7 +107,7 @@ export default function SoDEXPage() {
                   <td style={{ padding: '16px 24px', fontWeight: 600, fontSize: 14 }}>{getSymbol(t)}</td>
                   <td style={{ padding: '16px 24px', fontFamily: 'monospace', fontSize: 14 }}>${getLastPrice(t).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 6 })}</td>
                   <td style={{ padding: '16px 24px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 4, color: getChange(t) >= 0 ? '#00e676' : '#f43f5e', fontSize: 13, fontWeight: 600 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 4, color: getChange(t) >= 0 ? '#2bd9a8' : '#ff6b6b', fontSize: 13, fontWeight: 600 }}>
                       {getChange(t) >= 0 ? <ArrowUpRight size={14} /> : <ArrowDownRight size={14} />}
                       {Math.abs(getChange(t)).toFixed(2)}%
                     </div>
@@ -125,7 +125,7 @@ export default function SoDEXPage() {
                     <td style={{ padding: '16px 24px', fontWeight: 600, fontSize: 14 }}>{getSymbol(p)}</td>
                     <td style={{ padding: '16px 24px', fontFamily: 'monospace', fontSize: 14 }}>${getLastPrice(p).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 6 })}</td>
                     <td style={{ padding: '16px 24px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 4, color: change >= 0 ? '#00e676' : '#f43f5e', fontSize: 13, fontWeight: 600 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 4, color: change >= 0 ? '#2bd9a8' : '#ff6b6b', fontSize: 13, fontWeight: 600 }}>
                         {change >= 0 ? <ArrowUpRight size={14} /> : <ArrowDownRight size={14} />}
                         {Math.abs(change).toFixed(2)}%
                       </div>

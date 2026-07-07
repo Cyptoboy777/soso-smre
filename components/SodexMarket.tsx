@@ -37,9 +37,9 @@ export function MarketTicker({
           <BarChart2 size={13} color="var(--accent-orange)" />
           <span style={{ fontSize: 10, fontWeight: 900, letterSpacing: '.14em', color: 'var(--text-dim)', textTransform: 'uppercase' }}>Markets</span>
           <span style={{ marginLeft: 'auto', fontSize: 9, color: 'var(--text-dim)' }}>
-            <span style={{ color: '#00e676', fontWeight: 800 }}>{gainersCount}↑</span>
+            <span style={{ color: '#2bd9a8', fontWeight: 800 }}>{gainersCount}↑</span>
             {' · '}
-            <span style={{ color: '#f43f5e', fontWeight: 800 }}>{losersCount}↓</span>
+            <span style={{ color: '#ff6b6b', fontWeight: 800 }}>{losersCount}↓</span>
           </span>
         </div>
         {/* Search */}
@@ -89,12 +89,12 @@ export function MarketTicker({
               }}
             >
               {/* Hot glow */}
-              {hot && <div style={{ position: 'absolute', inset: 0, background: isUp ? 'rgba(0,230,118,0.03)' : 'rgba(244,63,94,0.03)', pointerEvents: 'none' }} />}
+              {hot && <div style={{ position: 'absolute', inset: 0, background: isUp ? 'rgba(43,217,168,0.03)' : 'rgba(255,107,107,0.03)', pointerEvents: 'none' }} />}
 
               <div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
                   <span style={{ fontSize: 12, fontWeight: 900, color: isActive ? 'var(--accent-orange)' : 'var(--text-primary)' }}>{t.base}</span>
-                  {hot && <span style={{ fontSize: 7, fontWeight: 900, color: isUp ? '#00e676' : '#f43f5e', background: isUp ? 'rgba(0,230,118,0.12)' : 'rgba(244,63,94,0.12)', padding: '1px 5px', borderRadius: 4 }}>🔥</span>}
+                  {hot && <span style={{ fontSize: 7, fontWeight: 900, color: isUp ? '#2bd9a8' : '#ff6b6b', background: isUp ? 'rgba(43,217,168,0.12)' : 'rgba(255,107,107,0.12)', padding: '1px 5px', borderRadius: 4 }}>🔥</span>}
                 </div>
                 <div style={{ fontSize: 9, color: 'var(--text-dim)', marginTop: 1 }}>/USDC</div>
               </div>
@@ -104,7 +104,7 @@ export function MarketTicker({
               </div>
 
               <div style={{ textAlign: 'right', marginLeft: 12, alignSelf: 'center' }}>
-                <div style={{ fontSize: 11, fontWeight: 900, fontFamily: 'monospace', color: isUp ? '#00e676' : '#f43f5e' }}>
+                <div style={{ fontSize: 11, fontWeight: 900, fontFamily: 'monospace', color: isUp ? '#2bd9a8' : '#ff6b6b' }}>
                   {isUp ? '▲' : '▼'}{absPct.toFixed(2)}%
                 </div>
               </div>
@@ -140,8 +140,8 @@ export const OrderBook = React.memo(function OrderBook({ symbol }: { symbol: str
     const pct = Math.min((q / maxQty) * 100, 100);
     return (
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', padding: '3px 14px', fontSize: 11, fontFamily: 'monospace', position: 'relative', gap: 4 }}>
-        <div style={{ position: 'absolute', top: 0, bottom: 0, [side === 'bid' ? 'left' : 'right']: 0, width: `${pct}%`, background: side === 'bid' ? 'rgba(0,230,118,0.07)' : 'rgba(244,63,94,0.07)', transition: 'width 0.3s' }} />
-        <span style={{ color: side === 'bid' ? '#00e676' : '#f43f5e', position: 'relative', fontWeight: 700 }}>{fmtPrice(p)}</span>
+        <div style={{ position: 'absolute', top: 0, bottom: 0, [side === 'bid' ? 'left' : 'right']: 0, width: `${pct}%`, background: side === 'bid' ? 'rgba(43,217,168,0.07)' : 'rgba(255,107,107,0.07)', transition: 'width 0.3s' }} />
+        <span style={{ color: side === 'bid' ? '#2bd9a8' : '#ff6b6b', position: 'relative', fontWeight: 700 }}>{fmtPrice(p)}</span>
         <span style={{ color: 'var(--text-dim)', position: 'relative', textAlign: 'right' }}>{q.toFixed(4)}</span>
       </div>
     );
@@ -181,11 +181,11 @@ export const OrderBook = React.memo(function OrderBook({ symbol }: { symbol: str
         return (
           <div style={{ padding: '8px 14px', borderTop: '1px solid var(--border-subtle)', flexShrink: 0 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 8, fontWeight: 900, marginBottom: 4, color: 'var(--text-dim)' }}>
-              <span style={{ color: '#00e676' }}>BIDS {bidPct}%</span>
-              <span style={{ color: '#f43f5e' }}>ASKS {100 - bidPct}%</span>
+              <span style={{ color: '#2bd9a8' }}>BIDS {bidPct}%</span>
+              <span style={{ color: '#ff6b6b' }}>ASKS {100 - bidPct}%</span>
             </div>
-            <div style={{ height: 4, borderRadius: 2, background: 'rgba(244,63,94,0.4)', overflow: 'hidden' }}>
-              <div style={{ width: `${bidPct}%`, height: '100%', background: '#00e676', transition: 'width 0.5s', borderRadius: 2 }} />
+            <div style={{ height: 4, borderRadius: 2, background: 'rgba(255,107,107,0.4)', overflow: 'hidden' }}>
+              <div style={{ width: `${bidPct}%`, height: '100%', background: '#2bd9a8', transition: 'width 0.5s', borderRadius: 2 }} />
             </div>
           </div>
         );
@@ -235,7 +235,7 @@ export function CopyTradePanel({ network }: { network: Network }) {
             <div style={{ fontSize: 9, color: 'var(--text-dim)', fontWeight: 800, marginBottom: 5 }}>MULTIPLIER</div>
             <input type="number" value={multi} onChange={e => setMulti(parseFloat(e.target.value))} style={{ width: '100%', background: 'rgba(255,255,255,0.04)', border: '1px solid var(--border-bold)', borderRadius: 8, padding: '8px 10px', fontSize: 12, color: '#fff', outline: 'none', boxSizing: 'border-box' }} />
           </div>
-          <button onClick={() => { if (active) stop(); setActive(!active); }} style={{ flex: 1, marginTop: 15, borderRadius: 8, border: 'none', background: active ? 'linear-gradient(135deg,#f43f5e,#be123c)' : 'linear-gradient(135deg,#f97316,#ea580c)', color: '#fff', fontSize: 10, fontWeight: 900, cursor: 'pointer', letterSpacing: '.08em' }}>
+          <button onClick={() => { if (active) stop(); setActive(!active); }} style={{ flex: 1, marginTop: 15, borderRadius: 8, border: 'none', background: active ? 'linear-gradient(135deg,#ff6b6b,#be123c)' : 'linear-gradient(135deg,#f97316,#ea580c)', color: '#fff', fontSize: 10, fontWeight: 900, cursor: 'pointer', letterSpacing: '.08em' }}>
             {active ? '■ STOP' : '▶ START COPY'}
           </button>
         </div>
@@ -271,10 +271,10 @@ export function CopyTradePanel({ network }: { network: Network }) {
                   {trader.address.slice(0, 6)}…{trader.address.slice(-4)}
                 </div>
                 <div style={{ fontSize: 9, color: 'var(--text-dim)' }}>
-                  Win: <span style={{ color: '#00e676' }}>{trader.winRate}%</span> · {trader.trades} trades · Vol: {trader.vol}
+                  Win: <span style={{ color: '#2bd9a8' }}>{trader.winRate}%</span> · {trader.trades} trades · Vol: {trader.vol}
                 </div>
               </div>
-              <div style={{ fontSize: 13, fontWeight: 900, color: '#00e676', fontFamily: 'monospace' }}>+{trader.roi.toFixed(1)}%</div>
+              <div style={{ fontSize: 13, fontWeight: 900, color: '#2bd9a8', fontFamily: 'monospace' }}>+{trader.roi.toFixed(1)}%</div>
             </div>
           </div>
         ))}

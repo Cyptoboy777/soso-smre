@@ -6,8 +6,8 @@ interface NewsItem { id: string; title: string; url: string; summary: string; so
 
 const SENTIMENTS = ['Positive', 'Neutral', 'Negative'] as const;
 type Sentiment = typeof SENTIMENTS[number];
-const sentimentColor = (s: Sentiment) => s === 'Positive' ? '#00e676' : s === 'Negative' ? '#f43f5e' : '#f59e0b';
-const sentimentBg = (s: Sentiment) => s === 'Positive' ? 'rgba(0,230,118,0.1)' : s === 'Negative' ? 'rgba(244,63,94,0.1)' : 'rgba(245,158,11,0.1)';
+const sentimentColor = (s: Sentiment) => s === 'Positive' ? '#2bd9a8' : s === 'Negative' ? '#ff6b6b' : '#f59e0b';
+const sentimentBg = (s: Sentiment) => s === 'Positive' ? 'rgba(43,217,168,0.1)' : s === 'Negative' ? 'rgba(255,107,107,0.1)' : 'rgba(245,158,11,0.1)';
 
 function Skeleton() {
   return <div className="shimmer" style={{ height: 210, border: '1px solid #1e1e1e' }} />;
@@ -79,7 +79,7 @@ export default function BreakingNewsPage() {
           <button onClick={runSentimentAnalysis} disabled={analyzing} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', background: 'rgba(59,130,246,0.12)', border: '1px solid rgba(59,130,246,0.3)', borderRadius: 8, color: '#60a5fa', fontSize: 13, fontWeight: 600, cursor: analyzing ? 'not-allowed' : 'pointer' }}>
             <Sparkles size={13} /> {analyzing ? 'Analyzing...' : 'AI Tag'}
           </button>
-          <span style={{ fontSize: 11, color: '#c084fc', background: 'rgba(168,85,247,0.12)', border: '1px solid rgba(168,85,247,0.3)', padding: '7px 14px', borderRadius: 8, fontWeight: 600 }}>
+          <span style={{ fontSize: 11, color: '#c084fc', background: 'rgba(157,123,255,0.12)', border: '1px solid rgba(157,123,255,0.3)', padding: '7px 14px', borderRadius: 8, fontWeight: 600 }}>
             {analyzing ? 'Processing Gemini AI...' : Object.keys(aiSentiments).length > 0 ? '✦ Dynamic AI Sentiment' : '○ Standby Mode'}
           </span>
         </div>

@@ -4,7 +4,9 @@ import { createContext, useContext, useEffect, useMemo, useState, useCallback } 
 import type { User } from 'firebase/auth';
 import { onAuthStateChanged, signInWithPopup, signOut as firebaseSignOut } from 'firebase/auth';
 import { auth, googleProvider, isFirebaseConfigured } from '@/lib/firebase';
-import { detectWallets, connectToWallet, signAuthMessage, type WalletProvider } from '@/lib/walletConnectors';
+import { detectWallets, connectToWallet, signAuthMessage, verifyAuthProof, type WalletProvider, type AuthProof } from '@/lib/walletConnectors';
+
+const AUTH_PROOF_KEY = 'sodex_auth_proof';
 
 export interface AuthContextValue {
   user: User | null;
@@ -34,13 +36,33 @@ export function FirebaseProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
-    // Restore saved wallet from last session
-    const savedWallet  = localStorage.getItem('sodex_wallet');
-    const savedWalletId = localStorage.getItem('sodex_wallet_id');
-    if (savedWallet) {
-      setWalletAddress(savedWallet);
-      setWalletId(savedWalletId);
-    }
+    // Restore saved wallet session, but only trust it if the stored signature
+    // still verifies against the stored address+message. Without this check,
+    // anyone could spoof a session with `localStorage.setItem('sodex_wallet', '0x...')`.
+    const restoreWalletSession = async () => {
+      const savedWalletId = localStorage.getItem('sodex_wallet_id');
+      const savedProofRaw = localStorage.getItem(AUTH_PROOF_KEY);
+      if (!savedProofRaw) return;
+
+      try {
+        const proof = JSON.parse(savedProofRaw) as AuthProof;
+        const valid = await verifyAuthProof(proof);
+        if (valid) {
+          setWalletAddress(proof.address);
+          setWalletId(savedWalletId);
+        } else {
+          localStorage.removeItem('sodex_wallet');
+          localStorage.removeItem('sodex_wallet_id');
+          localStorage.removeItem(AUTH_PROOF_KEY);
+        }
+      } catch {
+        localStorage.removeItem('sodex_wallet');
+        localStorage.removeItem('sodex_wallet_id');
+        localStorage.removeItem(AUTH_PROOF_KEY);
+      }
+    };
+
+    restoreWalletSession();
 
     // Detect installed wallets
     refreshWallets();
@@ -71,6 +93,7 @@ export function FirebaseProvider({ children }: { children: React.ReactNode }) {
       setWalletId(null);
       localStorage.removeItem('sodex_wallet');
       localStorage.removeItem('sodex_wallet_id');
+      localStorage.removeItem(AUTH_PROOF_KEY);
     },
 
     /**
@@ -89,13 +112,17 @@ export function FirebaseProvider({ children }: { children: React.ReactNode }) {
         : wallets[0];
 
       try {
-        const address   = await connectToWallet(wallet.provider);
-        const _sig      = await signAuthMessage(wallet.provider, address);
-        // Signature verified locally — no server needed for SIWE proof
+        const address = await connectToWallet(wallet.provider);
+        const proof   = await signAuthMessage(wallet.provider, address);
+
+        const valid = await verifyAuthProof(proof);
+        if (!valid) throw new Error('Wallet signature verification failed');
+
         setWalletAddress(address);
         setWalletId(wallet.id);
         localStorage.setItem('sodex_wallet',    address);
         localStorage.setItem('sodex_wallet_id', wallet.id);
+        localStorage.setItem(AUTH_PROOF_KEY, JSON.stringify(proof));
       } catch (e) {
         console.error('Wallet connection failed:', e);
         throw e;

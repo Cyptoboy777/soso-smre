@@ -14,7 +14,7 @@ interface Props {
 
 const HOST_COLORS = {
   eva:  '#a78bfa',
-  echo: '#38bdf8',
+  echo: '#4f9cff',
 };
 
 /**

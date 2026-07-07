@@ -133,9 +133,9 @@ export default function BacktestPage() {
       </div>
 
       {/* Trade count badge */}
-      <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '6px 14px', background: 'rgba(56,189,248,0.06)', border: '1px solid rgba(56,189,248,0.15)', borderRadius: 30, marginBottom: 28 }}>
-        <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#38bdf8' }} className="badge-live" />
-        <span style={{ fontSize: 11, color: '#38bdf8', fontWeight: 700 }}>{tradeCount} trades found in your portfolio history</span>
+      <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '6px 14px', background: 'rgba(79,156,255,0.06)', border: '1px solid rgba(79,156,255,0.15)', borderRadius: 30, marginBottom: 28 }}>
+        <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#4f9cff' }} className="badge-live" />
+        <span style={{ fontSize: 11, color: '#4f9cff', fontWeight: 700 }}>{tradeCount} trades found in your portfolio history</span>
       </div>
 
       <div style={{ background: '#0a0a0a', border: '1px solid #1a1a1a', borderRadius: 20, padding: 24, marginBottom: 24 }}>
@@ -179,16 +179,16 @@ export default function BacktestPage() {
       {result && (
         <div className="fade-up" style={{ background: '#0a0a0a', border: '1px solid #1a1a1a', borderRadius: 20, padding: 24 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 20 }}>
-            <CheckCircle size={18} color="#00e676" />
+            <CheckCircle size={18} color="#2bd9a8" />
             <span style={{ fontSize: 14, fontWeight: 700, color: '#fff' }}>Backtest Complete — Based on {result.totalTrades} real trades</span>
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16, marginBottom: 16 }}>
             {[
-              { label: 'REALIZED ROI', value: result.roi, color: result.roiValue >= 0 ? '#00e676' : '#f43f5e' },
+              { label: 'REALIZED ROI', value: result.roi, color: result.roiValue >= 0 ? '#2bd9a8' : '#ff6b6b' },
               { label: 'WIN RATE', value: result.winRate, color: '#fff' },
               { label: 'TOTAL TRADES', value: String(result.totalTrades), color: '#fff' },
-              { label: 'MAX DRAWDOWN', value: result.maxDrawdown, color: '#f43f5e' },
+              { label: 'MAX DRAWDOWN', value: result.maxDrawdown, color: '#ff6b6b' },
               { label: 'PROFIT FACTOR', value: result.profitFactor, color: '#f59e0b' },
               { label: 'W / L', value: `${result.wins} / ${result.losses}`, color: '#94a3b8' },
             ].map(r => (
@@ -204,7 +204,7 @@ export default function BacktestPage() {
             <div>
               <div style={{ fontSize: 10, color: '#f97316', fontWeight: 900, letterSpacing: '.15em', marginBottom: 6 }}>TRADING SCORE</div>
               <div style={{ display: 'flex', alignItems: 'flex-end', gap: 6 }}>
-                <span style={{ fontSize: 48, fontWeight: 900, color: result.tradingScore >= 60 ? '#00e676' : result.tradingScore >= 40 ? '#f59e0b' : '#f43f5e', lineHeight: 1 }}>
+                <span style={{ fontSize: 48, fontWeight: 900, color: result.tradingScore >= 60 ? '#2bd9a8' : result.tradingScore >= 40 ? '#f59e0b' : '#ff6b6b', lineHeight: 1 }}>
                   {result.tradingScore}
                 </span>
                 <span style={{ fontSize: 16, color: '#444', fontWeight: 700, marginBottom: 6 }}>/100</span>
@@ -217,7 +217,7 @@ export default function BacktestPage() {
               <svg viewBox="0 0 80 80" style={{ transform: 'rotate(-90deg)' }}>
                 <circle cx="40" cy="40" r="34" fill="none" stroke="rgba(255,255,255,0.05)" strokeWidth="8" />
                 <circle cx="40" cy="40" r="34" fill="none"
-                  stroke={result.tradingScore >= 60 ? '#00e676' : result.tradingScore >= 40 ? '#f59e0b' : '#f43f5e'}
+                  stroke={result.tradingScore >= 60 ? '#2bd9a8' : result.tradingScore >= 40 ? '#f59e0b' : '#ff6b6b'}
                   strokeWidth="8"
                   strokeLinecap="round"
                   strokeDasharray={`${(result.tradingScore / 100) * 213.6} 213.6`}
@@ -225,7 +225,7 @@ export default function BacktestPage() {
                 />
               </svg>
               <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                {result.tradingScore >= 60 ? <TrendingUp size={24} color="#00e676" /> : <TrendingDown size={24} color="#f43f5e" />}
+                {result.tradingScore >= 60 ? <TrendingUp size={24} color="#2bd9a8" /> : <TrendingDown size={24} color="#ff6b6b" />}
               </div>
             </div>
           </div>

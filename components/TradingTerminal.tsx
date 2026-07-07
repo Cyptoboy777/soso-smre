@@ -66,8 +66,8 @@ export default function TradingTerminal({ symbol, price, network }: Props) {
     setAmount((maxQty * pct / 100).toFixed(6));
   };
 
-  const sideColor = side === 'BUY' ? '#00e676' : '#f43f5e';
-  const sideBg    = side === 'BUY' ? 'rgba(0,230,118,0.1)' : 'rgba(244,63,94,0.1)';
+  const sideColor = side === 'BUY' ? '#2bd9a8' : '#ff6b6b';
+  const sideBg    = side === 'BUY' ? 'rgba(43,217,168,0.1)' : 'rgba(255,107,107,0.1)';
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
@@ -86,9 +86,9 @@ export default function TradingTerminal({ symbol, price, network }: Props) {
         {(['BUY', 'SELL'] as const).map(s => (
           <motion.button key={s} whileTap={{ scale: 0.97 }} onClick={() => setSide(s)} style={{
             padding: '11px', borderRadius: 10,
-            border: `1px solid ${side === s ? (s === 'BUY' ? '#00e676' : '#f43f5e') : 'var(--border-subtle)'}`,
-            background: side === s ? (s === 'BUY' ? 'rgba(0,230,118,0.12)' : 'rgba(244,63,94,0.12)') : 'transparent',
-            color: side === s ? (s === 'BUY' ? '#00e676' : '#f43f5e') : 'var(--text-dim)',
+            border: `1px solid ${side === s ? (s === 'BUY' ? '#2bd9a8' : '#ff6b6b') : 'var(--border-subtle)'}`,
+            background: side === s ? (s === 'BUY' ? 'rgba(43,217,168,0.12)' : 'rgba(255,107,107,0.12)') : 'transparent',
+            color: side === s ? (s === 'BUY' ? '#2bd9a8' : '#ff6b6b') : 'var(--text-dim)',
             fontSize: 12, fontWeight: 900, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
             transition: 'all 0.2s',
           }}>
@@ -132,12 +132,12 @@ export default function TradingTerminal({ symbol, price, network }: Props) {
       {/* ── Stop Loss / Take Profit ── */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 12 }}>
         <div>
-          <label style={{ fontSize: 8, color: '#f43f5e', fontWeight: 800, display: 'block', marginBottom: 4, letterSpacing: '.08em' }}>STOP LOSS</label>
-          <input value={stopLoss} onChange={e => setStopLoss(e.target.value)} placeholder="Optional" style={{ width: '100%', padding: '7px 10px', borderRadius: 7, background: 'rgba(244,63,94,0.04)', border: '1px solid rgba(244,63,94,0.18)', color: '#fff', fontSize: 11, outline: 'none', boxSizing: 'border-box' }} />
+          <label style={{ fontSize: 8, color: '#ff6b6b', fontWeight: 800, display: 'block', marginBottom: 4, letterSpacing: '.08em' }}>STOP LOSS</label>
+          <input value={stopLoss} onChange={e => setStopLoss(e.target.value)} placeholder="Optional" style={{ width: '100%', padding: '7px 10px', borderRadius: 7, background: 'rgba(255,107,107,0.04)', border: '1px solid rgba(255,107,107,0.18)', color: '#fff', fontSize: 11, outline: 'none', boxSizing: 'border-box' }} />
         </div>
         <div>
-          <label style={{ fontSize: 8, color: '#00e676', fontWeight: 800, display: 'block', marginBottom: 4, letterSpacing: '.08em' }}>TAKE PROFIT</label>
-          <input value={takeProfit} onChange={e => setTakeProfit(e.target.value)} placeholder="Optional" style={{ width: '100%', padding: '7px 10px', borderRadius: 7, background: 'rgba(0,230,118,0.04)', border: '1px solid rgba(0,230,118,0.18)', color: '#fff', fontSize: 11, outline: 'none', boxSizing: 'border-box' }} />
+          <label style={{ fontSize: 8, color: '#2bd9a8', fontWeight: 800, display: 'block', marginBottom: 4, letterSpacing: '.08em' }}>TAKE PROFIT</label>
+          <input value={takeProfit} onChange={e => setTakeProfit(e.target.value)} placeholder="Optional" style={{ width: '100%', padding: '7px 10px', borderRadius: 7, background: 'rgba(43,217,168,0.04)', border: '1px solid rgba(43,217,168,0.18)', color: '#fff', fontSize: 11, outline: 'none', boxSizing: 'border-box' }} />
         </div>
       </div>
 
@@ -158,7 +158,7 @@ export default function TradingTerminal({ symbol, price, network }: Props) {
           {rrRatio && (
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, fontFamily: 'monospace' }}>
               <span style={{ color: 'var(--text-dim)' }}>R:R Ratio</span>
-              <span style={{ color: parseFloat(rrRatio) >= 2 ? '#00e676' : '#ffd740', fontWeight: 900 }}>{rrRatio}:1</span>
+              <span style={{ color: parseFloat(rrRatio) >= 2 ? '#2bd9a8' : '#ffd740', fontWeight: 900 }}>{rrRatio}:1</span>
             </div>
           )}
         </motion.div>
@@ -172,13 +172,13 @@ export default function TradingTerminal({ symbol, price, network }: Props) {
         style={{
           width: '100%', padding: '13px', borderRadius: 12,
           background: submitted
-            ? 'linear-gradient(135deg,#00e676,#00c853)'
+            ? 'linear-gradient(135deg,#2bd9a8,#00c853)'
             : walletConnected
-              ? side === 'BUY' ? 'linear-gradient(135deg,#00e676,#00c853)' : 'linear-gradient(135deg,#f43f5e,#be123c)'
+              ? side === 'BUY' ? 'linear-gradient(135deg,#2bd9a8,#00c853)' : 'linear-gradient(135deg,#ff6b6b,#be123c)'
               : 'linear-gradient(135deg,#f97316,#ea580c)',
           color: '#000', border: 'none', fontSize: 12, fontWeight: 900, cursor: 'pointer',
           display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-          boxShadow: `0 8px 24px ${walletConnected ? (side === 'BUY' ? 'rgba(0,230,118,0.25)' : 'rgba(244,63,94,0.25)') : 'rgba(249,115,22,0.25)'}`,
+          boxShadow: `0 8px 24px ${walletConnected ? (side === 'BUY' ? 'rgba(43,217,168,0.25)' : 'rgba(255,107,107,0.25)') : 'rgba(249,115,22,0.25)'}`,
           letterSpacing: '.06em', transition: 'all 0.2s',
           opacity: walletConnected && !canTrade ? 0.5 : 1,
         }}

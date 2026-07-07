@@ -7,8 +7,8 @@ interface HistoryItem { asset: string; tf: string; signal: string; confidence: n
 interface NewsItem { title: string; source: string; time: string; url: string; }
 
 const TF = ['1M','5M','15M','30M','1H','4H','8H','12H','1D','1W'];
-const sigColor = (s: string) => s === 'BUY' ? '#00e676' : s === 'SELL' ? '#f43f5e' : '#f59e0b';
-const riskColor = (r: string) => r === 'LOW' ? '#00e676' : r === 'HIGH' ? '#f43f5e' : '#f59e0b';
+const sigColor = (s: string) => s === 'BUY' ? '#2bd9a8' : s === 'SELL' ? '#ff6b6b' : '#f59e0b';
+const riskColor = (r: string) => r === 'LOW' ? '#2bd9a8' : r === 'HIGH' ? '#ff6b6b' : '#f59e0b';
 
 export default function AIAnalysisPage() {
   const [asset, setAsset] = useState('BTC');
@@ -248,7 +248,7 @@ export default function AIAnalysisPage() {
 
                 {/* CTA */}
                 <a href={`/ai-trade-agent?asset=${asset}&stopLoss=${signal.stopLoss.replace(/[^0-9.]/g, '')}&target=${signal.target.replace(/[^0-9.]/g, '')}`} style={{ textDecoration: 'none' }}>
-                  <button style={{ width: '100%', padding: 15, borderRadius: 12, background: signal.signal === 'BUY' ? 'linear-gradient(90deg,#00c853,#00e676)' : signal.signal === 'SELL' ? 'linear-gradient(90deg,#c62828,#f43f5e)' : 'linear-gradient(90deg,#e65100,#f97316)', color: '#000', border: 'none', fontSize: 14, fontWeight: 800, letterSpacing: '.06em', cursor: 'pointer', boxShadow: signal.signal === 'BUY' ? '0 0 24px rgba(0,230,118,0.35)' : '0 0 24px rgba(249,115,22,0.35)' }}>
+                  <button style={{ width: '100%', padding: 15, borderRadius: 12, background: signal.signal === 'BUY' ? 'linear-gradient(90deg,#00c853,#2bd9a8)' : signal.signal === 'SELL' ? 'linear-gradient(90deg,#c62828,#ff6b6b)' : 'linear-gradient(90deg,#e65100,#f97316)', color: '#000', border: 'none', fontSize: 14, fontWeight: 800, letterSpacing: '.06em', cursor: 'pointer', boxShadow: signal.signal === 'BUY' ? '0 0 24px rgba(43,217,168,0.35)' : '0 0 24px rgba(249,115,22,0.35)' }}>
                     STEP 2: EXECUTE {signal.signal} TRADE
                   </button>
                 </a>
@@ -262,7 +262,7 @@ export default function AIAnalysisPage() {
           <div style={{ padding: 20 }}>
             <h3 style={{ fontSize: 15, fontWeight: 800, color: 'var(--text-primary)', textTransform: 'uppercase', letterSpacing: '-0.02em', marginBottom: 4 }}>Market Context</h3>
             <p style={{ fontSize: 11, color: 'var(--text-dim)', marginBottom: 18 }}>Real-time news for {asset}</p>
-            {error && <div style={{ background: 'rgba(244,63,94,0.08)', border: '1px solid rgba(244,63,94,0.25)', borderRadius: 10, padding: 12, color: '#fda4af', fontSize: 12, lineHeight: 1.5, marginBottom: 12 }}>{error}</div>}
+            {error && <div style={{ background: 'rgba(255,107,107,0.08)', border: '1px solid rgba(255,107,107,0.25)', borderRadius: 10, padding: 12, color: '#fda4af', fontSize: 12, lineHeight: 1.5, marginBottom: 12 }}>{error}</div>}
 
             {/* Sentiment Score — genuine signal-aware */}
             {signal && (() => {

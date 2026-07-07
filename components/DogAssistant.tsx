@@ -160,7 +160,7 @@ export default function DogAssistant() {
           {/* Header */}
           <div style={{ padding: '16px', background: 'linear-gradient(90deg, #f59e0b20, transparent)', borderBottom: '1px solid #222', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-               <div className="sync" style={{ width: 8, height: 8, borderRadius: '50%', background: '#00e676', boxShadow: '0 0 10px #00e676' }} />
+               <div className="sync" style={{ width: 8, height: 8, borderRadius: '50%', background: '#2bd9a8', boxShadow: '0 0 10px #2bd9a8' }} />
                <span style={{ fontSize: 11, fontWeight: 900, color: '#f59e0b', letterSpacing: '0.1em' }}>SODOGGY INTELLIGENCE</span>
             </div>
             <button onClick={() => setChatOpen(false)} style={{ background: 'transparent', border: 'none', color: '#555', cursor: 'pointer' }}><X size={18} /></button>
@@ -276,8 +276,8 @@ export default function DogAssistant() {
         }
         .wave-animation {
           animation: wave-animation 1s ease-in-out infinite;
-          border-color: #00e676 !important;
-          box-shadow: 0 0 40px rgba(0, 230, 118, 0.5) !important;
+          border-color: #2bd9a8 !important;
+          box-shadow: 0 0 40px rgba(43,217,168, 0.5) !important;
         }
       `}</style>
     </div>
