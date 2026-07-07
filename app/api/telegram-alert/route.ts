@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server';
 import { checkRateLimit, getClientKey } from '@/lib/rateLimit';
+import { isValidTelegramChatId } from '@/lib/telegram';
 
 const MAX_MESSAGE_LENGTH = 2000;
-const CHAT_ID_RE = /^-?\d{5,15}$/; // Telegram numeric chat/user IDs (groups are negative)
 
 export async function POST(req: Request) {
   try {
@@ -21,7 +21,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Telegram Bot Token not configured' }, { status: 500 });
     }
 
-    if (!chatId || typeof chatId !== 'string' || !CHAT_ID_RE.test(chatId.trim())) {
+    if (!isValidTelegramChatId(chatId)) {
       return NextResponse.json({ error: 'A valid numeric Telegram Chat ID is required' }, { status: 400 });
     }
 

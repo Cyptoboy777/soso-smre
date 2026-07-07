@@ -7,10 +7,8 @@ import { db } from '@/lib/firebase';
 import { CopyTradePanel } from '@/components/SodexMarket';
 import { useSodexStore } from '@/store/sodexStore';
 import { Search } from 'lucide-react';
+import type { Holding, Portfolio } from '@/types/portfolio';
 
-interface Holding { symbol: string; amount: number; avgBuyPrice: number; }
-interface Trade { id: string; symbol: string; type: 'BUY'|'SELL'; amount: number; price: number; total: number; timestamp: number; }
-interface Portfolio { usdc: number; holdings: Record<string,Holding>; trades: Trade[]; initialBalance: number; soPoints: number; }
 interface HoldingAnalytic extends Holding { currentPrice: number; currentValue: number; pnl: number; pnlPct: number; }
 interface Analytics { totalValue: number; holdingsValue: number; totalPnl: number; totalPnlPct: number; holdings: HoldingAnalytic[]; }
 

@@ -1,9 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { GET as getPrices } from '../prices/route';
-
-interface Holding { symbol: string; amount: number; avgBuyPrice: number; }
-interface Trade { id: string; symbol: string; type: 'BUY'|'SELL'; amount: number; price: number; total: number; timestamp: number; }
-interface Portfolio { usdc: number; holdings: Record<string,Holding>; trades: Trade[]; initialBalance: number; soPoints: number; }
+import type { Holding, Trade, Portfolio } from '@/types/portfolio';
 
 /**
  * Replay the trade log into cash + holdings instead of trusting the client-sent

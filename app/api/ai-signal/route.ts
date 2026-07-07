@@ -3,8 +3,7 @@ import { GoogleGenAI } from '@google/genai';
 import Groq from 'groq-sdk';
 import { GET as getPrices } from '../prices/route';
 import { checkRateLimit, getClientKey } from '@/lib/rateLimit';
-
-const CHAT_ID_RE = /^-?\d{5,15}$/;
+import { isValidTelegramChatId } from '@/lib/telegram';
 
 interface Body {
   token: string;
@@ -209,7 +208,7 @@ export async function POST(req: NextRequest) {
     }
 
     // SEND TELEGRAM ALERT IF A VALID CHAT ID WAS PROVIDED
-    if (body.chatId && CHAT_ID_RE.test(String(body.chatId).trim()) && process.env.TELEGRAM_BOT_TOKEN) {
+    if (isValidTelegramChatId(body.chatId) && process.env.TELEGRAM_BOT_TOKEN) {
       const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
       const msg = `🚀 <b>NEW AI SIGNAL</b>\n\n` +
                   `Asset: <b>${body.token.toUpperCase()}/USDT</b>\n` +
