@@ -1,6 +1,9 @@
 # Changelog
 
-## 2026-10-30 — SoDEX testnet live
+## 2026-10-30
+
+- Live preview MARKET buy orderID **1301914828** (IOC partial fill) via `/api/trade` + EIP-712; cancel path frees margin.
+ — SoDEX testnet live
 
 - Real EIP-712 testnet orders: 1301909841 FILLED, 1301909840 NEW (account 60539).
 - Diag `sodexTrade=true` / `TESTNET_LIVE_EIP712` when credentials present.

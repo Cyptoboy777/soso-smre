@@ -4,7 +4,7 @@ One-person AI fund desk: SoSoValue ETF flows, hot news and ssiMAG7 become a dail
 
 Live SoDEX testnet (not paper):
 - Account 60539 on testnet-gw.sodex.dev (chainId 138565)
-- Order 1301909841 FILLED (MARKET IOC buy, trade 9461764, 0.00005 vBTC @ 78619)
+- Order 1301914828 (preview), 1301909841 FILLED (MARKET IOC buy, trade 9461764, 0.00005 vBTC @ 78619)
 - Order 1301909840 NEW (LIMIT buy 0.001 @ 5000, resting)
 - Signing: SODEX_ACCOUNT_ID + SODEX_API_KEY_NAME=default + SODEX_API_KEY_PRIVATE_KEY (Preview branch flowsentinel-wave3). Mainnet hard-locked out. Server max notional 10 USDC.
 
