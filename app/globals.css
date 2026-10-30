@@ -450,15 +450,18 @@ button { font-family: inherit; }
   width: 100%;
   height: 100%;
   background: transparent !important;
+  -webkit-mask-image: radial-gradient(circle at 50% 48%, #000 46%, transparent 72%);
+  mask-image: radial-gradient(circle at 50% 48%, #000 46%, transparent 72%);
 }
 .hero-3d-poster {
   width: 100%;
   height: 100%;
   min-height: 240px;
   background:
-    radial-gradient(circle at 50% 45%, rgba(255, 118, 55, 0.55), transparent 58%),
+    radial-gradient(circle at 50% 45%, rgba(255, 118, 55, 0.42), transparent 62%),
     url('/brand/hero-poster.svg') center / contain no-repeat;
-  filter: drop-shadow(0 0 40px rgba(255, 79, 32, 0.35));
+  filter: drop-shadow(0 0 48px rgba(255, 79, 32, 0.4));
+  background-color: transparent !important;
 }
 .hero-steps {
   list-style: none;
@@ -529,16 +532,16 @@ button { font-family: inherit; }
   text-align: center;
 }
 .voice-mode-orb-wrap {
-  width: min(420px, 82vw);
-  height: min(420px, 48vh);
-  min-height: 260px;
-  margin-top: 28px;
-  margin-bottom: 8px;
+  width: min(440px, 84vw);
+  height: min(440px, 52vh);
+  min-height: 280px;
+  margin-top: 40px;
+  margin-bottom: 12px;
   display: grid;
   place-items: center;
   background: transparent !important;
   overflow: visible;
-  padding: 12px;
+  padding: 24px;
   box-sizing: border-box;
 }
 .voice-orb-canvas-host {
@@ -547,10 +550,22 @@ button { font-family: inherit; }
   background: transparent !important;
   border: none !important;
   box-shadow: none !important;
+  -webkit-mask-image: radial-gradient(circle at 50% 50%, #000 52%, transparent 72%);
+  mask-image: radial-gradient(circle at 50% 50%, #000 52%, transparent 72%);
 }
-.voice-orb-canvas-host canvas {
+/* v6 canvas alpha */
+.voice-orb-canvas-host canvas,
+.hero-3d-canvas canvas {
   background: transparent !important;
+  background-color: transparent !important;
   display: block;
+}
+.hero-3d-canvas,
+.voice-orb-canvas-host,
+.voice-mode-orb-wrap {
+  background: transparent !important;
+  background-color: transparent !important;
+  box-shadow: none !important;
 }
 .voice-orb-fallback {
   width: min(280px, 70%);

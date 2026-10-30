@@ -300,10 +300,12 @@ export function VoiceMode({
             {progress && progress.pct < 100 && (
               <div className="voice-progress" role="status">
                 <div className="voice-progress-bar">
-                  <div style={{ width: `${Math.max(progress.pct, 4)}%` }} />
+                  <div style={{ width: `${Math.max(12, Math.min(progress.pct, 96))}%` }} />
                 </div>
                 <span>
-                  {progress.label || 'Loading…'} · {Math.max(progress.pct, 1)}%
+                  {progress.pct < 8
+                    ? 'Preparing voice models…'
+                    : `${(progress.label || 'Loading…').replace(/Downloading (Whisper|Kokoro).*/, 'Preparing voice…')} · ${Math.max(progress.pct, 1)}%`}
                 </span>
               </div>
             )}

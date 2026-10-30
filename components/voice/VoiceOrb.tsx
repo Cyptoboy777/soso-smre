@@ -81,17 +81,20 @@ varying float vNoise;
 
 void main(){
   vec3 viewDir = normalize(cameraPosition - vWorldPos);
-  float fresnel = pow(1.0 - max(dot(viewDir, normalize(vNormal)), 0.0), 2.6);
-  float core = 0.35 + 0.25 * (vNoise * 0.5 + 0.5);
-  float pulse = 0.55 + uLevel * 0.9;
-  vec3 base = uColor * (core + pulse * 0.35);
-  vec3 rim = uColor * 1.35 + vec3(0.35, 0.12, 0.02);
-  vec3 col = mix(base, rim, fresnel * (0.75 + uGlow * 0.35));
-  // soft specular highlight
-  vec3 light = normalize(vec3(0.6, 0.8, 0.5));
-  float spec = pow(max(dot(reflect(-light, normalize(vNormal)), viewDir), 0.0), 28.0);
-  col += vec3(1.0, 0.85, 0.7) * spec * (0.35 + uLevel * 0.5);
-  float alpha = 0.92 + fresnel * 0.08;
+  vec3 N = normalize(vNormal);
+  float fresnel = pow(1.0 - max(dot(viewDir, N), 0.0), 2.2);
+  float core = 0.42 + 0.22 * (vNoise * 0.5 + 0.5);
+  float pulse = 0.6 + uLevel * 1.05;
+  vec3 base = uColor * (core + pulse * 0.4);
+  vec3 rim = uColor * 1.55 + vec3(0.55, 0.22, 0.05);
+  vec3 col = mix(base, rim, fresnel * (0.85 + uGlow * 0.4));
+  vec3 light = normalize(vec3(0.55, 0.85, 0.45));
+  float diff = max(dot(N, light), 0.0);
+  col += uColor * diff * 0.35;
+  float spec = pow(max(dot(reflect(-light, N), viewDir), 0.0), 42.0);
+  col += vec3(1.0, 0.92, 0.82) * spec * (0.55 + uLevel * 0.7);
+  // keep sphere body opaque-ish so it reads as a solid glossy ball; rim softens edge
+  float alpha = mix(0.98, 0.55, fresnel * 0.35);
   gl_FragColor = vec4(col, alpha);
 }
 `;
@@ -174,7 +177,7 @@ function OrbMesh({
         <meshBasicMaterial color="#FF4F20" transparent opacity={0.15} depthWrite={false} />
       </mesh>
       {/* soft outer haze — keeps bloom look without EffectComposer opaque clear */}
-      <mesh scale={1.7}>
+      <mesh scale={1.35}>
         <sphereGeometry args={[1.05, 32, 32]} />
         <meshBasicMaterial color="#FF7637" transparent opacity={0.08} depthWrite={false} blending={THREE.AdditiveBlending} />
       </mesh>
@@ -200,17 +203,21 @@ export function VoiceOrb({
     <div className="voice-orb-canvas-host" aria-hidden>
       <Canvas
         dpr={[1, 1.75]}
-        camera={{ position: [0, 0, 4.2], fov: 38 }}
+        camera={{ position: [0, 0, 5.4], fov: 35 }}
         gl={{
           antialias: true,
           alpha: true,
-          premultipliedAlpha: false,
+          premultipliedAlpha: true,
           powerPreference: 'high-performance',
         }}
         onCreated={({ gl }) => {
           gl.setClearColor(0x000000, 0);
+          gl.setClearAlpha(0);
+          const el = gl.domElement;
+          el.style.background = 'transparent';
+          el.style.backgroundColor = 'transparent';
         }}
-        style={{ background: 'transparent', width: '100%', height: '100%' }}
+        style={{ background: 'transparent', backgroundColor: 'transparent', width: '100%', height: '100%' }}
       >
         <ambientLight intensity={0.55} />
         <pointLight position={[3.5, 2.5, 4]} intensity={1.4} color="#FF7637" />

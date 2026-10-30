@@ -62,7 +62,7 @@ function CoreOrb() {
         <meshStandardMaterial
           color="#FF4F20"
           emissive="#FF4F20"
-          emissiveIntensity={1.1}
+          emissiveIntensity={1.55}
           metalness={0.55}
           roughness={0.2}
           wireframe
@@ -73,16 +73,16 @@ function CoreOrb() {
         <meshStandardMaterial
           color="#FF7637"
           emissive="#FF4F20"
-          emissiveIntensity={0.65}
+          emissiveIntensity={0.95}
           metalness={0.3}
           roughness={0.35}
           transparent
-          opacity={0.35}
+          opacity={0.45}
         />
       </mesh>
       <mesh ref={glow} scale={1.2}>
         <sphereGeometry args={[1.15, 32, 32]} />
-        <meshBasicMaterial color="#FF4F20" transparent opacity={0.18} depthWrite={false} />
+        <meshBasicMaterial color="#FF4F20" transparent opacity={0.28} depthWrite={false} />
       </mesh>
     </group>
   );
@@ -108,10 +108,14 @@ export function HeroScene({ reduceMotion }: { reduceMotion?: boolean }) {
       {visible ? (
         <Canvas
           dpr={[1, 1.5]}
-          camera={{ position: [0, 0.15, 4.2], fov: 42 }}
-          gl={{ antialias: true, alpha: true, powerPreference: 'high-performance' }}
-          onCreated={({ gl }) => gl.setClearColor(0x000000, 0)}
-          style={{ background: 'transparent' }}
+          camera={{ position: [0, 0.15, 4.6], fov: 40 }}
+          gl={{ antialias: true, alpha: true, premultipliedAlpha: true, powerPreference: 'high-performance' }}
+          onCreated={({ gl }) => {
+            gl.setClearColor(0x000000, 0);
+            gl.setClearAlpha(0);
+            gl.domElement.style.background = 'transparent';
+          }}
+          style={{ background: 'transparent', backgroundColor: 'transparent' }}
         >
           <ambientLight intensity={0.55} />
           <pointLight position={[3, 2, 4]} intensity={1.6} color="#FF7637" />
