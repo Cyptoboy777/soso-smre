@@ -69,5 +69,18 @@ export function DeskBelowFold() {
     };
   }, []);
 
-  return <div ref={ref}>{ready ? <DeskClient /> : null}</div>;
+  return (
+    <div ref={ref}>
+      {ready ? (
+        <DeskClient />
+      ) : (
+        <section className="panel" style={{ marginTop: 24, padding: 28, minHeight: 280 }} aria-busy>
+          <p className="muted" style={{ margin: 0 }}>
+            Loading live desk…
+          </p>
+          <div className="skeleton" style={{ height: 160, marginTop: 16 }} aria-hidden />
+        </section>
+      )}
+    </div>
+  );
 }
