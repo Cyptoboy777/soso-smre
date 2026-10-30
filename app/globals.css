@@ -501,7 +501,7 @@ button { font-family: inherit; }
   position: fixed;
   inset: 0;
   z-index: 80;
-  background: radial-gradient(ellipse at 50% 42%, #120c0a 0%, #0A0A0A 50%, #050505 100%);
+  background: #050505;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -563,7 +563,9 @@ button { font-family: inherit; }
 }
 /* v6 canvas alpha */
 .voice-orb-canvas-host canvas,
-.hero-3d-canvas canvas {
+.hero-3d-canvas canvas,
+.voice-orb-canvas-host > div,
+.hero-3d-canvas > div {
   background: transparent !important;
   background-color: transparent !important;
   display: block;

@@ -210,7 +210,7 @@ export function VoiceOrb({
     );
   }
   return (
-    <div className="voice-orb-canvas-host" aria-hidden>
+    <div className="voice-orb-canvas-host" aria-hidden style={{ background: 'transparent' }}>
       <Canvas
         dpr={[1, 1.75]}
         camera={{ position: [0, 0, 5.4], fov: 35 }}
