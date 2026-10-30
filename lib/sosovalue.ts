@@ -69,25 +69,31 @@ function mapEtfRows(rows: Array<Record<string, unknown>>): EtfFlowDay[] {
 
 /** Deterministic illustrative fallback — NEVER presented as live. */
 function fallbackEtf(symbol: 'BTC' | 'ETH'): EtfPanel {
-  const seed = symbol === 'BTC' ? 1 : -1;
-  const history: EtfFlowDay[] = Array.from({ length: 7 }, (_, i) => {
+  // Deterministic, realistic-looking sample for demos — always labelled Fallback.
+  const series =
+    symbol === 'BTC'
+      ? [182.4, -94.2, 241.8, 67.5, -31.1, 312.0, 148.6]
+      : [41.2, -28.7, 55.4, 12.8, -19.3, 63.1, 22.5];
+  const history: EtfFlowDay[] = series.map((m, i) => {
     const d = new Date();
-    d.setUTCDate(d.getUTCDate() - i - 1);
-    const inflow = seed * (40_000_000 + i * 5_000_000) * (i % 2 === 0 ? 1 : -0.6);
+    d.setUTCDate(d.getUTCDate() - (series.length - i));
+    // skip weekends for realism
+    while (d.getUTCDay() === 0 || d.getUTCDay() === 6) d.setUTCDate(d.getUTCDate() - 1);
+    const inflow = m * 1_000_000;
     return {
       date: d.toISOString().slice(0, 10),
       totalNetInflow: inflow,
-      totalValueTraded: 2_000_000_000 + i * 100_000_000,
-      totalNetAssets: symbol === 'BTC' ? 55_000_000_000 : 8_000_000_000,
-      cumNetInflow: 12_000_000_000 + inflow,
+      totalValueTraded: (symbol === 'BTC' ? 4.2 : 1.1) * 1e9 + Math.abs(m) * 8e6,
+      totalNetAssets: symbol === 'BTC' ? 98.4e9 : 12.6e9,
+      cumNetInflow: (symbol === 'BTC' ? 42.1e9 : 6.8e9) + inflow,
     };
-  });
+  }).reverse();
   return {
     symbol,
     country: 'US',
     latest: history[0] ?? null,
     history,
-    meta: meta('fallback', '/etfs/summary-history', 'Illustrative sample — set SOSOVALUE_API_KEY for live ETF flows'),
+    meta: meta('fallback', '/etfs/summary-history', 'Labelled sample — set SOSOVALUE_API_KEY for live ETF flows'),
   };
 }
 
@@ -136,7 +142,7 @@ function fallbackNews(): NewsPanel {
         id: 'fb-1',
         title: '[Fallback] Spot BTC ETF flows in focus ahead of weekly close',
         url: 'https://sosovalue.com',
-        summary: 'Illustrative headline for demo when SOSOVALUE_API_KEY is unset.',
+        summary: 'Labelled sample: Spot BTC ETF books mixed prints into week-end (not live).',
         publishedAt: new Date().toISOString(),
         isShock: false,
       },
@@ -144,13 +150,13 @@ function fallbackNews(): NewsPanel {
         id: 'fb-2',
         title: '[Fallback] ETH staking yields steady as L2 activity cools',
         url: 'https://sosovalue.com',
-        summary: 'Illustrative headline — not live SoSoValue news.',
+        summary: 'Labelled sample: ETH staking yields steady as L2 fees cool (not live).',
         publishedAt: new Date(Date.now() - 3_600_000).toISOString(),
         isShock: false,
       },
     ],
     shockActive: false,
-    meta: meta('fallback', '/news/hot', 'Illustrative sample — set SOSOVALUE_API_KEY for live hot news'),
+    meta: meta('fallback', '/news/hot', 'Labelled sample — set SOSOVALUE_API_KEY for live hot news'),
   };
 }
 
@@ -206,7 +212,7 @@ function fallbackSsi(): SsiPanel {
     price: 21.4,
     changePct24h: 0.0042,
     roi7d: 0.018,
-    meta: meta('fallback', '/indices/ssimag7/market-snapshot', 'Illustrative sample — set SOSOVALUE_API_KEY for live SSI'),
+    meta: meta('fallback', '/indices/ssimag7/market-snapshot', 'Labelled sample — set SOSOVALUE_API_KEY for live SSI'),
   };
 }
 

@@ -186,7 +186,7 @@ export function VoiceAssistant({
   };
 
   return (
-    <section className="panel" aria-label="Voice assistant">
+    <section className="panel panel-interactive" aria-label="Voice assistant">
       <div className="panel-head">
         <div>
           <strong style={{ fontWeight: 560 }}>Voice desk</strong>
@@ -194,28 +194,19 @@ export function VoiceAssistant({
             Free Web Speech · never orders by voice
           </span>
         </div>
-        <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
-          <span style={{ color: 'var(--text-muted)' }}>Language</span>
-          <select
-            value={lang}
-            onChange={(e) => setLang(e.target.value as VoiceLang)}
-            style={{
-              background: 'var(--surface-2)',
-              color: 'var(--text)',
-              border: '1px solid var(--line)',
-              borderRadius: 10,
-              padding: '8px 10px',
-              fontSize: 14,
-              minHeight: 40,
-            }}
-          >
-            {VOICE_LANGS.map((l) => (
-              <option key={l.id} value={l.id}>
-                {l.label}
-              </option>
-            ))}
-          </select>
-        </label>
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end', maxWidth: 420 }}>
+          {VOICE_LANGS.map((l) => (
+            <button
+              key={l.id}
+              type="button"
+              className="lang-chip"
+              data-active={lang === l.id ? 'true' : 'false'}
+              onClick={() => setLang(l.id)}
+            >
+              {l.label}
+            </button>
+          ))}
+        </div>
       </div>
       <div className="panel-body" style={{ display: 'grid', gap: 14 }}>
         {!supported && (
@@ -295,23 +286,23 @@ export function VoiceAssistant({
             {listening ? '■' : '🎤'}
           </button>
 
-          <div
-            aria-hidden
-            style={{ display: 'flex', alignItems: 'end', gap: 3, height: 36, width: 88 }}
-          >
-            {Array.from({ length: 9 }).map((_, i) => {
+          <div className="voice-wave" aria-hidden>
+            {Array.from({ length: 12 }).map((_, i) => {
+              const phase = (i / 12) * Math.PI * 2;
               const h = listening
-                ? 6 + ((level * (0.4 + (i % 5) * 0.15)) % 1) * 30
-                : 6;
+                ? 8 + Math.abs(Math.sin(phase + level * 8)) * 28 * (0.55 + level * 0.45)
+                : 6 + (i % 3);
               return (
                 <div
                   key={i}
                   style={{
                     flex: 1,
                     height: h,
-                    borderRadius: 2,
-                    background: listening ? 'var(--accent)' : 'var(--surface-3)',
-                    transition: reduce ? undefined : 'height 80ms linear',
+                    borderRadius: 3,
+                    background: listening
+                      ? 'linear-gradient(180deg, #FF7637, #FF4F20)'
+                      : 'var(--surface-3)',
+                    transition: reduce ? undefined : 'height 70ms linear',
                   }}
                 />
               );

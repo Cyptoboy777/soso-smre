@@ -4,8 +4,9 @@ export default function DemoPage() {
   return (
     <div style={{ maxWidth: 720, display: 'grid', gap: 24 }}>
       <header>
-        <h1 style={{ margin: '0 0 8px', fontSize: 'clamp(1.8rem, 4vw, 2.5rem)', letterSpacing: '-0.035em' }}>
-          Judge path — 3 clicks
+        <p className="hero-kicker">Three clicks</p>
+        <h1 style={{ margin: '0 0 8px', fontSize: 'clamp(1.8rem, 4vw, 2.5rem)', letterSpacing: '-0.04em' }}>
+          Judge path
         </h1>
         <p style={{ margin: 0, color: 'var(--text-muted)' }}>
           No wallet. No login. Works with or without API keys (fallback panels are labelled).

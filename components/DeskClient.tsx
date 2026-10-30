@@ -7,6 +7,7 @@ import { LiveBadge } from './LiveBadge';
 import { FlowRadar } from './FlowRadar';
 import { CountUp } from './CountUp';
 import { VoiceAssistant } from './VoiceAssistant';
+import { EtfFlowChart } from './EtfFlowChart';
 
 type DeskPayload = DeskSnapshot & {
   keys: { sosovalue: boolean; gemini: boolean; sodex: boolean };
@@ -128,20 +129,10 @@ export function DeskClient() {
 
   return (
     <div style={{ display: 'grid', gap: 20 }}>
-      <div className="desk-intro">
-        <div>
-          <p className="hero-kicker">One-person fund desk</p>
-          <h1>Today&apos;s insight → confirmed action</h1>
-          <p>
-            SoSoValue flows and news become a plain-English thesis, a risk gate, and a confirmed SoDEX
-            testnet order. Fallback panels are always labelled.
-          </p>
-        </div>
-      </div>
 
-      {/* Hero */}
+      {/* Thesis hero */}
       <motion.section
-        className="panel desk-hero"
+        className="panel desk-hero glass-hero"
         variants={reduce ? undefined : fadeUp}
         initial={reduce ? false : 'hidden'}
         animate="show"
@@ -230,7 +221,7 @@ export function DeskClient() {
           ) : (
             <>
               <BigFlow value={btcFlow} hint={`Latest ${etfBtc.latest?.date ?? '—'}`} />
-              <MiniBars history={etfBtc.history.slice(0, 7).reverse()} />
+              <EtfFlowChart history={etfBtc.history.slice(0, 14)} height={128} />
             </>
           )}
         </DataCard>
@@ -243,7 +234,7 @@ export function DeskClient() {
           ) : (
             <>
               <BigFlow value={ethFlow} hint={`Latest ${etfEth.latest?.date ?? '—'}`} />
-              <MiniBars history={etfEth.history.slice(0, 7).reverse()} />
+              <EtfFlowChart history={etfEth.history.slice(0, 14)} height={128} />
             </>
           )}
         </DataCard>
@@ -509,30 +500,6 @@ function BigFlow({ value, hint }: { value: number; hint?: string }) {
   );
 }
 
-function MiniBars({ history }: { history: { totalNetInflow: number }[] }) {
-  if (!history.length) return null;
-  const max = Math.max(...history.map((h) => Math.abs(h.totalNetInflow)), 1);
-  return (
-    <div style={{ display: 'flex', alignItems: 'end', gap: 4, height: 36, marginTop: 14 }} aria-hidden>
-      {history.map((h, i) => {
-        const hgt = Math.max(4, (Math.abs(h.totalNetInflow) / max) * 36);
-        const up = h.totalNetInflow >= 0;
-        return (
-          <div
-            key={i}
-            style={{
-              flex: 1,
-              height: hgt,
-              borderRadius: 3,
-              background: up ? 'rgba(30,168,88,0.7)' : 'rgba(242,66,55,0.7)',
-              transition: 'height 400ms var(--ease-out)',
-            }}
-          />
-        );
-      })}
-    </div>
-  );
-}
 
 function EmptyPanel({ title, body }: { title: string; body: string }) {
   return (

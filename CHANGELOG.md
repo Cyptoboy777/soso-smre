@@ -11,6 +11,7 @@ Rebuild as **FlowSentinel** — cut feature sprawl and ship a single insight→a
 - Mock data presented as live when keys were missing
 
 ### Added
+- Award-level hero (animated mark, flow-field, Data→Thesis→Risk→Order steps), ETF history charts (recharts), glass cards, track-record hit-rate ring + timeline, voice language chips
 - Premium polish: animated FlowRadar, CountUp metrics, staggered panels, refined logo/favicon, empty/fallback states
 - Multilingual **Voice desk** (Web Speech STT/TTS): thesis / risk / flows / news Q&A; never places orders by voice
 
