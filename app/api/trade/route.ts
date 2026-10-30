@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import {
   placeLimitOrder,
+  placeMarketBuyFunds,
   querySpotOrder,
   hasSodexCredentials,
   SODEX_MAX_NOTIONAL_USDC,
@@ -17,6 +18,9 @@ export async function POST(req: Request) {
     news: NewsPanel;
     confirmed: boolean;
     quantity?: number;
+    /** When true, place a tiny MARKET buy using quote funds (capped). */
+    marketBuy?: boolean;
+    fundsUsdc?: number;
   };
 
   if (!body.thesis || !body.news) {
@@ -48,14 +52,24 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Invalid quantity after risk / notional caps' }, { status: 400 });
   }
 
-  const order = await placeLimitOrder({
-    thesisId: body.thesis.id,
-    symbol: body.thesis.symbol,
-    side,
-    price,
-    quantity,
-    confirmed: true,
-  });
+  const order = body.marketBuy
+    ? await placeMarketBuyFunds({
+        symbol: body.thesis.symbol,
+        fundsUsdc: Math.min(
+          body.fundsUsdc && body.fundsUsdc > 0 ? body.fundsUsdc : Math.min(notional, SODEX_MAX_NOTIONAL_USDC),
+          SODEX_MAX_NOTIONAL_USDC,
+        ),
+        thesisId: body.thesis.id,
+        confirmed: true,
+      })
+    : await placeLimitOrder({
+        thesisId: body.thesis.id,
+        symbol: body.thesis.symbol,
+        side,
+        price,
+        quantity,
+        confirmed: true,
+      });
 
   let row: { id: string } | null = null;
   try {

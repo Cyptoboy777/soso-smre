@@ -121,6 +121,8 @@ export interface OrderResult {
   quantity: number;
   submittedAt: string;
   note: string;
+  raw?: unknown;
+  clientOrderId?: string;
 }
 
 export type OutcomeStatus = 'open' | 'hit_tp' | 'hit_sl' | 'expired' | 'cancelled';

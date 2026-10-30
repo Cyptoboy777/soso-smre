@@ -465,20 +465,27 @@ export async function placeOrder(
         env,
       };
     }
-    const data = envelope.data as
-      | { orderId?: string | number; orderID?: string | number; status?: string }
-      | Array<{ orderId?: string | number; orderID?: string | number }>
-      | undefined;
-    const first = Array.isArray(data) ? data[0] : data;
-    const orderId = String(
-      first?.orderId ?? first?.orderID ?? clientOrderId,
-    );
+    const data = envelope.data as unknown;
+    const dig = (node: unknown): { id?: string; status?: string } => {
+      if (!node) return {};
+      if (Array.isArray(node)) return dig(node[0]);
+      if (typeof node === "object") {
+        const o = node as Record<string, unknown>;
+        const nested = o.orders ?? o.order ?? o.result ?? o.items;
+        const id = o.orderID ?? o.orderId ?? o.id;
+        if (id != null && id !== "") return { id: String(id), status: String(o.status ?? "submitted") };
+        if (nested) return dig(nested);
+      }
+      return {};
+    };
+    const found = dig(data);
+    const orderId = found.id ?? clientOrderId;
     return {
       ok: true,
       dryRun: false,
       orderId,
       clientOrderId,
-      status: (first as { status?: string } | undefined)?.status ?? "submitted",
+      status: found.status ?? "submitted",
       raw,
       env,
     };
@@ -594,6 +601,66 @@ export async function placeLimitOrder(req: OrderRequest): Promise<OrderResult> {
           ? result.note
           : "DRY-RUN — no SoDEX testnet credentials; nothing submitted.")
       : `Submitted to SoDEX testnet (chainId ${SODEX_TESTNET.chainId}).`,
+    raw: "raw" in result ? result.raw : undefined,
+    clientOrderId: "clientOrderId" in result ? result.clientOrderId : undefined,
+  };
+}
+
+/** Tiny market buy using quote funds (USDC). Prefer for reliable testnet fills. */
+export async function placeMarketBuyFunds(opts: {
+  symbol: string;
+  fundsUsdc: number;
+  thesisId: string;
+  confirmed: boolean;
+}): Promise<OrderResult> {
+  if (!opts.confirmed) {
+    return {
+      mode: "dry-run",
+      orderId: `blocked-${Date.now()}`,
+      status: "rejected",
+      symbol: opts.symbol,
+      side: "BUY",
+      price: 0,
+      quantity: opts.fundsUsdc,
+      submittedAt: new Date().toISOString(),
+      note: "Order not confirmed — DRY-RUN only; nothing submitted.",
+    };
+  }
+  const funds = Math.min(Math.max(opts.fundsUsdc, 1), SODEX_MAX_NOTIONAL_USDC);
+  const result = await placeOrder({
+    symbol: opts.symbol,
+    side: "buy",
+    type: "market",
+    quantity: String(funds),
+    clientOrderId: `fs-mkt-${Date.now().toString(36)}`.slice(0, 36),
+  });
+  if (!result.ok) {
+    return {
+      mode: "dry-run",
+      orderId: `err-${Date.now()}`,
+      status: "error",
+      symbol: opts.symbol,
+      side: "BUY",
+      price: 0,
+      quantity: funds,
+      submittedAt: new Date().toISOString(),
+      note: `DRY-RUN / blocked: ${result.error}`,
+    };
+  }
+  return {
+    mode: result.dryRun ? "dry-run" : "live",
+    orderId: result.orderId,
+    status: result.status,
+    symbol: opts.symbol,
+    side: "BUY",
+    price: 0,
+    quantity: funds,
+    submittedAt: new Date().toISOString(),
+    note: result.dryRun
+      ? ("note" in result ? result.note : "DRY-RUN")
+      : `Market buy submitted on SoDEX testnet (funds ${funds} USDC).`,
+    raw: "raw" in result ? result.raw : undefined,
+    clientOrderId: "clientOrderId" in result ? result.clientOrderId : undefined,
   };
 }
 
