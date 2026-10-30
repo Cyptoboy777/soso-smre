@@ -1,4 +1,4 @@
-/** In-memory token bucket per IP/route — soft guard for SoSoValue 20/min. */
+/** In-memory token bucket per IP/route - soft guard for SoSoValue 20/min. */
 type Bucket = { tokens: number; updated: number };
 
 const buckets = new Map<string, Bucket>();

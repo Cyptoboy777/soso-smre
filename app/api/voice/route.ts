@@ -10,7 +10,7 @@ export async function POST(req: Request) {
   const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'anon';
   const rl = rateLimit(`voice:${ip}`, 20, 60_000);
   if (!rl.ok) {
-    return NextResponse.json({ error: 'Rate limit — Too many voice requests' }, { status: 429 });
+    return NextResponse.json({ error: 'Rate limit: Too many voice requests' }, { status: 429 });
   }
   const body = (await req.json()) as {
     question?: string;

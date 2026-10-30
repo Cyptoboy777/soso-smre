@@ -3,7 +3,7 @@
  * Base: https://openapi.sosovalue.com/openapi/v1
  * Auth header: x-soso-api-key
  * Docs: https://sosovalue-1.gitbook.io/sosovalue-api-doc
- * Rate limit ~20 calls/min — Next.js fetch revalidate=300s caches responses.
+ * Rate limit ~20 calls/min - Next.js fetch revalidate=300s caches responses.
  */
 import type {
   EtfFlowDay,
@@ -68,9 +68,9 @@ function mapEtfRows(rows: Array<Record<string, unknown>>): EtfFlowDay[] {
   }));
 }
 
-/** Deterministic illustrative fallback — NEVER presented as live. */
+/** Deterministic illustrative fallback - NEVER presented as live. */
 function fallbackEtf(symbol: 'BTC' | 'ETH'): EtfPanel {
-  // Deterministic, realistic-looking sample for demos — always labelled Fallback.
+  // Deterministic, realistic-looking sample for demos - always labelled Fallback.
   const series =
     symbol === 'BTC'
       ? [182.4, -94.2, 241.8, 67.5, -31.1, 312.0, 148.6]
@@ -94,7 +94,7 @@ function fallbackEtf(symbol: 'BTC' | 'ETH'): EtfPanel {
     country: 'US',
     latest: history[0] ?? null,
     history,
-    meta: meta('fallback', '/etfs/summary-history', 'Labelled sample — set SOSOVALUE_API_KEY for live ETF flows'),
+    meta: meta('fallback', '/etfs/summary-history', 'Labelled sample. Set SOSOVALUE_API_KEY for live ETF flows'),
   };
 }
 
@@ -119,7 +119,7 @@ export async function fetchEtfFlows(symbol: 'BTC' | 'ETH'): Promise<EtfPanel> {
 
   if (!raw.length) {
     const fb = fallbackEtf(symbol);
-    fb.meta.note = 'Live response empty — labelled fallback.';
+    fb.meta.note = 'Live response empty. Labelled fallback.';
     return fb;
   }
 
@@ -157,7 +157,7 @@ function fallbackNews(): NewsPanel {
       },
     ],
     shockActive: false,
-    meta: meta('fallback', '/news/hot', 'Labelled sample — set SOSOVALUE_API_KEY for live hot news'),
+    meta: meta('fallback', '/news/hot', 'Labelled sample. Set SOSOVALUE_API_KEY for live hot news'),
   };
 }
 
@@ -182,7 +182,7 @@ export async function fetchHotNews(): Promise<NewsPanel> {
   const list = result.data.list ?? [];
   if (!list.length) {
     const fb = fallbackNews();
-    fb.meta.note = 'Live response empty — labelled fallback.';
+    fb.meta.note = 'Live response empty. Labelled fallback.';
     return fb;
   }
 
@@ -213,7 +213,7 @@ function fallbackSsi(): SsiPanel {
     price: 21.4,
     changePct24h: 0.0042,
     roi7d: 0.018,
-    meta: meta('fallback', '/indices/ssimag7/market-snapshot', 'Labelled sample — set SOSOVALUE_API_KEY for live SSI'),
+    meta: meta('fallback', '/indices/ssimag7/market-snapshot', 'Labelled sample. Set SOSOVALUE_API_KEY for live SSI'),
   };
 }
 

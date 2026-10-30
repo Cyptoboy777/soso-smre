@@ -30,7 +30,7 @@ export function HeroLanding() {
       (navigator as Navigator & { hardwareConcurrency?: number }).hardwareConcurrency != null &&
       (navigator.hardwareConcurrency as number) <= 4;
     const saveData = Boolean((navigator as Navigator & { connection?: { saveData?: boolean } }).connection?.saveData);
-    // Mobile / low-end: keep static poster only — biggest TBT win
+    // Mobile / low-end: keep static poster only - biggest TBT win
     if (reduce || narrow || lowEnd || saveData) {
       setFlowOk(false);
       return;
@@ -91,7 +91,7 @@ export function HeroLanding() {
             transition={{ delay: 0.18, duration: 0.5 }}
           >
             A one-person fund desk: SoSoValue data becomes a daily thesis, a risk check you can read, and a
-            confirmed SoDEX testnet order — with an honest public track record.
+            confirmed SoDEX testnet order, with an honest public track record.
           </motion.p>
           <motion.div
             className="hero-cta-row"

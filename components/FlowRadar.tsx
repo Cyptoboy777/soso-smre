@@ -64,7 +64,7 @@ export function FlowRadar({
           transition={reduce ? { duration: 0 } : { duration: 0.85, ease: [0.16, 1, 0.3, 1] }}
         />
 
-        {/* Slow sweep ring — pauses under reduced motion */}
+        {/* Slow sweep ring - pauses under reduced motion */}
         {!reduce && (
           <motion.g
             style={{ originX: '80px', originY: '80px' }}

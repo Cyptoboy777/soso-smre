@@ -149,7 +149,7 @@ export async function ensureVoiceModels(
         for (let i = 0; i < audio.length; i += step) energy += Math.abs(audio[i]);
         if (energy > 0.01) ttsCap = 'kokoro';
         else {
-          console.warn('[voice] Kokoro probe silent — falling back');
+          console.warn('[voice] Kokoro probe silent - falling back');
           kokoroInstance = null;
         }
       } else {
@@ -347,7 +347,7 @@ function speakWebSpeech(text: string, lang: string, onLevel?: (n: number) => voi
   });
 }
 
-/** Friendly speak — never throws engine jargon. Returns engine used or null if silent skip. */
+/** Friendly speak - never throws engine jargon. Returns engine used or null if silent skip. */
 export async function speakText(opts: {
   text: string;
   lang: VoiceLang;
@@ -492,7 +492,7 @@ export function friendlyVoiceMessage(err: unknown): string {
     return 'Local voice models are still warming up. You can type a question anytime.';
   }
   if (t.includes('network') || t.includes('fetch') || t.includes('cdn') || t.includes('cors')) {
-    return 'Could not download voice models yet. Check your connection — typing still works.';
+    return 'Could not download voice models yet. Check your connection. Typing still works.';
   }
   // Never surface raw engine text
   return 'Something went wrong with voice. Typing still works, and voice never places orders.';

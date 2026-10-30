@@ -112,9 +112,9 @@ JSON shape:
     };
   } catch (e) {
     if (e instanceof GeminiRateLimitError) {
-      console.warn('[thesis] Gemini rate-limited — rules fallback');
+      console.warn('[thesis] Gemini rate-limited - rules fallback');
     } else {
-      console.warn('[thesis] Gemini unavailable — rules fallback');
+      console.warn('[thesis] Gemini unavailable - rules fallback');
     }
     return fallback;
   }

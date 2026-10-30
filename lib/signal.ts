@@ -1,6 +1,6 @@
 /**
  * Deterministic rule-based thesis engine (fallback when GEMINI_API_KEY is absent).
- * Pure functions — unit-tested.
+ * Pure functions - unit-tested.
  */
 import type {
   EtfPanel,

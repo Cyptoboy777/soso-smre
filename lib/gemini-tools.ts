@@ -1,6 +1,6 @@
 /**
  * Server-only Jarvis tools for Gemini function calling.
- * buildOrderTicket never places — ticket draft only.
+ * buildOrderTicket never places - ticket draft only.
  */
 import { fetchEtfFlows, fetchHotNews, fetchSsiSnapshot } from '@/lib/sosovalue';
 import { fetchOrderBook, fetchTicker } from '@/lib/sodex-market';

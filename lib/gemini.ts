@@ -162,7 +162,7 @@ export async function geminiGroundedBrief(opts: {
     if (opts.cacheKey) cacheSet(opts.cacheKey, JSON.stringify(out));
     return out;
   } catch (e) {
-    // Free tier may reject googleSearch — fall through to plain generate
+    // Free tier may reject googleSearch - fall through to plain generate
     const msg = e instanceof Error ? e.message : String(e);
     if (/429|rate|quota|RESOURCE_EXHAUSTED/i.test(msg)) throw new GeminiRateLimitError(msg.slice(0, 120));
     const text = await geminiGenerate({

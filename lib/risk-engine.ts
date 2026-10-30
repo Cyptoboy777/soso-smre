@@ -1,7 +1,7 @@
 /**
  * Deterministic risk gate for FlowSentinel.
  * Inspired by sodex-grok-trader risk engine ideas (sizing, drawdown, news pause)
- * but rewritten in TypeScript for the Next.js desk — no Python dependency.
+ * but rewritten in TypeScript for the Next.js desk - no Python dependency.
  */
 import type { NewsPanel, RiskCheck, RiskDecision, Thesis } from '@/types/flow';
 
@@ -41,7 +41,7 @@ export function evaluateRisk(
     id: 'direction',
     label: 'Directional thesis',
     passed: notFlat,
-    detail: notFlat ? `${thesis.side} on ${thesis.symbol}` : 'Thesis is FLAT — no order',
+    detail: notFlat ? `${thesis.side} on ${thesis.symbol}` : 'Thesis is FLAT; no order',
   });
 
   // 2. Confidence floor
@@ -108,7 +108,7 @@ export function evaluateRisk(
     passed: newsOk,
     detail: newsOk
       ? 'No blocking shock headlines'
-      : 'Shock headline detected — new entries paused',
+      : 'Shock headline detected; new entries paused',
   });
 
   // Position sizing from risk budget
@@ -134,7 +134,7 @@ export function evaluateRisk(
     passed: sizeOk,
     detail: sizeOk
       ? `${positionSize.toPrecision(4)} @ $${entry.toLocaleString()} (risk $${riskUsd.toFixed(2)})`
-      : 'Unable to size — check geometry',
+      : 'Unable to size; check geometry',
   });
 
   const approved = checks.every((c) => c.passed);

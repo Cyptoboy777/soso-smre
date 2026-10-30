@@ -36,7 +36,7 @@ function fmtUsd(n: number | null | undefined) {
 }
 
 function fmtPctFraction(n: number | null) {
-  if (n == null) return '—';
+  if (n == null) return '-';
   return `${n >= 0 ? '+' : ''}${(n * 100).toFixed(2)}%`;
 }
 
@@ -272,7 +272,7 @@ export function DeskClient() {
             />
           ) : (
             <>
-              <BigFlow value={btcFlow} hint={`Latest ${etfBtc.latest?.date ?? '—'}`} />
+              <BigFlow value={btcFlow} hint={`Latest ${etfBtc.latest?.date ?? '-'}`} />
               <EtfFlowChart history={etfBtc.history.slice(0, 14)} height={128} />
             </>
           )}
@@ -285,7 +285,7 @@ export function DeskClient() {
             />
           ) : (
             <>
-              <BigFlow value={ethFlow} hint={`Latest ${etfEth.latest?.date ?? '—'}`} />
+              <BigFlow value={ethFlow} hint={`Latest ${etfEth.latest?.date ?? '-'}`} />
               <EtfFlowChart history={etfEth.history.slice(0, 14)} height={128} />
             </>
           )}
@@ -397,7 +397,7 @@ export function DeskClient() {
         <div style={{ borderLeft: '1px solid var(--line)', padding: 24, background: 'rgba(255,79,32,0.035)' }}>
           <h2 style={{ margin: '0 0 8px', fontSize: 18, letterSpacing: '-0.02em' }}>Confirm & execute</h2>
           <p style={{ margin: '0 0 16px', color: 'var(--text-muted)', fontSize: 13 }}>
-            Limit {thesis.side === 'SHORT' ? 'SELL' : 'BUY'} {risk.positionSize || '—'} {thesis.symbol} @ $
+            Limit {thesis.side === 'SHORT' ? 'SELL' : 'BUY'} {risk.positionSize || '-'} {thesis.symbol} @ $
             {thesis.entry.toLocaleString()}
             <br />
             Risk ${risk.riskUsd} ({risk.riskPct}% of ${risk.equityUsd.toLocaleString()} equity)
@@ -465,7 +465,7 @@ export function DeskClient() {
             </p>
           )}
           <p style={{ margin: '14px 0 0', fontSize: 11, color: 'var(--text-faint)' }}>
-            Voice assistant never places orders — confirmation click required.
+            Voice assistant never places orders. Confirmation click required.
           </p>
         </div>
       </motion.section>

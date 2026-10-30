@@ -45,7 +45,7 @@ export default function TrackRecordPage() {
           Public track record
         </h1>
         <p style={{ margin: 0, color: 'var(--text-muted)', maxWidth: 560, textWrap: 'pretty' }}>
-          Every thesis is logged. Outcomes resolve only from real mark prices — we never invent PnL.
+          Every thesis is logged. Outcomes resolve only from real mark prices. We never invent PnL.
         </p>
       </header>
 
@@ -84,7 +84,7 @@ export default function TrackRecordPage() {
               >
                 <div style={{ textAlign: 'center' }}>
                   <div className="tabular" style={{ fontSize: 22, fontWeight: 650, letterSpacing: '-0.03em' }}>
-                    {data.stats.hitRate == null ? '—' : <CountUp value={hit} decimals={0} suffix="%" />}
+                    {data.stats.hitRate == null ? '-' : <CountUp value={hit} decimals={0} suffix="%" />}
                   </div>
                   <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Hit rate</div>
                 </div>
@@ -145,7 +145,7 @@ export default function TrackRecordPage() {
                       >
                         <div style={{ color, fontWeight: 600, marginBottom: 4 }}>{e.side[0]}</div>
                         <div className="tabular" style={{ color: 'var(--text-muted)' }}>
-                          {e.pnlPct == null ? '—' : `${e.pnlPct > 0 ? '+' : ''}${e.pnlPct.toFixed(1)}%`}
+                          {e.pnlPct == null ? '-' : `${e.pnlPct > 0 ? '+' : ''}${e.pnlPct.toFixed(1)}%`}
                         </div>
                       </motion.div>
                     );
@@ -180,7 +180,7 @@ export default function TrackRecordPage() {
                 {data.entries.length === 0 && (
                   <tr>
                     <td colSpan={8} style={{ padding: 28, color: 'var(--text-muted)' }}>
-                      Empty record — the Desk will append ideas here.
+                      Empty record. The Desk will append ideas here.
                     </td>
                   </tr>
                 )}
@@ -209,7 +209,7 @@ export default function TrackRecordPage() {
                               : 'var(--danger)',
                       }}
                     >
-                      {e.pnlPct == null ? '—' : `${e.pnlPct >= 0 ? '+' : ''}${e.pnlPct}%`}
+                      {e.pnlPct == null ? '-' : `${e.pnlPct >= 0 ? '+' : ''}${e.pnlPct}%`}
                     </td>
                   </tr>
                 ))}

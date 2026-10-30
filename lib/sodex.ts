@@ -1,5 +1,5 @@
 /**
- * SoDEX testnet client — EIP-712 signed spot orders.
+ * SoDEX testnet client - EIP-712 signed spot orders.
  * Hard-locked to testnet (chainId 138565). No mainnet path.
  *
  * Auth (official docs):
@@ -129,7 +129,7 @@ export function hasSodexCredentials(): boolean {
   return getSodexCredentials() !== null;
 }
 
-/** @deprecated alias — prefer hasSodexCredentials */
+/** @deprecated alias - prefer hasSodexCredentials */
 export function hasSodexKeys(): boolean {
   return hasSodexCredentials();
 }
@@ -145,7 +145,7 @@ function fallbackMarket(): MarketPanel {
       { symbol: "vBTC_vUSDC", lastPrice: 95_000, changePct24h: 1.2, high: 96_200, low: 93_800, volume: 120 },
       { symbol: "vETH_vUSDC", lastPrice: 3_450, changePct24h: 0.8, high: 3_510, low: 3_380, volume: 800 },
     ],
-    meta: sourceMeta("fallback", "/markets/tickers", "Illustrative sample — SoDEX public tickers unavailable"),
+    meta: sourceMeta("fallback", "/markets/tickers", "Illustrative sample. SoDEX public tickers unavailable"),
   };
 }
 
@@ -188,7 +188,7 @@ function parseTickers(body: unknown, endpoint: string): MarketPanel {
 
   if (!tickers.length) {
     const fb = fallbackMarket();
-    fb.meta.note = "SoDEX returned no BTC/ETH tickers — labelled fallback.";
+    fb.meta.note = "SoDEX returned no BTC/ETH tickers. Labelled fallback.";
     return fb;
   }
   return { tickers, meta: sourceMeta("live", endpoint) };
@@ -205,13 +205,13 @@ export async function fetchSpotTickers(): Promise<MarketPanel> {
     });
     if (!res.ok) {
       const fb = fallbackMarket();
-      fb.meta.note = `SoDEX testnet tickers HTTP ${res.status} — labelled fallback.`;
+      fb.meta.note = `SoDEX testnet tickers HTTP ${res.status}. Labelled fallback.`;
       return fb;
     }
     return parseTickers(await res.json(), `${base}${path}`);
   } catch (e) {
     const fb = fallbackMarket();
-    fb.meta.note = `SoDEX fetch error (${e instanceof Error ? e.message : String(e)}) — labelled fallback.`;
+    fb.meta.note = `SoDEX fetch error (${e instanceof Error ? e.message : String(e)}). Labelled fallback.`;
     return fb;
   }
 }
@@ -265,7 +265,7 @@ export async function resolveSymbolId(symbol: string): Promise<number | null> {
 }
 
 /**
- * Compact JSON for payloadHash — JSON.stringify with no whitespace.
+ * Compact JSON for payloadHash - JSON.stringify with no whitespace.
  * Key order MUST match Go struct field order (see schema BatchNewOrder*).
  */
 function compactSignPayload(type: string, params: Record<string, unknown>): string {
@@ -550,7 +550,7 @@ export async function previewSignedOrder(
     clientOrderId,
     status: "dry-run",
     note:
-      "DRY-RUN preview — EIP-712 payload hashed locally; nothing submitted to SoDEX. Confirm on desk to submit on testnet only.",
+      "DRY-RUN preview. EIP-712 payload hashed locally; nothing submitted to SoDEX. Confirm on desk to submit on testnet only.",
     env,
     signedPreview: {
       payloadHash,
@@ -578,7 +578,7 @@ export async function placeLimitOrder(req: OrderRequest): Promise<OrderResult> {
       price: req.price,
       quantity: req.quantity,
       submittedAt: new Date().toISOString(),
-      note: "Order not confirmed — DRY-RUN only; nothing submitted.",
+      note: "Order not confirmed. DRY-RUN only; nothing submitted.",
     };
   }
   const result = await placeOrder({
@@ -614,7 +614,7 @@ export async function placeLimitOrder(req: OrderRequest): Promise<OrderResult> {
     note: result.dryRun
       ? ("note" in result
           ? result.note
-          : "DRY-RUN — no SoDEX testnet credentials; nothing submitted.")
+          : "DRY-RUN. No SoDEX testnet credentials; nothing submitted.")
       : `Submitted to SoDEX testnet (chainId ${SODEX_TESTNET.chainId}).`,
     raw: "raw" in result ? result.raw : undefined,
     clientOrderId: "clientOrderId" in result ? result.clientOrderId : undefined,
@@ -638,7 +638,7 @@ export async function placeMarketBuyFunds(opts: {
       price: 0,
       quantity: opts.fundsUsdc,
       submittedAt: new Date().toISOString(),
-      note: "Order not confirmed — DRY-RUN only; nothing submitted.",
+      note: "Order not confirmed. DRY-RUN only; nothing submitted.",
     };
   }
   const funds = Math.min(Math.max(opts.fundsUsdc, 1), SODEX_MAX_NOTIONAL_USDC);
@@ -757,7 +757,7 @@ export async function querySpotOrder(orderId: string): Promise<{
 }> {
   const creds = getSodexCredentials();
   if (!creds) {
-    return { ok: false, orderId, error: 'No SoDEX credentials — cannot query live order' };
+    return { ok: false, orderId, error: 'No SoDEX credentials; cannot query live order' };
   }
   const base = requireTestnetOnly(process.env.SODEX_BASE_URL);
   const master =

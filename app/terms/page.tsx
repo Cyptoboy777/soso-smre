@@ -3,7 +3,7 @@ import Link from 'next/link';
 
 export const metadata: Metadata = {
   title: 'Terms · FlowSentinel',
-  description: 'Terms of use for FlowSentinel — testnet demo, not financial advice.',
+  description: 'Terms of use for FlowSentinel: testnet demo, not financial advice.',
 };
 
 export default function TermsPage() {

@@ -58,7 +58,7 @@ function ruleIdeas(desk: DeskSnapshot): JarvisIdea[] {
 
   const ideas: JarvisIdea[] = [];
 
-  // Idea 1 — primary desk thesis, priced off SoDEX
+  // Idea 1 - primary desk thesis, priced off SoDEX
   {
     const symbol = thesis.symbol || 'vBTC_vUSDC';
     const entry = pickPrice(market, symbol) || thesis.entry;
@@ -68,7 +68,7 @@ function ruleIdeas(desk: DeskSnapshot): JarvisIdea[] {
       rank: 1,
       side,
       symbol,
-      title: side === 'FLAT' ? 'Stand aside — conviction gate closed' : `${side} ${symbol.replace('v', '').replace('_', '/')}`,
+      title: side === 'FLAT' ? 'Stand aside: conviction gate closed' : `${side} ${symbol.replace('v', '').replace('_', '/')}`,
       reasoning: thesis.plainEnglish,
       citations: [
         { kind: 'etf', label: 'BTC US ETF net', detail: money(btc) },
@@ -78,7 +78,7 @@ function ruleIdeas(desk: DeskSnapshot): JarvisIdea[] {
       ],
       confidence: shock ? Math.min(thesis.confidence, 45) : thesis.confidence,
       riskNote: shock
-        ? 'News-shock filter is active — size is zero until headlines cool.'
+        ? 'News-shock filter is active. Size is zero until headlines cool.'
         : 'Risk engine caps notional; confirm ticket before any SoDEX testnet order.',
       invalidation:
         side === 'LONG'
@@ -93,7 +93,7 @@ function ruleIdeas(desk: DeskSnapshot): JarvisIdea[] {
     });
   }
 
-  // Idea 2 — ETH vs BTC flow divergence watch
+  // Idea 2 - ETH vs BTC flow divergence watch
   {
     const ethStronger = Math.abs(eth) > Math.abs(btc) * 0.55 && eth > 0;
     const ethWeaker = eth < 0 && btc > 0;
@@ -113,7 +113,7 @@ function ruleIdeas(desk: DeskSnapshot): JarvisIdea[] {
       reasoning: ethStronger
         ? `ETH ETF net ${money(eth)} outpaces BTC ${money(btc)}; prefer ETH beta if SSI holds.`
         : ethWeaker
-          ? `ETH ETF net ${money(eth)} while BTC still ${money(btc)} — ETH lag risk.`
+          ? `ETH ETF net ${money(eth)} while BTC still ${money(btc)}. ETH lag risk.`
           : `Flow spread is muted (BTC ${money(btc)}, ETH ${money(eth)}). Keep as a watch, not a force.`,
       citations: [
         { kind: 'etf', label: 'BTC US ETF', detail: money(btc) },
@@ -121,7 +121,7 @@ function ruleIdeas(desk: DeskSnapshot): JarvisIdea[] {
         ...citeNews(1),
       ],
       confidence: shock ? 35 : ethStronger || ethWeaker ? 62 : 48,
-      riskNote: 'ETH beta can gap on L2 / staking headlines — keep stops tight.',
+      riskNote: 'ETH beta can gap on L2 / staking headlines. Keep stops tight.',
       invalidation: `ETH ETF flips sign vs today (${money(eth)}) or ssiMAG7 drops >2% session.`,
       entry,
       stopLoss: lv.stopLoss,
@@ -130,7 +130,7 @@ function ruleIdeas(desk: DeskSnapshot): JarvisIdea[] {
     });
   }
 
-  // Idea 3 — news / SSI event watch
+  // Idea 3 - news / SSI event watch
   {
     const headline = topNews[0];
     const bullishNews = headline ? /\b(etf|inflow|approval|record|surge|all-?time high)\b/i.test(headline.title) : false;
@@ -143,12 +143,12 @@ function ruleIdeas(desk: DeskSnapshot): JarvisIdea[] {
       rank: 3,
       side,
       symbol,
-      title: side === 'LONG' ? 'News + SSI alignment scalp' : 'Event desk — do not chase',
+      title: side === 'LONG' ? 'News + SSI alignment scalp' : 'Event desk: do not chase',
       reasoning: headline
         ? `Headline: “${headline.title}”. SSI 24h ${((ssiCh || 0) * 100).toFixed(2)}%. ${
-            side === 'LONG' ? 'Only a small long if risk gate passes.' : 'No force — wait for confirmation prints.'
+            side === 'LONG' ? 'Only a small long if risk gate passes.' : 'No force. Wait for confirmation prints.'
           }`
-        : 'No fresh headline leadership — keep powder dry.',
+        : 'No fresh headline leadership. Keep powder dry.',
       citations: [...citeNews(0), ...citeNews(2), { kind: 'ssi', label: 'ssiMAG7', detail: String(ssi.price ?? 'n/a') }],
       confidence: side === 'LONG' ? 55 : 40,
       riskNote: 'News fades fast; invalidation is time-based as much as price-based.',
@@ -180,7 +180,7 @@ async function geminiIdeas(desk: DeskSnapshot, fallback: JarvisIdea[]): Promise<
   ].join('|');
 
   try {
-    const prompt = `You are JARVIS for FlowSentinel — a calm, precise crypto fund copilot.
+    const prompt = `You are JARVIS for FlowSentinel, a calm, precise crypto fund copilot.
 Return ONLY a JSON array of exactly 3 trade/watch ideas.
 
 DATA:
@@ -249,8 +249,8 @@ Prefer FLAT when shock or weak conviction. Use SoDEX last prices for entry/stop/
       } satisfies JarvisIdea;
     });
   } catch (e) {
-    if (e instanceof GeminiRateLimitError) console.warn('[jarvis] Gemini rate-limited — rules');
-    else console.warn('[jarvis] Gemini unavailable — rules');
+    if (e instanceof GeminiRateLimitError) console.warn('[jarvis] Gemini rate-limited - rules');
+    else console.warn('[jarvis] Gemini unavailable - rules');
     return fallback;
   }
 }
@@ -309,7 +309,7 @@ export async function buildJarvisBriefing(desk: DeskSnapshot): Promise<JarvisBri
   const spokenSummary = `${greeting}. Here's what moved. ${
     top
       ? `Top idea: ${top.title}. ${top.side} on ${top.symbol.replace(/v/g, '').replace('_', ' ')} with confidence ${top.confidence}. ${top.reasoning} Ticket would be entry ${top.entry}, stop ${top.stopLoss}, target ${top.takeProfit}.`
-      : 'No high-conviction setup — standing aside.'
+      : 'No high-conviction setup. Standing aside.'
   } Voice never places orders.`;
 
   return {

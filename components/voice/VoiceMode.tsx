@@ -262,7 +262,7 @@ export function VoiceMode({
           console.warn('[voice] whisper continuous failed', e);
         }
         if (!text.trim()) {
-          // soft fail — resume listening without raw errors
+          // soft fail - resume listening without raw errors
           continuousRef.current?.resume();
           setState('listening');
           return;
@@ -347,7 +347,7 @@ export function VoiceMode({
       };
       levelRaf.current = requestAnimationFrame(tick);
     } catch {
-      /* mic denied — Web Speech may still work */
+      /* mic denied - Web Speech may still work */
     }
 
     if (!Ctor) {
@@ -356,7 +356,7 @@ export function VoiceMode({
         {
           id: `e_${Date.now()}`,
           role: 'assistant',
-          text: 'Live listening is limited here. Type a question below — answers still work, and voice never places orders.',
+          text: 'Live listening is limited here. Type a question below. Answers still work, and voice never places orders.',
         },
       ]);
       stopListen();

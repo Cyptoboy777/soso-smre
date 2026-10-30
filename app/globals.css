@@ -403,7 +403,7 @@ button { font-family: inherit; }
   }
 }
 
-/* —— Hero layout + 3D centerpiece —— */
+/* -- Hero layout + 3D centerpiece -- */
 .hero-landing {
   position: relative;
   overflow: hidden;
@@ -495,7 +495,7 @@ button { font-family: inherit; }
   .hero-visual { max-height: 280px; order: -1; }
 }
 
-/* —— Grok-style voice mode overlay —— */
+/* -- Grok-style voice mode overlay -- */
 
 .voice-mode-overlay {
   position: fixed;
@@ -716,7 +716,7 @@ button { font-family: inherit; }
 }
 
 
-/* —— Agency polish: mode pills, JARVIS, judge, diagnostics —— */
+/* -- Agency polish: mode pills, JARVIS, judge, diagnostics -- */
 .desk-mode-row {
   display: flex;
   flex-wrap: wrap;

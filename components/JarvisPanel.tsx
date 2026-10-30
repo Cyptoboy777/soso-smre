@@ -159,7 +159,7 @@ export function JarvisPanel({
               <ul className="jarvis-cites">
                 {idea.citations.map((c, idx) => (
                   <li key={`${c.kind}-${idx}`}>
-                    <span className="pill">{c.kind}</span> <strong>{c.label}</strong> — {c.detail}
+                    <span className="pill">{c.kind}</span> <strong>{c.label}</strong>: {c.detail}
                   </li>
                 ))}
               </ul>

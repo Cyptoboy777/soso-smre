@@ -21,7 +21,7 @@ const site = process.env.NEXT_PUBLIC_APP_URL || 'https://flowsentinel-app.vercel
 export const metadata: Metadata = {
   metadataBase: new URL(site),
   title: {
-    default: 'FlowSentinel — SoSoValue Wave 3',
+    default: 'FlowSentinel | SoSoValue Wave 3',
     template: '%s · FlowSentinel',
   },
   description:
@@ -39,7 +39,7 @@ export const metadata: Metadata = {
   openGraph: {
     type: 'website',
     url: site,
-    title: 'FlowSentinel — Watch the flow. Act with a gate.',
+    title: 'FlowSentinel. Watch the flow. Act with a gate.',
     description:
       'SoSoValue data to thesis, risk gate, and confirmed SoDEX testnet order. Honest Live/Fallback labels.',
     siteName: 'FlowSentinel',

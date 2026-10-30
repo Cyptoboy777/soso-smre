@@ -3,7 +3,7 @@ import Link from 'next/link';
 
 export const metadata: Metadata = {
   title: 'Privacy · FlowSentinel',
-  description: 'Privacy notes for FlowSentinel — local voice models, minimal server logs.',
+  description: 'Privacy notes for FlowSentinel: local voice models, minimal server logs.',
 };
 
 export default function PrivacyPage() {

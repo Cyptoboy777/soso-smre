@@ -115,7 +115,7 @@ export function JudgeClient() {
           <p className="eyebrow">Judge path · 60 seconds</p>
           <h1>Data → thesis → risk → confirm → receipt</h1>
           <p className="lede">
-            Same loop as the live desk. SoSoValue drives the call. Orders stay SoDEX testnet only — never mainnet.
+            Same loop as the live desk. SoSoValue drives the call. Orders stay SoDEX testnet only, never mainnet.
           </p>
         </div>
         <div className="judge-top-actions">
@@ -193,12 +193,12 @@ export function JudgeClient() {
                 <ul className="judge-checks">
                   {desk.risk.checks.map((c) => (
                     <li key={c.id} className={c.passed ? 'ok' : 'fail'}>
-                      {c.passed ? 'Pass' : 'Fail'} — {c.label}: {c.detail}
+                      {c.passed ? 'Pass' : 'Fail'} · {c.label}: {c.detail}
                     </li>
                   ))}
                 </ul>
                 <button type="button" className="btn btn-accent" onClick={() => setStep(3)} disabled={!desk.risk.approved && desk.thesis.side !== 'FLAT'}>
-                  {desk.risk.approved ? 'Continue to confirm' : desk.thesis.side === 'FLAT' ? 'FLAT — still show ticket' : 'Blocked'}
+                  {desk.risk.approved ? 'Continue to confirm' : desk.thesis.side === 'FLAT' ? 'FLAT · still show ticket' : 'Blocked'}
                 </button>
               </>
             )}
@@ -208,7 +208,7 @@ export function JudgeClient() {
                 <h2>Confirm ticket</h2>
                 <div className="judge-ticket tabular">
                   <div>Side</div>
-                  <div>{desk.thesis.side === 'SHORT' ? 'SELL' : desk.thesis.side === 'LONG' ? 'BUY' : '—'}</div>
+                  <div>{desk.thesis.side === 'SHORT' ? 'SELL' : desk.thesis.side === 'LONG' ? 'BUY' : '-'}</div>
                   <div>Symbol</div>
                   <div>{desk.thesis.symbol}</div>
                   <div>Entry</div>

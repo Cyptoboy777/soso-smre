@@ -1,5 +1,5 @@
 /**
- * Deterministic grounded answers from desk snapshot — used when GEMINI is absent
+ * Deterministic grounded answers from desk snapshot - used when GEMINI is absent
  * and as the source of truth for voice commands.
  */
 import type { DeskSnapshot } from '@/types/flow';
@@ -77,11 +77,11 @@ export function groundedAnswer(desk: DeskSnapshot, intent: VoiceIntent, question
     }
     case 'ticket': {
         const side = thesis.side === 'SHORT' ? 'sell' : thesis.side === 'LONG' ? 'buy' : 'flat';
-        return `Order ticket: ${side} ${thesis.symbol}. Entry ${thesis.entry}, stop ${thesis.stopLoss}, take profit ${thesis.takeProfit}. Risk size ${risk.positionSize}, notional about ${Math.round(risk.notionalUsd)} dollars, risk ${risk.riskPct.toFixed(2)} percent of equity. Gate is ${risk.approved ? 'approved' : 'blocked'}. ${risk.checks.filter(c=>!c.passed).map(c=>c.label).join(', ') || 'All checks clear'}. Voice narration only — confirm on the desk for SoDEX testnet. Voice never places orders.`;
+        return `Order ticket: ${side} ${thesis.symbol}. Entry ${thesis.entry}, stop ${thesis.stopLoss}, take profit ${thesis.takeProfit}. Risk size ${risk.positionSize}, notional about ${Math.round(risk.notionalUsd)} dollars, risk ${risk.riskPct.toFixed(2)} percent of equity. Gate is ${risk.approved ? 'approved' : 'blocked'}. ${risk.checks.filter(c=>!c.passed).map(c=>c.label).join(', ') || 'All checks clear'}. Voice narration only. Confirm on the desk for SoDEX testnet. Voice never places orders.`;
       }
       case 'risk': {
         const failed = risk.checks.filter((c) => !c.passed);
-        return `Risk gate ${risk.approved ? 'passed' : 'blocked'}. Equity ${risk.equityUsd}, size ${risk.positionSize}, notional ${Math.round(risk.notionalUsd)}, risk budget ${risk.riskPct.toFixed(2)} percent. ${failed.length ? 'Failed: ' + failed.map((c) => c.label + ' — ' + c.detail).join('; ') : 'All checks passed'}. Confirm required before any testnet order.`;
+        return `Risk gate ${risk.approved ? 'passed' : 'blocked'}. Equity ${risk.equityUsd}, size ${risk.positionSize}, notional ${Math.round(risk.notionalUsd)}, risk budget ${risk.riskPct.toFixed(2)} percent. ${failed.length ? 'Failed: ' + failed.map((c) => c.label + ': ' + c.detail).join('; ') : 'All checks passed'}. Confirm required before any testnet order.`;
       }
       case 'flows':
       return `BTC US ETF latest net ${money(etfBtc.latest?.totalNetInflow)} (${etfBtc.meta.source}). ETH US ETF latest net ${money(etfEth.latest?.totalNetInflow)} (${etfEth.meta.source}). ssiMAG7 ${ssi.price ?? 'n/a'} (${ssi.meta.source}).`;
@@ -92,7 +92,7 @@ export function groundedAnswer(desk: DeskSnapshot, intent: VoiceIntent, question
         : `No shock pause. Top headlines: ${heads || 'none'}.`;
     }
     case 'track':
-      return 'Open the Track record page for logged ideas, outcomes, and hit rate. Outcomes resolve only from real mark prices — never invented PnL.';
+      return 'Open the Track record page for logged ideas, outcomes, and hit rate. Outcomes resolve only from real mark prices. Never invented PnL.';
     case 'help':
       return "Try: 'read thesis', 'explain risk', 'read the ticket', 'ETF flows', 'news', 'track record', or 'refresh thesis'. I will not place orders by voice.";
     case 'ask':

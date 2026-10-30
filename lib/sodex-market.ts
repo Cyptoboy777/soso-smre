@@ -166,7 +166,7 @@ export async function fetchMarketBundle(symbol: string): Promise<SodexMarketBund
     meta: meta(
       live ? 'live' : 'fallback',
       `/api/v1/spot/markets/${symbol}`,
-      live ? undefined : 'SoDEX public market data unavailable — charts will soft-empty',
+      live ? undefined : 'SoDEX public market data unavailable; charts will soft-empty',
     ),
   };
 }

@@ -1,60 +1,61 @@
 # Changelog
 
-## 2026-10-30
+## 2026-10-30 (honesty fix)
 
-- Live preview MARKET buy orderID **1301914828** (IOC partial fill) via `/api/trade` + EIP-712; cancel path frees margin.
- — SoDEX testnet live
+- Track record: never resolve unfilled SoDEX orders (`NEW`/`RESTING`) against the mark (fixes false +1471% on limit @ 5000 vs ~78k).
+- Scrub absurd PnL (>50%) and re-open false resolutions on read.
+- Seed copy clarifies resting limit is unfilled proof, not a filled position.
+- User-facing copy: removed em dashes (hero, desk, judge, voice, API notes).
 
-- Real EIP-712 testnet orders: 1301909841 FILLED, 1301909840 NEW (account 60539).
-- Diag `sodexTrade=true` / `TESTNET_LIVE_EIP712` when credentials present.
-- Server max notional 10 USDC; risk gate + confirm still required.
-- Track record seeded with live order IDs; `/judge` 60s path; JARVIS + Gemini.
+All notable Wave 3 work for FlowSentinel lives on branch `flowsentinel-wave3` (preview only — do not merge to `main` until after judging).
 
+## Wave 3 — FlowSentinel (2026-10-30)
 
-## Unreleased — public launch polish
+Rebuild as a single insight-to-action AI fund desk for the AKINDO SoSoValue buildathon Wave 3.
 
-- Grok-style fullscreen voice mode with react-three-fiber orb (idle/listening/thinking/speaking), mic + TTS AnalyserNode levels, Bloom
-- TTS: Kokoro-82M (kokoro-js) for English; Piper for Hindi/es/fr/pt/it; Web Speech fallback
-- STT: Whisper tiny via transformers.js when loaded; Web Speech fallback
-- Telugu removed from language chips; added French, Portuguese, Italian
-- Lazy 3D hero capital-flow field (r3f) after idle; Lenis smooth scroll; reduced-motion static fallback
-- SEO: metadata, OG, manifest, robots, sitemap; terms/privacy; 404/error/loading; skip link; security headers; API soft rate limit
-- Branch preview: https://flowsentinel-app.vercel.app
+### Live SoDEX testnet proof (EIP-712)
 
-## Unreleased
+- Account `60539` on `testnet-gw.sodex.dev` (chainId `138565`)
+- Order **1301914828** — MARKET IOC (partial fill) via `/api/trade`
+- Order **1301909841** — FILLED (MARKET IOC buy; trade `9461764`, 0.00005 vBTC @ 78619)
+- Order **1301909840** — NEW (LIMIT buy 0.001 @ 5000, resting)
+- Server max notional **10 USDC**; mainnet hard-locked out
+- Diag flags `sodexTrade=true` / `TESTNET_LIVE_EIP712` when credentials present
+- Cancel path frees margin; per-order batch errors rejected honestly
 
-- SoDEX client rewritten for EIP-712 spot signing (viem); hard-locked to testnet
-- Env: `SODEX_ACCOUNT_ID` / `SODEX_API_KEY_NAME` / `SODEX_API_KEY_PRIVATE_KEY` (replaces HMAC pair)
-- `scripts/register-testnet-api-key.ts` for local testnet key registration (do not run on shared hosts)
-- SoSoValue fetch cache revalidate=300s (respect ~20/min rate limit)
-- Desk clearly labels DRY-RUN when SoDEX keys absent
+### SoSoValue inside the decision
 
-## Wave 3 (since Jul 4 submission)
+- Live `/etfs/summary-history` (BTC+ETH), `/news/hot`, `/indices/ssimag7/market-snapshot`
+- JARVIS ranks ideas with news citations, confidence, risk note, invalidation
+- Gemini thesis when keyed; deterministic rules fallback otherwise
+- API diagnostics page probes each endpoint (status + latency)
 
-Rebuild as **FlowSentinel** — cut feature sprawl and ship a single insight→action loop for the AKINDO SoSoValue buildathon Wave 3.
+### Risk, honesty, judge path
 
-### Removed (judge feedback: sprawl)
-- Podcast / SoEva host, SoDoggy assistant, Telegram alerts
-- Leaderboard, achievements, backtest UI
-- Wallet-gated main path (RainbowKit / wagmi no longer required to demo)
-- Mock data presented as live when keys were missing
+- Hard risk gate (`lib/risk-engine.ts`) with pass/fail reasons + confirm checkbox
+- Desk pills: **TESTNET LIVE** vs **DRY-RUN SIMULATED** (no paper ambiguity)
+- `/judge` 60-second path: Data → thesis → risk → confirm → receipt
+- Track record seeded with real order IDs; empty states when APIs fail
+- Voice co-pilot narrates the same ticket and never places orders
 
-### Added
-- Award-level hero (animated mark, flow-field, Data→Thesis→Risk→Order steps), ETF history charts (recharts), glass cards, track-record hit-rate ring + timeline, voice language chips
-- Premium polish: animated FlowRadar, CountUp metrics, staggered panels, refined logo/favicon, empty/fallback states
-- Multilingual **Voice desk** (Web Speech STT/TTS): thesis / risk / flows / news Q&A; never places orders by voice
+### Brand and UX
 
-- SoSoValue-first desk: BTC/ETH US ETF flows, hot news, ssiMAG7, SoDEX tickers
-- Honest **Live / Fallback** badges on every data panel
-- AI daily thesis (Gemini) with confidence + drivers; deterministic rules fallback
-- Risk gate: sizing, max drawdown, geometry, confidence floor, news-shock pause — pass/fail reasons
-- Explicit confirmation → SoDEX **testnet** limit order (dry-run when keys absent)
-- Public track record with entry, horizon, outcome, hit rate — no invented PnL
-- Judge/demo mode page with 3-click path
-- SoSoValue / SoDEX brand theme (`#FF4F20`, `#FF7637`, `#7F2711`, ink greys)
-- Unique FlowSentinel logo (sentinel aperture / FlowRadar)
-- Unit tests for risk engine + signal logic
+- Sentinel Eye logo, dark + SoSoValue orange (`#FF4F20`) theme
+- Hero proof strip with EIP-712 order IDs
+- Continuous VAD voice mode (Kokoro English TTS; Piper for other languages)
+- SEO, security headers, soft API rate limit, terms/privacy
+
+### Removed (prior sprawl called out by judges)
+
+- Podcast studio / animated dual hosts, Telegram alpha, alpha leaderboard
+- Social “Proof of PnL” holographic cards with invented live ROI
+- Wallet-gated main path for the demo loop
 
 ### Integration endpoints
-- SoSoValue: `GET /etfs/summary-history`, `GET /news/hot`, `GET /indices/{ticker}/market-snapshot` (header `x-soso-api-key`)
-- SoDEX: public `GET /markets/tickers`; authenticated `POST /orders` on testnet when keys set
+
+- SoSoValue: `GET /etfs/summary-history`, `GET /news/hot`, `GET /indices/{ticker}/market-snapshot`
+- SoDEX testnet: public tickers; authenticated EIP-712 `batchNewOrder` / cancel when `SODEX_*` set
+
+## Earlier waves
+
+Prior production site remains on the default branch / prior deploy for Waves 1–2 history. Wave 3 preview: https://flowsentinel-app.vercel.app

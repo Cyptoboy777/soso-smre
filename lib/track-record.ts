@@ -46,7 +46,7 @@ function ensure(): TrackRecordEntry[] {
         fs.mkdirSync(path.dirname(FILE), { recursive: true });
         fs.writeFileSync(FILE, JSON.stringify(memoryCache, null, 2), 'utf8');
       } catch {
-        /* read-only FS — memory only */
+        /* read-only FS - memory only */
       }
       return memoryCache;
     }
@@ -66,7 +66,7 @@ function save(rows: TrackRecordEntry[]) {
     fs.mkdirSync(path.dirname(FILE), { recursive: true });
     fs.writeFileSync(FILE, JSON.stringify(rows, null, 2), 'utf8');
   } catch {
-    /* Vercel read-only — keep in-memory for this isolate */
+    /* Vercel read-only - keep in-memory for this isolate */
   }
 }
 
@@ -106,17 +106,65 @@ export function logIdea(
   return entry;
 }
 
+/** Unfilled / resting orders must not resolve to PnL against the mark. */
+function isUnfilledOrder(row: TrackRecordEntry): boolean {
+  const s = (row.orderStatus || '').toUpperCase();
+  return s === 'NEW' || s === 'PENDING' || s === 'OPEN' || s === 'RESTING';
+}
+
+/**
+ * Re-open rows that were wrongly resolved while still unfilled (e.g. limit @ 5000
+ * vs mark ~78k → absurd +1471% hit_tp). Keeps the track record honest for judges.
+ */
+function scrubFalseResolutions(rows: TrackRecordEntry[]): boolean {
+  let changed = false;
+  for (const row of rows) {
+    if (!isUnfilledOrder(row)) continue;
+    if (row.outcome === 'open' && row.pnlPct == null && row.exitPrice == null) continue;
+    row.outcome = 'open';
+    delete row.exitPrice;
+    delete row.pnlPct;
+    delete row.resolvedAt;
+    changed = true;
+  }
+  // Also drop absurd PnL on any row (entry vs exit mismatch, e.g. limit price as entry)
+  for (const row of rows) {
+    if (row.pnlPct == null || !Number.isFinite(row.pnlPct)) continue;
+    if (Math.abs(row.pnlPct) > 50) {
+      // Cap of 50% move is already extreme for our short horizons; beyond that reset to open
+      // unless it was a real fill with matching entry near exit.
+      const exit = row.exitPrice;
+      if (exit != null && row.entry > 0) {
+        const move = Math.abs(exit - row.entry) / row.entry;
+        if (move > 0.5) {
+          row.outcome = 'open';
+          delete row.exitPrice;
+          delete row.pnlPct;
+          delete row.resolvedAt;
+          changed = true;
+        }
+      }
+    }
+  }
+  return changed;
+}
+
 /**
  * Resolve open ideas when a mark price is supplied (from live tickers or later cron).
- * Does not invent prices — if mark is missing, leaves open.
+ * Does not invent prices - if mark is missing, leaves open.
+ * Never resolves unfilled resting orders (orderStatus NEW etc.).
  */
 export function resolveOpen(marks: Record<string, number>, now = Date.now()): TrackRecordEntry[] {
   const rows = ensure();
-  let changed = false;
+  let changed = scrubFalseResolutions(rows);
   for (const row of rows) {
     if (row.outcome !== 'open') continue;
+    if (isUnfilledOrder(row)) continue;
     const mark = marks[row.symbol];
     if (mark == null || !Number.isFinite(mark)) continue;
+
+    // Guard: entry must be in the same ballpark as mark (rejects limit-price-as-entry)
+    if (row.entry > 0 && Math.abs(mark - row.entry) / row.entry > 0.5) continue;
 
     let outcome: OutcomeStatus = 'open';
     if (row.side === 'LONG') {
@@ -131,10 +179,13 @@ export function resolveOpen(marks: Record<string, number>, now = Date.now()): Tr
     if (outcome === 'open' && expired) outcome = 'expired';
 
     if (outcome !== 'open') {
+      const dir = row.side === 'SHORT' ? -1 : 1;
+      const pnlPct = Number((((mark - row.entry) / row.entry) * 100 * dir).toFixed(3));
+      // Final honesty gate: never publish fantasy PnL
+      if (!Number.isFinite(pnlPct) || Math.abs(pnlPct) > 50) continue;
       row.outcome = outcome;
       row.exitPrice = mark;
-      const dir = row.side === 'SHORT' ? -1 : 1;
-      row.pnlPct = Number((((mark - row.entry) / row.entry) * 100 * dir).toFixed(3));
+      row.pnlPct = pnlPct;
       row.resolvedAt = new Date(now).toISOString();
       changed = true;
     }
