@@ -66,8 +66,7 @@ export default function DemoPage() {
             <strong style={{ color: 'var(--text)' }}>GEMINI_API_KEY:</strong> LLM thesis (else deterministic rules).
           </li>
           <li>
-            <strong style={{ color: 'var(--text)' }}>SODEX_API_KEY + SODEX_API_SECRET:</strong> real testnet limit
-            orders (else dry-run).
+            <strong style={{ color: 'var(--text)' }}>SODEX_ACCOUNT_ID + SODEX_API_KEY_NAME + SODEX_API_KEY_PRIVATE_KEY:</strong> EIP-712 signed SoDEX testnet orders (else labelled DRY-RUN). No mainnet path.
           </li>
         </ul>
       </section>

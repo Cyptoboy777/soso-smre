@@ -41,7 +41,7 @@ export async function GET(req: Request) {
     keys: {
       sosovalue: Boolean(process.env.SOSOVALUE_API_KEY?.trim()),
       gemini: Boolean(process.env.GEMINI_API_KEY?.trim()),
-      sodex: Boolean(process.env.SODEX_API_KEY?.trim() && process.env.SODEX_API_SECRET?.trim()),
+      sodex: Boolean(process.env.SODEX_ACCOUNT_ID?.trim() && process.env.SODEX_API_KEY_NAME?.trim() && process.env.SODEX_API_KEY_PRIVATE_KEY?.trim()),
     },
   });
 }

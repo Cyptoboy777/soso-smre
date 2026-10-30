@@ -352,7 +352,7 @@ export function DeskClient() {
           </p>
           {!keys.sodex && (
             <p className="badge fallback" style={{ marginBottom: 12, display: 'inline-flex' }}>
-              SoDEX keys absent → dry-run only
+              SoDEX testnet keys absent → labelled DRY-RUN (no live order; no mainnet)
             </p>
           )}
           <label
@@ -381,7 +381,7 @@ export function DeskClient() {
               disabled={!risk.approved || !confirming || busy || thesis.side === 'FLAT'}
               onClick={() => void execute()}
             >
-              {busy ? 'Submitting…' : keys.sodex ? 'Place testnet order' : 'Run dry-run order'}
+              {busy ? 'Submitting…' : keys.sodex ? 'Place SoDEX testnet order' : 'Run labelled DRY-RUN order'}
             </button>
             <button className="btn" onClick={() => void load()} disabled={busy}>
               Refresh thesis
@@ -401,7 +401,7 @@ export function DeskClient() {
               }}
             >
               <div style={{ fontWeight: 560, marginBottom: 4 }}>
-                {order.mode === 'dry-run' ? 'Dry-run result' : 'Order result'} · {order.status}
+                {order.mode === 'dry-run' ? 'DRY-RUN result (nothing submitted)' : 'Testnet order result'} · {order.status}
               </div>
               <div className="tabular">ID {order.orderId}</div>
               <div style={{ color: 'var(--text-muted)', marginTop: 6 }}>{order.note}</div>

@@ -3,6 +3,7 @@
  * Base: https://openapi.sosovalue.com/openapi/v1
  * Auth header: x-soso-api-key
  * Docs: https://sosovalue-1.gitbook.io/sosovalue-api-doc
+ * Rate limit ~20 calls/min — Next.js fetch revalidate=300s caches responses.
  */
 import type {
   EtfFlowDay,
@@ -38,7 +39,7 @@ async function sosoGet<T>(path: string, params?: Record<string, string>): Promis
         'x-soso-api-key': key,
         Accept: 'application/json',
       },
-      next: { revalidate: 60 },
+      next: { revalidate: 300 },
     });
     if (!res.ok) {
       return { ok: false, error: `HTTP ${res.status}` };

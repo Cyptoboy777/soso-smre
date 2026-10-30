@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- SoDEX client rewritten for EIP-712 spot signing (viem); hard-locked to testnet
+- Env: `SODEX_ACCOUNT_ID` / `SODEX_API_KEY_NAME` / `SODEX_API_KEY_PRIVATE_KEY` (replaces HMAC pair)
+- `scripts/register-testnet-api-key.ts` for local testnet key registration (do not run on shared hosts)
+- SoSoValue fetch cache revalidate=300s (respect ~20/min rate limit)
+- Desk clearly labels DRY-RUN when SoDEX keys absent
+
 ## Wave 3 (since Jul 4 submission)
 
 Rebuild as **FlowSentinel** — cut feature sprawl and ship a single insight→action loop for the AKINDO SoSoValue buildathon Wave 3.

@@ -4,7 +4,8 @@ AI **one-person fund desk** for the [AKINDO SoSoValue buildathon Wave 3](https:/
 
 Reads **SoSoValue** ETF flows, hot news and SSI → writes a plain-English daily thesis with confidence → runs a **risk gate** → places a **confirmed SoDEX testnet** limit order → logs an honest **public track record**.
 
-Live production (previous waves): https://soso-smre.vercel.app  
+FlowSentinel Wave 3 preview (public): https://flowsentinel-app.vercel.app  
+Live production (previous waves, untouched): https://soso-smre.vercel.app  
 This Wave 3 work lives on branch `flowsentinel-wave3` (preview / PR — not production).
 
 ---
@@ -37,7 +38,7 @@ SoDEX tickers ─┘                                              │
 | Layer | Role |
 | --- | --- |
 | `lib/sosovalue.ts` | SoSoValue client (`x-soso-api-key`) + labelled fallbacks |
-| `lib/sodex.ts` | Public tickers + dry-run / keyed order place |
+| `lib/sodex.ts` | SoDEX testnet EIP-712 spot orders (dry-run when keys absent; mainnet hard-locked out) |
 | `lib/signal.ts` | Deterministic flow→side scoring |
 | `lib/thesis.ts` | Gemini wrapper → rules fallback |
 | `lib/risk-engine.ts` | Pass/fail checks + position size |
@@ -72,10 +73,11 @@ Copy `.env.example` → `.env.local` (never commit secrets).
 | --- | --- | --- |
 | `SOSOVALUE_API_KEY` | Live ETF / news / SSI | Labelled **Fallback** panels |
 | `GEMINI_API_KEY` | LLM thesis | Deterministic rules thesis |
-| `SODEX_API_KEY` | Testnet order | **Dry-run** order id |
-| `SODEX_API_SECRET` | Testnet order | **Dry-run** |
+| `SODEX_ACCOUNT_ID` | Testnet EIP-712 order | Labelled **DRY-RUN** (nothing submitted) |
+| `SODEX_API_KEY_NAME` | Testnet EIP-712 order | Labelled **DRY-RUN** |
+| `SODEX_API_KEY_PRIVATE_KEY` | API-key wallet pk (never master) | Labelled **DRY-RUN** |
 | `FLOWSENTINEL_DEMO_MODE` | Force demo label | Optional (`0`/`1`) |
-| `NEXT_PUBLIC_APP_URL` | Absolute links | `http://localhost:3000` |
+| `NEXT_PUBLIC_APP_URL` | Absolute links | Preview: `https://flowsentinel-app.vercel.app` |
 
 ---
 
@@ -152,3 +154,23 @@ Visual language and motion patterns were informed by public, license-respecting 
 | Hyperliquid / Linear-style trading UIs | N/A (look & feel) | Restraint, tabular numbers, calm density |
 
 Brand colours are from SoSoValue / SoDEX public sites (see Brand section).
+
+
+## SoDEX testnet orders (optional)
+
+FlowSentinel is hard-locked to SoDEX **testnet** (`testnet-gw.sodex.dev`, chainId `138565`). There is no mainnet path.
+
+Orders use EIP-712 (`ExchangeAction` / spot domain) with:
+- `X-API-Key` = registered key **name**
+- `X-API-Sign` = `0x01` + signature from the **API-key wallet** private key
+- `X-API-Nonce` = millisecond timestamp
+
+Without `SODEX_ACCOUNT_ID` + `SODEX_API_KEY_NAME` + `SODEX_API_KEY_PRIVATE_KEY`, the desk clearly labels the path as **DRY-RUN** and does not submit.
+
+To register a testnet API key on **your own PC** (never on a shared agent box, never paste master keys into chat):
+
+```bash
+npx tsx scripts/register-testnet-api-key.ts
+```
+
+That script generates a fresh API-key wallet, has your master wallet sign `AddAPIKey` for testnet only, and writes secrets to a local `*.secret.txt` file (never printed). Copy the three `SODEX_*` lines into `.env`, then delete the secret file.
