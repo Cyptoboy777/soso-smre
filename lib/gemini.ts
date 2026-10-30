@@ -5,9 +5,20 @@
  */
 import { JARVIS_TOOL_DECLS, runJarvisTool } from '@/lib/gemini-tools';
 
-export const GEMINI_FAST_MODEL = 'gemini-2.5-flash';
+/** Prefer lite/latest for free-tier headroom; fall back if busy. */
+export const GEMINI_MODEL_CANDIDATES = [
+  'gemini-flash-lite-latest',
+  'gemini-3.5-flash-lite',
+  'gemini-flash-latest',
+  'gemini-3.5-flash',
+  'gemini-2.5-flash',
+] as const;
+export const GEMINI_FAST_MODEL = GEMINI_MODEL_CANDIDATES[0];
 
 export function hasGeminiKey(): boolean {
+  if (process.env.VITEST || process.env.JARVIS_FORCE_RULES === '1' || process.env.NODE_ENV === 'test') {
+    return false;
+  }
   return Boolean(process.env.GEMINI_API_KEY?.trim());
 }
 
@@ -80,25 +91,33 @@ export async function geminiGenerate(opts: {
   }
   const { GoogleGenAI } = await import('@google/genai');
   const client = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY!.trim() });
-  try {
-    const res = await client.models.generateContent({
-      model: GEMINI_FAST_MODEL,
-      contents: opts.prompt,
-      config: {
-        temperature: 0.3,
-        responseMimeType: 'application/json',
-        ...(opts.system ? { systemInstruction: opts.system } : {}),
-      },
-    });
-    const text =
-      (res as { text?: string }).text ??
-      String((res as { response?: { text?: () => string } }).response?.text?.() ?? '');
-    if (!text.trim()) throw new Error('Empty Gemini response');
-    if (opts.cacheKey) cacheSet(opts.cacheKey, text);
-    return text;
-  } catch (e) {
-    mapErr(e);
+  let lastErr: unknown;
+  for (const model of GEMINI_MODEL_CANDIDATES) {
+    try {
+      const res = await client.models.generateContent({
+        model,
+        contents: opts.prompt,
+        config: {
+          temperature: 0.3,
+          responseMimeType: 'application/json',
+          ...(opts.system ? { systemInstruction: opts.system } : {}),
+        },
+      });
+      const text =
+        (res as { text?: string }).text ??
+        String((res as { response?: { text?: () => string } }).response?.text?.() ?? '');
+      if (!text.trim()) throw new Error('Empty Gemini response');
+      if (opts.cacheKey) cacheSet(opts.cacheKey, text);
+      return text;
+    } catch (e) {
+      lastErr = e;
+      const msg = e instanceof Error ? e.message : String(e);
+      if (/429|rate|quota|RESOURCE_EXHAUSTED/i.test(msg)) throw new GeminiRateLimitError(msg.slice(0, 120));
+      // try next model on 503/404/UNAVAILABLE
+      if (!/503|UNAVAILABLE|404|high demand|not found|no longer/i.test(msg)) mapErr(e);
+    }
   }
+  mapErr(lastErr ?? new Error('All Gemini models failed'));
 }
 
 export type GroundedSource = { title: string; uri: string };
@@ -123,7 +142,7 @@ export async function geminiGroundedBrief(opts: {
   const client = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY!.trim() });
   try {
     const res = await client.models.generateContent({
-      model: GEMINI_FAST_MODEL,
+      model: 'gemini-flash-latest',
       contents: opts.prompt,
       config: {
         temperature: 0.4,
@@ -185,7 +204,7 @@ export async function geminiWithTools(opts: {
   try {
     for (let round = 0; round < maxRounds; round++) {
       const res = await client.models.generateContent({
-        model: GEMINI_FAST_MODEL,
+        model: 'gemini-flash-lite-latest',
         contents,
         config: {
           temperature: 0.35,

@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { buildJarvisBriefing } from '@/lib/jarvis';
 import type { DeskSnapshot } from '@/types/flow';
+
+process.env.JARVIS_FORCE_RULES = '1';
+process.env.GEMINI_API_KEY = '';
 
 const desk = {
   etfBtc: {
@@ -76,10 +78,12 @@ const desk = {
 
 describe('jarvis briefing', () => {
   it('returns 3 ranked ideas with citations', async () => {
+    const { buildJarvisBriefing } = await import('@/lib/jarvis');
     const b = await buildJarvisBriefing(desk);
     expect(b.ideas).toHaveLength(3);
     expect(b.ideas[0].rank).toBe(1);
     expect(b.ideas[0].citations.length).toBeGreaterThan(0);
+    expect(b.engine).toBe('rules');
     expect(b.spokenSummary.toLowerCase()).toContain('voice never places orders');
   });
 });
