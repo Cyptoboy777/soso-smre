@@ -117,3 +117,14 @@ export function hitRate(rows: TrackRecordEntry[] = listTrackRecord()): {
     hitRate: scored === 0 ? null : Number(((wins / scored) * 100).toFixed(1)),
   };
 }
+
+
+export function updateOrderStatus(trackId: string, status: string, extra?: Partial<TrackRecordEntry>) {
+  const rows = ensure();
+  const row = rows.find((r) => r.id === trackId);
+  if (!row) return null;
+  (row as TrackRecordEntry & { orderStatus?: string }).orderStatus = status;
+  if (extra) Object.assign(row, extra);
+  save(rows);
+  return row;
+}

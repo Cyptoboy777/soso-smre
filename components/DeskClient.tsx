@@ -16,6 +16,14 @@ const EtfFlowChart = dynamic(() => import('./EtfFlowChart').then((m) => m.EtfFlo
   ssr: false,
   loading: () => <div className="skeleton" style={{ height: 128 }} aria-hidden />,
 });
+const JarvisPanel = dynamic(() => import('./JarvisPanel').then((m) => m.JarvisPanel), {
+  ssr: false,
+  loading: () => <div className="panel" style={{ padding: 24, minHeight: 220 }} aria-busy>Loading JARVIS…</div>,
+});
+const ApiDiagnostics = dynamic(() => import('./ApiDiagnostics').then((m) => m.ApiDiagnostics), {
+  ssr: false,
+  loading: () => <div className="panel" style={{ padding: 24, minHeight: 160 }} aria-busy>Probing APIs…</div>,
+});
 
 type DeskPayload = DeskSnapshot & {
   keys: { sosovalue: boolean; gemini: boolean; sodex: boolean };
@@ -53,6 +61,7 @@ export function DeskClient() {
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
   const [order, setOrder] = useState<OrderResult | null>(null);
+  const [modeBanner] = useState(true);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -137,6 +146,20 @@ export function DeskClient() {
 
   return (
     <div style={{ display: 'grid', gap: 20 }}>
+      <div className="desk-mode-row" role="status">
+        <span className={`mode-pill ${data.keys.sodex ? 'live' : 'sim'}`}>
+          Orders: {data.keys.sodex ? 'TESTNET LIVE READY' : 'DRY-RUN SIMULATED'}
+        </span>
+        <span className={`mode-pill ${data.keys.gemini ? 'live' : 'sim'}`}>
+          Advisor: {data.keys.gemini ? 'Gemini' : 'Rules'}
+        </span>
+        <span className={`mode-pill ${data.keys.sosovalue ? 'live' : 'sim'}`}>
+          SoSoValue: {data.keys.sosovalue ? 'Live key' : 'Fallback'}
+        </span>
+        <a className="btn btn-ghost" href="/judge" style={{ marginLeft: 'auto' }}>
+          Judge 60s path
+        </a>
+      </div>
 
       {/* Thesis hero */}
       <motion.section
@@ -211,6 +234,27 @@ export function DeskClient() {
           />
         </div>
       </motion.section>
+
+      <JarvisPanel
+        onPrefill={(idea) => {
+          if (!data) return;
+          setData({
+            ...data,
+            thesis: {
+              ...data.thesis,
+              side: idea.side,
+              symbol: idea.symbol,
+              entry: idea.entry,
+              stopLoss: idea.stopLoss,
+              takeProfit: idea.takeProfit,
+              confidence: idea.confidence,
+              plainEnglish: idea.reasoning,
+            },
+          });
+          setConfirming(false);
+          setOrder(null);
+        }}
+      />
 
       {/* Data panels */}
       <section
@@ -425,6 +469,8 @@ export function DeskClient() {
           </p>
         </div>
       </motion.section>
+
+      <ApiDiagnostics />
 
       <VoiceAssistant desk={data} onRefresh={() => void load()} />
 

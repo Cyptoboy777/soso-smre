@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
-import { placeLimitOrder } from '@/lib/sodex';
+import { placeLimitOrder, querySpotOrder } from '@/lib/sodex';
 import { evaluateRisk } from '@/lib/risk-engine';
-import { logIdea } from '@/lib/track-record';
+import { logIdea, updateOrderStatus } from '@/lib/track-record';
 import type { NewsPanel, Thesis } from '@/types/flow';
 
 export const dynamic = 'force-dynamic';
@@ -42,6 +42,13 @@ export async function POST(req: Request) {
   });
 
   const row = logIdea(body.thesis, order.mode === 'live' ? 'live' : 'dry-run', order.orderId);
+  let queried: { status?: string; ok?: boolean } | null = null;
+  if (order.mode === 'live' && order.orderId) {
+    queried = await querySpotOrder(order.orderId);
+    if (queried.ok && queried.status) {
+      updateOrderStatus(row.id, queried.status);
+    }
+  }
 
-  return NextResponse.json({ order, risk, trackId: row.id });
+  return NextResponse.json({ order, risk, trackId: row.id, queried, modeLabel: order.mode === 'live' ? 'TESTNET_LIVE' : 'DRY_RUN_SIMULATED' });
 }

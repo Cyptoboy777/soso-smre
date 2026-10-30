@@ -29,7 +29,7 @@ export const VOICE_LANGS: { id: VoiceLang; label: string; speech: string }[] = [
   { id: 'ko-KR', label: '한국어', speech: 'ko-KR' },
 ];
 
-export type VoiceIntent = 'refresh' | 'explain_risk' | 'read_thesis' | 'flows' | 'news' | 'track' | 'help' | 'order_blocked' | 'ask';
+export type VoiceIntent = 'order_blocked' | 'refresh' | 'read_thesis' | 'explain_risk' | 'ticket' | 'risk' | 'flows' | 'news' | 'track' | 'help' | 'ask' | 'thesis' | 'ssi' | 'general';
 
 export function detectIntent(text: string): VoiceIntent {
   const t = text.toLowerCase().trim();
@@ -40,6 +40,8 @@ export function detectIntent(text: string): VoiceIntent {
   if (/\b(refresh|reload|update|new thesis|फिर से|रिफ्रेश)\b/.test(t)) return 'refresh';
   if (/\b(risk|gate|drawdown|blocked|pass|explain risk)\b/.test(t)) return 'explain_risk';
   if (/\b(read|speak|aloud|thesis|idea|कहकर|बोलो)\b/.test(t) && /\b(thesis|idea|daily|today)\b/.test(t)) return 'read_thesis';
+  if (/\b(ticket|order|entry|stop|target|size|notional)\b/.test(t)) return 'ticket';
+  if (/\b(risk|gate|drawdown|position|approve|block)\b/.test(t)) return 'risk';
   if (/\b(etf|flow|inflow|outflow|btc|eth)\b/.test(t)) return 'flows';
   if (/\b(news|headline|shock)\b/.test(t)) return 'news';
   if (/\b(track|record|hit rate|pnl|performance)\b/.test(t)) return 'track';
@@ -73,7 +75,15 @@ export function groundedAnswer(desk: DeskSnapshot, intent: VoiceIntent, question
       }
       return `Risk gate blocked. Failed: ${fails.map((c) => `${c.label} (${c.detail})`).join('; ') || 'unknown'}.`;
     }
-    case 'flows':
+    case 'ticket': {
+        const side = thesis.side === 'SHORT' ? 'sell' : thesis.side === 'LONG' ? 'buy' : 'flat';
+        return `Order ticket: ${side} ${thesis.symbol}. Entry ${thesis.entry}, stop ${thesis.stopLoss}, take profit ${thesis.takeProfit}. Risk size ${risk.positionSize}, notional about ${Math.round(risk.notionalUsd)} dollars, risk ${risk.riskPct.toFixed(2)} percent of equity. Gate is ${risk.approved ? 'approved' : 'blocked'}. ${risk.checks.filter(c=>!c.passed).map(c=>c.label).join(', ') || 'All checks clear'}. Voice narration only — confirm on the desk for SoDEX testnet. Voice never places orders.`;
+      }
+      case 'risk': {
+        const failed = risk.checks.filter((c) => !c.passed);
+        return `Risk gate ${risk.approved ? 'passed' : 'blocked'}. Equity ${risk.equityUsd}, size ${risk.positionSize}, notional ${Math.round(risk.notionalUsd)}, risk budget ${risk.riskPct.toFixed(2)} percent. ${failed.length ? 'Failed: ' + failed.map((c) => c.label + ' — ' + c.detail).join('; ') : 'All checks passed'}. Confirm required before any testnet order.`;
+      }
+      case 'flows':
       return `BTC US ETF latest net ${money(etfBtc.latest?.totalNetInflow)} (${etfBtc.meta.source}). ETH US ETF latest net ${money(etfEth.latest?.totalNetInflow)} (${etfEth.meta.source}). ssiMAG7 ${ssi.price ?? 'n/a'} (${ssi.meta.source}).`;
     case 'news': {
       const heads = news.items.slice(0, 3).map((n) => n.title).join('. ');
@@ -84,7 +94,7 @@ export function groundedAnswer(desk: DeskSnapshot, intent: VoiceIntent, question
     case 'track':
       return 'Open the Track record page for logged ideas, outcomes, and hit rate. Outcomes resolve only from real mark prices — never invented PnL.';
     case 'help':
-      return "Try: 'read thesis', 'explain risk', 'ETF flows', 'news', 'track record', or 'refresh thesis'. I will not place orders by voice.";
+      return "Try: 'read thesis', 'explain risk', 'read the ticket', 'ETF flows', 'news', 'track record', or 'refresh thesis'. I will not place orders by voice.";
     case 'ask':
     default:
       return `Based on today's desk: thesis ${thesis.side} ${thesis.symbol}, confidence ${thesis.confidence}. ${thesis.plainEnglish} Risk gate is ${risk.approved ? 'pass' : 'blocked'}. Question was: ${question}`;

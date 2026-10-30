@@ -576,3 +576,49 @@ export async function placeLimitOrder(req: OrderRequest): Promise<OrderResult> {
       : `Submitted to SoDEX testnet (chainId ${SODEX_TESTNET.chainId}).`,
   };
 }
+
+
+/** Query a spot order by id on testnet (requires credentials). */
+export async function querySpotOrder(orderId: string): Promise<{
+  ok: boolean;
+  orderId: string;
+  status?: string;
+  raw?: unknown;
+  error?: string;
+}> {
+  const creds = getSodexCredentials();
+  if (!creds) {
+    return { ok: false, orderId, error: 'No SoDEX credentials — cannot query live order' };
+  }
+  const base = requireTestnetOnly(process.env.SODEX_BASE_URL);
+  try {
+    const path = `/api/v1/spot/trade/orders/${encodeURIComponent(orderId)}`;
+    // Public-ish account query still needs signing on some gateways — try unsigned first then signed GET
+    const res = await fetch(`${base}${path}?accountId=${creds.accountId}`, {
+      headers: {
+        Accept: 'application/json',
+        'X-API-Key': creds.apiKeyName,
+      },
+      cache: 'no-store',
+    });
+    const text = await res.text();
+    let raw: unknown = text;
+    try { raw = JSON.parse(text); } catch { /* */ }
+    if (!res.ok) {
+      return { ok: false, orderId, error: `HTTP ${res.status}: ${text.slice(0, 160)}`, raw };
+    }
+    const env = raw as { code?: number; data?: { status?: string; orderId?: string | number }; msg?: string };
+    if (typeof env.code === 'number' && env.code !== 0) {
+      return { ok: false, orderId, error: env.msg || `code ${env.code}`, raw };
+    }
+    const data = env.data ?? (raw as { status?: string });
+    return {
+      ok: true,
+      orderId: String((data as { orderId?: string | number }).orderId ?? orderId),
+      status: (data as { status?: string }).status ?? 'unknown',
+      raw,
+    };
+  } catch (e) {
+    return { ok: false, orderId, error: e instanceof Error ? e.message : String(e) };
+  }
+}

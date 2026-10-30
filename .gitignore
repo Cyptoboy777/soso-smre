@@ -15,3 +15,8 @@ data/track-record.json
 # SoDEX local registration secrets
 *.secret.txt
 sodex_*.secret.txt
+.env*
+
+# never commit local testnet keys (path)
+secrets/
+**/secrets/

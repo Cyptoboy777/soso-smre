@@ -8,7 +8,7 @@ import { SmoothScroll } from './SmoothScroll';
 const NAV = [
   { href: '/', label: 'Desk' },
   { href: '/track-record', label: 'Track record' },
-  { href: '/demo', label: 'Judge path' },
+  { href: '/judge', label: 'Judge path' },
 ];
 
 export function Shell({ children }: { children: React.ReactNode }) {
@@ -86,7 +86,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
         <div style={{ display: 'flex', gap: 16, justifyContent: 'center', flexWrap: 'wrap' }}>
           <Link href="/terms">Terms</Link>
           <Link href="/privacy">Privacy</Link>
-          <Link href="/demo">Judge path</Link>
+          <Link href="/judge">Judge path</Link>
         </div>
       </footer>
     </div>

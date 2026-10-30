@@ -138,6 +138,7 @@ export interface TrackRecordEntry {
   plainEnglish: string;
   orderMode: 'live' | 'dry-run' | 'idea-only';
   orderId?: string;
+  orderStatus?: string;
   horizonHours: number;
   resolveAfter: string;
   outcome: OutcomeStatus;
@@ -156,4 +157,80 @@ export interface DeskSnapshot {
   thesis: Thesis;
   risk: RiskDecision;
   demoMode: boolean;
+}
+
+
+export interface SodexBookLevel {
+  price: number;
+  qty: number;
+}
+
+export interface SodexOrderBook {
+  symbol: string;
+  bids: SodexBookLevel[];
+  asks: SodexBookLevel[];
+  blockTime: number;
+  updateId: number;
+  meta: SourceMeta;
+  gateway: 'testnet' | 'mainnet';
+}
+
+export interface SodexKline {
+  t: number;
+  o: number;
+  h: number;
+  l: number;
+  c: number;
+  v: number;
+}
+
+export interface SodexTradePrint {
+  id: number;
+  time: number;
+  price: number;
+  qty: number;
+  side: 'BUY' | 'SELL';
+}
+
+export interface SodexMarketBundle {
+  symbol: string;
+  ticker: MarketTicker | null;
+  orderbook: SodexOrderBook | null;
+  klines: SodexKline[];
+  trades: SodexTradePrint[];
+  fundingRate: number | null;
+  gateway: 'testnet' | 'mainnet' | 'fallback';
+  meta: SourceMeta;
+}
+
+export interface JarvisCitation {
+  kind: 'news' | 'etf' | 'ssi' | 'market';
+  label: string;
+  detail: string;
+  url?: string;
+}
+
+export interface JarvisIdea {
+  rank: number;
+  side: ThesisSide;
+  symbol: string;
+  title: string;
+  reasoning: string;
+  citations: JarvisCitation[];
+  confidence: number;
+  riskNote: string;
+  invalidation: string;
+  entry: number;
+  stopLoss: number;
+  takeProfit: number;
+  horizonHours: number;
+}
+
+export interface JarvisBriefing {
+  greeting: string;
+  spokenSummary: string;
+  asOf: string;
+  ideas: JarvisIdea[];
+  engine: 'gemini' | 'rules';
+  newsShock: boolean;
 }
