@@ -6,8 +6,16 @@ import type { DeskSnapshot, OrderResult, RiskDecision, SourceMeta } from '@/type
 import { LiveBadge } from './LiveBadge';
 import { FlowRadar } from './FlowRadar';
 import { CountUp } from './CountUp';
-import { VoiceAssistant } from './VoiceAssistant';
-import { EtfFlowChart } from './EtfFlowChart';
+import dynamic from 'next/dynamic';
+
+const VoiceAssistant = dynamic(() => import('./VoiceAssistant').then((m) => m.VoiceAssistant), {
+  ssr: false,
+  loading: () => <div className="panel" style={{ padding: 20 }} aria-busy>Loading voice desk…</div>,
+});
+const EtfFlowChart = dynamic(() => import('./EtfFlowChart').then((m) => m.EtfFlowChart), {
+  ssr: false,
+  loading: () => <div className="skeleton" style={{ height: 128 }} aria-hidden />,
+});
 
 type DeskPayload = DeskSnapshot & {
   keys: { sosovalue: boolean; gemini: boolean; sodex: boolean };

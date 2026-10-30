@@ -30,9 +30,9 @@ export function HeroLanding() {
       if (!cancelled) setShow3d(true);
     };
     if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
-      idleId = window.requestIdleCallback(go, { timeout: 1200 });
+      idleId = window.requestIdleCallback(go, { timeout: 2500 });
     } else {
-      timeoutId = setTimeout(go, 400);
+      timeoutId = setTimeout(go, 1800);
     }
     return () => {
       cancelled = true;

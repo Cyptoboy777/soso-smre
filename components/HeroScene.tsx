@@ -1,11 +1,11 @@
 'use client';
 
-import { useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
 import { Float } from '@react-three/drei';
 import * as THREE from 'three';
 
-function FlowParticles({ count = 900 }: { count?: number }) {
+function FlowParticles({ count }: { count: number }) {
   const points = useRef<THREE.Points>(null);
   const speeds = useMemo(() => {
     const s = new Float32Array(count);
@@ -38,14 +38,7 @@ function FlowParticles({ count = 900 }: { count?: number }) {
 
   return (
     <points ref={points} geometry={geom}>
-      <pointsMaterial
-        size={0.035}
-        color="#FF7637"
-        transparent
-        opacity={0.85}
-        depthWrite={false}
-        sizeAttenuation
-      />
+      <pointsMaterial size={0.035} color="#FF7637" transparent opacity={0.85} depthWrite={false} sizeAttenuation />
     </points>
   );
 }
@@ -60,39 +53,44 @@ function CoreOrb() {
   return (
     <Float speed={1.4} floatIntensity={0.6}>
       <mesh ref={mesh}>
-        <icosahedronGeometry args={[0.85, 2]} />
-        <meshStandardMaterial
-          color="#FF4F20"
-          emissive="#FF4F20"
-          emissiveIntensity={0.65}
-          metalness={0.4}
-          roughness={0.25}
-          wireframe
-        />
+        <icosahedronGeometry args={[0.85, 1]} />
+        <meshStandardMaterial color="#FF4F20" emissive="#FF4F20" emissiveIntensity={0.65} metalness={0.4} roughness={0.25} wireframe />
       </mesh>
     </Float>
   );
 }
 
 export function HeroScene({ reduceMotion }: { reduceMotion?: boolean }) {
-  if (reduceMotion) {
-    return <div className="hero-3d-static" aria-hidden />;
-  }
+  const wrap = useRef<HTMLDivElement>(null);
+  const [visible, setVisible] = useState(true);
   const mobile = typeof window !== 'undefined' && window.innerWidth < 700;
+
+  useEffect(() => {
+    const el = wrap.current;
+    if (!el || typeof IntersectionObserver === 'undefined') return;
+    const io = new IntersectionObserver(([e]) => setVisible(e.isIntersecting), { threshold: 0.05 });
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
+
+  if (reduceMotion) return <div className="hero-3d-static" aria-hidden />;
+
   return (
-    <div className="hero-3d-canvas" aria-hidden>
-      <Canvas
-        dpr={[1, 1.5]}
-        camera={{ position: [0, 0.2, 5.2], fov: 45 }}
-        gl={{ antialias: true, alpha: true, powerPreference: 'high-performance' }}
-        style={{ background: 'transparent' }}
-      >
-        <ambientLight intensity={0.4} />
-        <pointLight position={[3, 2, 4]} intensity={1.1} color="#FF7637" />
-        <pointLight position={[-3, -1, -2]} intensity={0.45} color="#FF4F20" />
-        <FlowParticles count={mobile ? 420 : 900} />
-        <CoreOrb />
-      </Canvas>
+    <div className="hero-3d-canvas" ref={wrap} aria-hidden>
+      {visible ? (
+        <Canvas
+          dpr={[1, 1.25]}
+          camera={{ position: [0, 0.2, 5.2], fov: 45 }}
+          gl={{ antialias: false, alpha: true, powerPreference: 'high-performance' }}
+          frameloop="always"
+          style={{ background: 'transparent' }}
+        >
+          <ambientLight intensity={0.4} />
+          <pointLight position={[3, 2, 4]} intensity={1.1} color="#FF7637" />
+          <FlowParticles count={mobile ? 220 : 480} />
+          <CoreOrb />
+        </Canvas>
+      ) : null}
     </div>
   );
 }
