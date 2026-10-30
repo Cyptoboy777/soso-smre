@@ -81,15 +81,22 @@ JSON shape:
             .join('; ')}.`
         : '';
 
+    let entry = Number(parsed.entry ?? fallback.entry) || fallback.entry;
+    let stopLoss = Number(parsed.stopLoss ?? fallback.stopLoss) || fallback.stopLoss;
+    let takeProfit = Number(parsed.takeProfit ?? fallback.takeProfit) || fallback.takeProfit;
+    if (side === 'FLAT') {
+      stopLoss = entry;
+      takeProfit = entry;
+    }
     return {
       ...fallback,
       side,
       symbol,
       confidence: Math.round(Math.max(0, Math.min(100, Number(parsed.confidence ?? fallback.confidence)))),
       plainEnglish: `${String(parsed.plainEnglish ?? fallback.plainEnglish)}${citeNote}`,
-      entry: Number(parsed.entry ?? fallback.entry) || fallback.entry,
-      stopLoss: Number(parsed.stopLoss ?? fallback.stopLoss) || fallback.stopLoss,
-      takeProfit: Number(parsed.takeProfit ?? fallback.takeProfit) || fallback.takeProfit,
+      entry,
+      stopLoss,
+      takeProfit,
       horizonHours: Number(parsed.horizonHours ?? 24) || 24,
       engine: 'gemini',
       drivers: {

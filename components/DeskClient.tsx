@@ -221,7 +221,7 @@ export function DeskClient() {
         </div>
         <div
           style={{
-            background: 'linear-gradient(165deg, rgba(127,39,17,0.42), rgba(10,10,10,0.15))',
+            background: 'radial-gradient(circle at 50% 45%, rgba(255,79,32,0.16), transparent 62%)',
             borderLeft: '1px solid var(--line)',
             display: 'grid',
             placeItems: 'center',
