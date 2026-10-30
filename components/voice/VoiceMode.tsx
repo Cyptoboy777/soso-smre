@@ -336,11 +336,12 @@ export function VoiceMode({
                 const fd = new FormData(e.currentTarget);
                 const q = String(fd.get('q') || '');
                 e.currentTarget.reset();
+                stopListen();
                 void ask(q);
               }}
             >
               <input name="q" placeholder="Type if mic unavailable…" autoComplete="off" aria-label="Type a question" />
-              <button type="submit" className="btn" disabled={state !== 'idle' && state !== 'loading'}>
+              <button type="submit" className="btn" disabled={state === 'thinking' || state === 'speaking'}>
                 Ask
               </button>
             </form>
