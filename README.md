@@ -79,6 +79,18 @@ Copy `.env.example` → `.env.local` (never commit secrets).
 
 ---
 
+## Voice desk
+
+Multilingual push-to-talk assistant on the Desk (judge mode friendly):
+
+- **STT / TTS:** browser [Web Speech API](https://developer.mozilla.org/en-US/docs/Web/API/Web_Speech_API) (free, many languages)
+- **Languages:** English, Hindi, Telugu, Spanish, Chinese, Japanese, Korean (+ Auto)
+- **Grounded answers** about thesis, ETF flows, news, risk gate, track record
+- **Commands:** “read thesis”, “explain risk”, “refresh thesis”, “ETF flows”, “news”
+- **Safety:** voice **never** places orders — explicit Confirm checkbox + click still required
+- **LLM:** `GEMINI_API_KEY` when set; otherwise deterministic answers from the live desk snapshot
+- Optional heavier STT fallback (not bundled by default): [Xenova/whisper-tiny](https://huggingface.co/Xenova/whisper-tiny) via `@xenova/transformers` (Apache-2.0)
+
 ## Local run
 
 ```bash
@@ -123,3 +135,20 @@ Logo: sentinel aperture (FlowRadar) — concentric arcs + flow tick. Assets in `
 
 See `CHANGELOG.md` → **Wave 3 (since Jul 4 submission)**.  
 Do not merge this branch into the default branch until after judging — production remains the prior live site.
+
+
+## Design credits (inspiration, not copy-paste of proprietary kits)
+
+Visual language and motion patterns were informed by public, license-respecting sources. FlowSentinel code is original; we did not vendor proprietary component source.
+
+| Resource | License | What we took inspiration from |
+| --- | --- | --- |
+| [shadcn/ui](https://ui.shadcn.com) | MIT | Quiet panels, focus rings, composition |
+| [Magic UI](https://magicui.design) | MIT | Tasteful Motion entrances / stagger |
+| [Origin UI](https://originui.com) | MIT | Dense app chrome, metric chips |
+| [Tremor](https://tremor.so) | Apache-2.0 | Dashboard metric hierarchy |
+| [Motion](https://motion.dev) (`framer-motion`) | MIT | Springs, reduced-motion, list stagger |
+| Aceternity UI | Free personal/commercial use (no resale as a lib) | Hero energy — patterns only, no pasted blocks |
+| Hyperliquid / Linear-style trading UIs | N/A (look & feel) | Restraint, tabular numbers, calm density |
+
+Brand colours are from SoSoValue / SoDEX public sites (see Brand section).

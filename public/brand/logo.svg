@@ -1,15 +1,15 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 280 64" fill="none" role="img" aria-label="FlowSentinel">
-  <g transform="translate(0,0)" fill="none" stroke="#FF4F20" stroke-linecap="round">
-    <circle cx="32" cy="32" r="26" stroke-width="2.5" opacity="0.25"/>
-    <path d="M32 8a24 24 0 0 1 20.78 12" stroke-width="3"/>
-    <path d="M52.78 44A24 24 0 0 1 32 56" stroke-width="3"/>
-    <path d="M11.22 44A24 24 0 0 1 32 8" stroke-width="3" opacity="0.35"/>
-    <circle cx="32" cy="32" r="14" stroke-width="2.5"/>
-    <circle cx="32" cy="32" r="5" fill="#FF4F20" stroke="none"/>
-    <path d="M32 32l14-14" stroke-width="2.5"/>
-    <circle cx="48" cy="18" r="3" fill="#FF4F20" stroke="none"/>
+  <g transform="translate(0,0)">
+    <circle cx="32" cy="32" r="28" stroke="#FF4F20" stroke-width="1.5" opacity="0.18"/>
+    <path d="M32 6c14.36 0 26 11.64 26 26" stroke="#FF4F20" stroke-width="3.5" stroke-linecap="round" opacity="0.35"/>
+    <path d="M58 32c0 14.36-11.64 26-26 26S6 46.36 6 32" stroke="#FF4F20" stroke-width="3.5" stroke-linecap="round"/>
+    <path d="M12 18.5A22 22 0 0 1 32 10" stroke="#FF4F20" stroke-width="3.5" stroke-linecap="round"/>
+    <circle cx="32" cy="32" r="12" stroke="#FF4F20" stroke-width="2.5"/>
+    <circle cx="32" cy="32" r="4.5" fill="#FF4F20"/>
+    <path d="M36.5 27.5 50 14" stroke="#FF4F20" stroke-width="3" stroke-linecap="round"/>
+    <circle cx="51.5" cy="12.5" r="3.25" fill="#FF4F20"/>
   </g>
-  <g fill="#F5F5F5" font-family="ui-sans-serif, system-ui, sans-serif">
-    <text x="78" y="40" font-size="28" font-weight="600" letter-spacing="-0.03em">FlowSentinel</text>
-  </g>
+  <text x="78" y="41" font-family="ui-sans-serif, system-ui, sans-serif" font-size="28" font-weight="650" letter-spacing="-0.04em">
+    <tspan fill="#F5F5F5">Flow</tspan><tspan fill="#FF7637">Sentinel</tspan>
+  </text>
 </svg>

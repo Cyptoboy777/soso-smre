@@ -1,24 +1,21 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import type { DeskSnapshot, OrderResult, RiskDecision } from '@/types/flow';
+import { motion, useReducedMotion } from 'framer-motion';
+import type { DeskSnapshot, OrderResult, RiskDecision, SourceMeta } from '@/types/flow';
 import { LiveBadge } from './LiveBadge';
 import { FlowRadar } from './FlowRadar';
+import { CountUp } from './CountUp';
+import { VoiceAssistant } from './VoiceAssistant';
 
 type DeskPayload = DeskSnapshot & {
   keys: { sosovalue: boolean; gemini: boolean; sodex: boolean };
   trackId?: string;
 };
 
-function fmtUsd(n: number | null | undefined, compact = true) {
-  if (n == null || !Number.isFinite(n)) return '—';
-  if (!compact) return `$${n.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
-  const abs = Math.abs(n);
-  const sign = n < 0 ? '−' : '';
-  if (abs >= 1e9) return `${sign}$${(abs / 1e9).toFixed(2)}B`;
-  if (abs >= 1e6) return `${sign}$${(abs / 1e6).toFixed(1)}M`;
-  if (abs >= 1e3) return `${sign}$${(abs / 1e3).toFixed(0)}K`;
-  return `${sign}$${abs.toFixed(0)}`;
+function fmtUsd(n: number | null | undefined) {
+  if (n == null || !Number.isFinite(n)) return null;
+  return n;
 }
 
 function fmtPctFraction(n: number | null) {
@@ -26,7 +23,21 @@ function fmtPctFraction(n: number | null) {
   return `${n >= 0 ? '+' : ''}${(n * 100).toFixed(2)}%`;
 }
 
+const fadeUp = {
+  hidden: { opacity: 0, y: 14 },
+  show: (i: number) => ({
+    opacity: 1,
+    y: 0,
+    transition: {
+      delay: Math.min(i * 0.05, 0.3),
+      duration: 0.55,
+      ease: [0.16, 1, 0.3, 1] as [number, number, number, number],
+    },
+  }),
+};
+
 export function DeskClient() {
+  const reduce = useReducedMotion();
   const [data, setData] = useState<DeskPayload | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -42,8 +53,7 @@ export function DeskClient() {
     try {
       const res = await fetch('/api/thesis?persist=1', { cache: 'no-store' });
       if (!res.ok) throw new Error(`Desk load failed (${res.status})`);
-      const json = (await res.json()) as DeskPayload;
-      setData(json);
+      setData((await res.json()) as DeskPayload);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -87,8 +97,9 @@ export function DeskClient() {
   if (loading && !data) {
     return (
       <div style={{ display: 'grid', gap: 16 }}>
-        <div className="skel" style={{ height: 220 }} />
+        <div className="skel" style={{ height: 240 }} />
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(240px,1fr))', gap: 16 }}>
+          <div className="skel" style={{ height: 160 }} />
           <div className="skel" style={{ height: 160 }} />
           <div className="skel" style={{ height: 160 }} />
           <div className="skel" style={{ height: 160 }} />
@@ -99,10 +110,12 @@ export function DeskClient() {
 
   if (error && !data) {
     return (
-      <div className="panel" style={{ padding: 24 }}>
-        <p style={{ margin: 0 }}>{error}</p>
-        <button className="btn" style={{ marginTop: 16 }} onClick={() => void load()}>
-          Retry
+      <div className="panel" style={{ padding: 28 }}>
+        <p className="hero-kicker">Desk offline</p>
+        <h2 style={{ margin: '0 0 8px', letterSpacing: '-0.03em' }}>Could not load today&apos;s thesis</h2>
+        <p style={{ margin: '0 0 16px', color: 'var(--text-muted)' }}>{error}</p>
+        <button className="btn btn-primary" onClick={() => void load()}>
+          Retry desk
         </button>
       </div>
     );
@@ -110,15 +123,32 @@ export function DeskClient() {
 
   if (!data) return null;
   const { thesis, risk, etfBtc, etfEth, news, ssi, market, keys } = data;
+  const btcFlow = fmtUsd(etfBtc.latest?.totalNetInflow);
+  const ethFlow = fmtUsd(etfEth.latest?.totalNetInflow);
 
   return (
     <div style={{ display: 'grid', gap: 20 }}>
+      <div className="desk-intro">
+        <div>
+          <p className="hero-kicker">One-person fund desk</p>
+          <h1>Today&apos;s insight → confirmed action</h1>
+          <p>
+            SoSoValue flows and news become a plain-English thesis, a risk gate, and a confirmed SoDEX
+            testnet order. Fallback panels are always labelled.
+          </p>
+        </div>
+      </div>
+
       {/* Hero */}
-      <section
-        className="panel rise desk-hero"
+      <motion.section
+        className="panel desk-hero"
+        variants={reduce ? undefined : fadeUp}
+        initial={reduce ? false : 'hidden'}
+        animate="show"
+        custom={0}
         style={{
           display: 'grid',
-          gridTemplateColumns: 'minmax(0,1.4fr) minmax(200px,0.6fr)',
+          gridTemplateColumns: 'minmax(0,1.45fr) minmax(220px,0.55fr)',
           gap: 0,
           overflow: 'hidden',
         }}
@@ -129,38 +159,51 @@ export function DeskClient() {
               Daily thesis
             </span>
             <span className="badge">{thesis.engine === 'gemini' ? 'Gemini' : 'Rules engine'}</span>
-            <span className="badge">{thesis.side}</span>
+            <span className={`badge ${thesis.side === 'FLAT' ? 'fallback' : 'live'}`}>{thesis.side}</span>
           </div>
-          <h1
+          <h2
             style={{
               margin: '0 0 12px',
-              fontSize: 'clamp(1.6rem, 3.5vw, 2.35rem)',
-              letterSpacing: '-0.035em',
-              lineHeight: 1.15,
+              fontSize: 'clamp(1.7rem, 3.6vw, 2.5rem)',
+              letterSpacing: '-0.04em',
+              lineHeight: 1.12,
               textWrap: 'balance',
-              fontWeight: 600,
+              fontWeight: 650,
             }}
           >
-            {thesis.side === 'FLAT' ? 'Stand aside today' : `${thesis.side} ${thesis.symbol.replace(/v/g, '').replace('_', '/')}`}
-          </h1>
-          <p style={{ margin: '0 0 20px', color: 'var(--text-muted)', maxWidth: 58 * 8, textWrap: 'pretty' }}>
+            {thesis.side === 'FLAT'
+              ? 'Stand aside today'
+              : `${thesis.side} ${thesis.symbol.replace(/v/g, '').replace('_', '/')}`}
+          </h2>
+          <p style={{ margin: '0 0 22px', color: 'var(--text-muted)', maxWidth: 54 * 8, textWrap: 'pretty' }}>
             {thesis.plainEnglish}
           </p>
-          <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', alignItems: 'end' }}>
-            <Metric label="Confidence" value={`${thesis.confidence}`} suffix="/100" accent />
-            <Metric label="Entry" value={`$${thesis.entry.toLocaleString()}`} />
-            <Metric label="Stop" value={`$${thesis.stopLoss.toLocaleString()}`} />
-            <Metric label="Target" value={`$${thesis.takeProfit.toLocaleString()}`} />
-            <Metric label="Horizon" value={`${thesis.horizonHours}h`} />
+          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'stretch' }}>
+            <div className="metric-chip">
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>Confidence</div>
+              <div style={{ color: 'var(--accent)', fontSize: 26, fontWeight: 650, letterSpacing: '-0.03em' }}>
+                <CountUp value={thesis.confidence} />
+                <span style={{ fontSize: 13, color: 'var(--text-muted)', fontWeight: 500 }}> /100</span>
+              </div>
+            </div>
+            <MetricChip label="Entry" value={thesis.entry} prefix="$" />
+            <MetricChip label="Stop" value={thesis.stopLoss} prefix="$" />
+            <MetricChip label="Target" value={thesis.takeProfit} prefix="$" />
+            <div className="metric-chip">
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>Horizon</div>
+              <div className="tabular" style={{ fontSize: 18, fontWeight: 600 }}>
+                {thesis.horizonHours}h
+              </div>
+            </div>
           </div>
         </div>
         <div
           style={{
-            background: 'linear-gradient(160deg, rgba(127,39,17,0.35), rgba(10,10,10,0.2))',
+            background: 'linear-gradient(165deg, rgba(127,39,17,0.42), rgba(10,10,10,0.15))',
             borderLeft: '1px solid var(--line)',
             display: 'grid',
             placeItems: 'center',
-            padding: 20,
+            padding: 22,
           }}
         >
           <FlowRadar
@@ -168,83 +211,116 @@ export function DeskClient() {
             ethInflow={etfEth.latest?.totalNetInflow ?? null}
           />
         </div>
-      </section>
+      </motion.section>
 
       {/* Data panels */}
       <section
         style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))',
           gap: 16,
         }}
       >
-        <DataCard title="BTC US ETF flow" meta={etfBtc.meta} className="rise rise-d1">
-          <BigStat
-            value={fmtUsd(etfBtc.latest?.totalNetInflow)}
-            hint={`Latest ${etfBtc.latest?.date ?? '—'}`}
-            tone={(etfBtc.latest?.totalNetInflow ?? 0) >= 0 ? 'up' : 'down'}
-          />
-          <MiniBars history={etfBtc.history.slice(0, 7).reverse()} />
+        <DataCard title="BTC US ETF flow" meta={etfBtc.meta} index={1}>
+          {btcFlow == null ? (
+            <EmptyPanel
+              title="No ETF print yet"
+              body="When SOSOVALUE_API_KEY is set, the latest US BTC ETF net inflow appears here."
+            />
+          ) : (
+            <>
+              <BigFlow value={btcFlow} hint={`Latest ${etfBtc.latest?.date ?? '—'}`} />
+              <MiniBars history={etfBtc.history.slice(0, 7).reverse()} />
+            </>
+          )}
         </DataCard>
-        <DataCard title="ETH US ETF flow" meta={etfEth.meta} className="rise rise-d2">
-          <BigStat
-            value={fmtUsd(etfEth.latest?.totalNetInflow)}
-            hint={`Latest ${etfEth.latest?.date ?? '—'}`}
-            tone={(etfEth.latest?.totalNetInflow ?? 0) >= 0 ? 'up' : 'down'}
-          />
-          <MiniBars history={etfEth.history.slice(0, 7).reverse()} />
+        <DataCard title="ETH US ETF flow" meta={etfEth.meta} index={2}>
+          {ethFlow == null ? (
+            <EmptyPanel
+              title="No ETF print yet"
+              body="ETH US ETF net inflow/outflow will show live with a SoSoValue key."
+            />
+          ) : (
+            <>
+              <BigFlow value={ethFlow} hint={`Latest ${etfEth.latest?.date ?? '—'}`} />
+              <MiniBars history={etfEth.history.slice(0, 7).reverse()} />
+            </>
+          )}
         </DataCard>
-        <DataCard title="ssiMAG7" meta={ssi.meta} className="rise rise-d3">
-          <BigStat value={ssi.price?.toFixed(2) ?? '—'} hint={`24h ${fmtPctFraction(ssi.changePct24h)}`} />
-          <p style={{ margin: '12px 0 0', fontSize: 13, color: 'var(--text-muted)' }}>
-            7d ROI {fmtPctFraction(ssi.roi7d)}
-          </p>
+        <DataCard title="ssiMAG7" meta={ssi.meta} index={3}>
+          {ssi.price == null ? (
+            <EmptyPanel title="SSI unavailable" body="Index snapshot needs SOSOVALUE_API_KEY or will show labelled fallback." />
+          ) : (
+            <>
+              <div className="tabular" style={{ fontSize: 28, fontWeight: 650, letterSpacing: '-0.03em' }}>
+                <CountUp value={ssi.price} decimals={2} />
+              </div>
+              <p style={{ margin: '8px 0 0', fontSize: 13, color: 'var(--text-muted)' }}>
+                24h {fmtPctFraction(ssi.changePct24h)} · 7d {fmtPctFraction(ssi.roi7d)}
+              </p>
+            </>
+          )}
         </DataCard>
-        <DataCard title="Hot news" meta={news.meta} className="rise rise-d4">
-          <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'grid', gap: 10 }}>
-            {news.items.slice(0, 3).map((n) => (
-              <li key={n.id} style={{ fontSize: 13, lineHeight: 1.4 }}>
-                <a href={n.url} target="_blank" rel="noreferrer" style={{ color: 'var(--text)' }}>
-                  {n.isShock ? '⚠ ' : ''}
-                  {n.title}
-                </a>
-              </li>
-            ))}
-          </ul>
+        <DataCard title="Hot news" meta={news.meta} index={4}>
+          {news.items.length === 0 ? (
+            <EmptyPanel title="No headlines" body="Hot news fills in from SoSoValue /news/hot when the key is present." />
+          ) : (
+            <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'grid', gap: 10 }}>
+              {news.items.slice(0, 3).map((n) => (
+                <li key={n.id} style={{ fontSize: 13, lineHeight: 1.4 }}>
+                  <a className="news-link" href={n.url} target="_blank" rel="noreferrer" style={{ color: 'var(--text)' }}>
+                    {n.isShock ? '⚠ ' : ''}
+                    {n.title}
+                  </a>
+                </li>
+              ))}
+            </ul>
+          )}
           {news.shockActive && (
             <p style={{ margin: '12px 0 0', color: 'var(--danger)', fontSize: 12 }}>News-shock pause armed</p>
           )}
         </DataCard>
       </section>
 
-      {/* Market strip */}
-      <section className="panel rise rise-d2">
+      {/* Market */}
+      <motion.section
+        className="panel"
+        variants={reduce ? undefined : fadeUp}
+        initial={reduce ? false : 'hidden'}
+        animate="show"
+        custom={5}
+      >
         <div className="panel-head">
           <strong style={{ fontWeight: 560 }}>SoDEX market</strong>
           <LiveBadge source={market.meta.source} note={market.meta.note} />
         </div>
-        <div
-          className="panel-body"
-          style={{ display: 'flex', gap: 20, flexWrap: 'wrap', fontFamily: 'var(--font-mono)', fontSize: 13 }}
-        >
-          {market.tickers.slice(0, 4).map((t) => (
-            <div key={t.symbol}>
-              <div style={{ color: 'var(--text-muted)', marginBottom: 4 }}>{t.symbol}</div>
-              <div className="tabular">
-                ${t.lastPrice.toLocaleString()}{' '}
-                <span style={{ color: t.changePct24h >= 0 ? 'var(--success)' : 'var(--danger)' }}>
-                  {t.changePct24h >= 0 ? '+' : ''}
-                  {t.changePct24h.toFixed(2)}%
-                </span>
+        <div className="panel-body" style={{ display: 'flex', gap: 20, flexWrap: 'wrap', fontSize: 13 }}>
+          {market.tickers.length === 0 ? (
+            <EmptyPanel title="No tickers" body="Public SoDEX tickers will appear when the gateway responds." />
+          ) : (
+            market.tickers.slice(0, 4).map((t) => (
+              <div key={t.symbol}>
+                <div style={{ color: 'var(--text-muted)', marginBottom: 4 }}>{t.symbol}</div>
+                <div className="tabular" style={{ fontFamily: 'var(--font-mono)' }}>
+                  $<CountUp value={t.lastPrice} decimals={t.lastPrice >= 100 ? 0 : 2} />{' '}
+                  <span style={{ color: t.changePct24h >= 0 ? 'var(--success)' : 'var(--danger)' }}>
+                    {t.changePct24h >= 0 ? '+' : ''}
+                    {t.changePct24h.toFixed(2)}%
+                  </span>
+                </div>
               </div>
-            </div>
-          ))}
+            ))
+          )}
         </div>
-      </section>
+      </motion.section>
 
-      {/* Risk gate + confirm */}
-      <section
-        className="panel rise rise-d3 risk-split"
+      {/* Risk + confirm */}
+      <motion.section
+        className="panel risk-split"
+        variants={reduce ? undefined : fadeUp}
+        initial={reduce ? false : 'hidden'}
+        animate="show"
+        custom={6}
         style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) minmax(260px,0.55fr)' }}
       >
         <div>
@@ -256,16 +332,13 @@ export function DeskClient() {
             </span>
           </div>
           <div className="panel-body" style={{ display: 'grid', gap: 10 }}>
-            {risk.checks.map((c) => (
-              <div
+            {risk.checks.map((c, i) => (
+              <motion.div
                 key={c.id}
-                style={{
-                  display: 'grid',
-                  gridTemplateColumns: '20px 1fr',
-                  gap: 10,
-                  alignItems: 'start',
-                  fontSize: 14,
-                }}
+                initial={reduce ? false : { opacity: 0, x: -6 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: 0.05 * i, duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
+                style={{ display: 'grid', gridTemplateColumns: '20px 1fr', gap: 10, fontSize: 14 }}
               >
                 <span aria-hidden style={{ color: c.passed ? 'var(--success)' : 'var(--danger)' }}>
                   {c.passed ? '✓' : '×'}
@@ -274,11 +347,11 @@ export function DeskClient() {
                   <div style={{ fontWeight: 550 }}>{c.label}</div>
                   <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>{c.detail}</div>
                 </div>
-              </div>
+              </motion.div>
             ))}
           </div>
         </div>
-        <div style={{ borderLeft: '1px solid var(--line)', padding: 24, background: 'rgba(255,79,32,0.03)' }}>
+        <div style={{ borderLeft: '1px solid var(--line)', padding: 24, background: 'rgba(255,79,32,0.035)' }}>
           <h2 style={{ margin: '0 0 8px', fontSize: 18, letterSpacing: '-0.02em' }}>Confirm & execute</h2>
           <p style={{ margin: '0 0 16px', color: 'var(--text-muted)', fontSize: 13 }}>
             Limit {thesis.side === 'SHORT' ? 'SELL' : 'BUY'} {risk.positionSize || '—'} {thesis.symbol} @ $
@@ -286,13 +359,11 @@ export function DeskClient() {
             <br />
             Risk ${risk.riskUsd} ({risk.riskPct}% of ${risk.equityUsd.toLocaleString()} equity)
           </p>
-
           {!keys.sodex && (
             <p className="badge fallback" style={{ marginBottom: 12, display: 'inline-flex' }}>
               SoDEX keys absent → dry-run only
             </p>
           )}
-
           <label
             style={{
               display: 'flex',
@@ -313,7 +384,6 @@ export function DeskClient() {
             />
             <span>I reviewed the thesis and risk checks. Place the SoDEX testnet limit order.</span>
           </label>
-
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             <button
               className="btn btn-primary"
@@ -326,7 +396,6 @@ export function DeskClient() {
               Refresh thesis
             </button>
           </div>
-
           {order && (
             <div
               role="status"
@@ -352,10 +421,14 @@ export function DeskClient() {
               {error}
             </p>
           )}
+          <p style={{ margin: '14px 0 0', fontSize: 11, color: 'var(--text-faint)' }}>
+            Voice assistant never places orders — confirmation click required.
+          </p>
         </div>
-      </section>
+      </motion.section>
 
-      {/* Key status */}
+      <VoiceAssistant desk={data} onRefresh={() => void load()} />
+
       <p style={{ fontSize: 12, color: 'var(--text-faint)', margin: 0 }}>
         Keys: SoSoValue {keys.sosovalue ? '✓' : '✗'} · Gemini {keys.gemini ? '✓' : '✗'} · SoDEX{' '}
         {keys.sodex ? '✓' : '✗'} · Demo mode {data.demoMode ? 'on' : 'off'}
@@ -364,31 +437,13 @@ export function DeskClient() {
   );
 }
 
-function Metric({
-  label,
-  value,
-  suffix,
-  accent,
-}: {
-  label: string;
-  value: string;
-  suffix?: string;
-  accent?: boolean;
-}) {
+function MetricChip({ label, value, prefix = '' }: { label: string; value: number; prefix?: string }) {
+  const decimals = value >= 1000 ? 0 : value >= 1 ? 2 : 4;
   return (
-    <div>
-      <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>{label}</div>
-      <div
-        className="tabular"
-        style={{
-          fontSize: accent ? 28 : 18,
-          fontWeight: 600,
-          letterSpacing: '-0.02em',
-          color: accent ? 'var(--accent)' : 'var(--text)',
-        }}
-      >
-        {value}
-        {suffix && <span style={{ fontSize: 14, color: 'var(--text-muted)', fontWeight: 500 }}> {suffix}</span>}
+    <div className="metric-chip">
+      <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>{label}</div>
+      <div style={{ fontSize: 18, fontWeight: 600, letterSpacing: '-0.02em' }}>
+        <CountUp value={value} decimals={decimals} prefix={prefix} />
       </div>
     </div>
   );
@@ -398,45 +453,56 @@ function DataCard({
   title,
   meta,
   children,
-  className = '',
+  index,
 }: {
   title: string;
-  meta: { source: 'live' | 'fallback' | 'unavailable'; note?: string };
+  meta: SourceMeta;
   children: React.ReactNode;
-  className?: string;
+  index: number;
 }) {
+  const reduce = useReducedMotion();
   return (
-    <article className={`panel ${className}`}>
+    <motion.article
+      className="panel panel-interactive"
+      variants={reduce ? undefined : fadeUp}
+      initial={reduce ? false : 'hidden'}
+      animate="show"
+      custom={index}
+    >
       <div className="panel-head">
         <strong style={{ fontWeight: 560, fontSize: 14 }}>{title}</strong>
         <LiveBadge source={meta.source} note={meta.note} />
       </div>
       <div className="panel-body">{children}</div>
-    </article>
+    </motion.article>
   );
 }
 
-function BigStat({
-  value,
-  hint,
-  tone,
-}: {
-  value: string;
-  hint?: string;
-  tone?: 'up' | 'down';
-}) {
+function BigFlow({ value, hint }: { value: number; hint?: string }) {
+  const abs = Math.abs(value);
+  let scaled = abs;
+  let suffix = '';
+  if (abs >= 1e9) {
+    scaled = abs / 1e9;
+    suffix = 'B';
+  } else if (abs >= 1e6) {
+    scaled = abs / 1e6;
+    suffix = 'M';
+  } else if (abs >= 1e3) {
+    scaled = abs / 1e3;
+    suffix = 'K';
+  }
   return (
     <div>
       <div
-        className="tabular"
         style={{
           fontSize: 28,
-          fontWeight: 600,
+          fontWeight: 650,
           letterSpacing: '-0.03em',
-          color: tone === 'up' ? 'var(--success)' : tone === 'down' ? 'var(--danger)' : 'var(--text)',
+          color: value >= 0 ? 'var(--success)' : 'var(--danger)',
         }}
       >
-        {value}
+        <CountUp value={scaled} decimals={suffix === 'B' ? 2 : 1} prefix={value < 0 ? '−$' : '+$'} suffix={suffix} />
       </div>
       {hint && <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>{hint}</div>}
     </div>
@@ -459,6 +525,7 @@ function MiniBars({ history }: { history: { totalNetInflow: number }[] }) {
               height: hgt,
               borderRadius: 3,
               background: up ? 'rgba(30,168,88,0.7)' : 'rgba(242,66,55,0.7)',
+              transition: 'height 400ms var(--ease-out)',
             }}
           />
         );
@@ -467,3 +534,11 @@ function MiniBars({ history }: { history: { totalNetInflow: number }[] }) {
   );
 }
 
+function EmptyPanel({ title, body }: { title: string; body: string }) {
+  return (
+    <div className="empty-state">
+      <strong>{title}</strong>
+      <span>{body}</span>
+    </div>
+  );
+}

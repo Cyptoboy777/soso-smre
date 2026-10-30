@@ -1,12 +1,10 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none" aria-hidden="true">
-  <!-- Unit grid 8. Outer aperture rings share centre 32,32 -->
-  <circle cx="32" cy="32" r="26" stroke="currentColor" stroke-width="2.5" opacity="0.25"/>
-  <path d="M32 8a24 24 0 0 1 20.78 12" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>
-  <path d="M52.78 44A24 24 0 0 1 32 56" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>
-  <path d="M11.22 44A24 24 0 0 1 32 8" stroke="currentColor" stroke-width="3" stroke-linecap="round" opacity="0.35"/>
-  <circle cx="32" cy="32" r="14" stroke="currentColor" stroke-width="2.5"/>
-  <circle cx="32" cy="32" r="5" fill="currentColor"/>
-  <!-- Flow tick (north-east) -->
-  <path d="M32 32l14-14" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
-  <circle cx="48" cy="18" r="3" fill="currentColor"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <circle cx="32" cy="32" r="28" stroke="#FF4F20" stroke-width="1.5" opacity="0.18"/>
+  <path d="M32 6c14.36 0 26 11.64 26 26" stroke="#FF4F20" stroke-width="3.5" stroke-linecap="round" opacity="0.35"/>
+  <path d="M58 32c0 14.36-11.64 26-26 26S6 46.36 6 32" stroke="#FF4F20" stroke-width="3.5" stroke-linecap="round"/>
+  <path d="M12 18.5A22 22 0 0 1 32 10" stroke="#FF4F20" stroke-width="3.5" stroke-linecap="round"/>
+  <circle cx="32" cy="32" r="12" stroke="#FF4F20" stroke-width="2.5"/>
+  <circle cx="32" cy="32" r="4.5" fill="#FF4F20"/>
+  <path d="M36.5 27.5 50 14" stroke="#FF4F20" stroke-width="3" stroke-linecap="round"/>
+  <circle cx="51.5" cy="12.5" r="3.25" fill="#FF4F20"/>
 </svg>

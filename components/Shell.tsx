@@ -1,4 +1,7 @@
+'use client';
+
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import { Logo } from './Logo';
 
 const NAV = [
@@ -8,6 +11,7 @@ const NAV = [
 ];
 
 export function Shell({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname();
   return (
     <div style={{ minHeight: '100dvh', display: 'flex', flexDirection: 'column' }}>
       <header
@@ -35,24 +39,24 @@ export function Shell({ children }: { children: React.ReactNode }) {
             <Logo />
           </Link>
           <nav style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }} aria-label="Primary">
-            {NAV.map((n) => (
-              <Link
-                key={n.href}
-                href={n.href}
-                className="btn btn-ghost"
-                style={{ minHeight: 36, padding: '0 12px', fontSize: 14, fontWeight: 500 }}
-              >
-                {n.label}
-              </Link>
-            ))}
+            {NAV.map((n) => {
+              const active = n.href === '/' ? pathname === '/' : pathname.startsWith(n.href);
+              return (
+                <Link
+                  key={n.href}
+                  href={n.href}
+                  className="btn btn-ghost nav-link"
+                  data-active={active ? 'true' : 'false'}
+                  style={{ minHeight: 36, padding: '0 12px', fontSize: 14, fontWeight: 500 }}
+                >
+                  {n.label}
+                </Link>
+              );
+            })}
           </nav>
-          <span className="badge" style={{ display: 'none' }} />
           <span
-            className="badge"
-            style={{
-              borderColor: 'rgba(255,79,32,0.3)',
-              color: 'var(--accent-soft)',
-            }}
+            className="badge wave-badge"
+            style={{ borderColor: 'rgba(255,79,32,0.3)', color: 'var(--accent-soft)' }}
           >
             Wave 3 · Judge mode
           </span>

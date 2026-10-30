@@ -11,6 +11,9 @@ Rebuild as **FlowSentinel** — cut feature sprawl and ship a single insight→a
 - Mock data presented as live when keys were missing
 
 ### Added
+- Premium polish: animated FlowRadar, CountUp metrics, staggered panels, refined logo/favicon, empty/fallback states
+- Multilingual **Voice desk** (Web Speech STT/TTS): thesis / risk / flows / news Q&A; never places orders by voice
+
 - SoSoValue-first desk: BTC/ETH US ETF flows, hot news, ssiMAG7, SoDEX tickers
 - Honest **Live / Fallback** badges on every data panel
 - AI daily thesis (Gemini) with confidence + drivers; deterministic rules fallback
