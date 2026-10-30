@@ -278,7 +278,8 @@ function buildSpotNewOrderParams(input: {
 }): Record<string, unknown> {
   const sideNum = input.side === "buy" ? 1 : 2;
   const typeNum = input.type === "limit" ? 1 : 2;
-  const timeInForce = 1; // GTC
+  // LIMIT → GTC(1); MARKET must be IOC(3) per SoDEX docs / official SDK.
+  const timeInForce = input.type === "market" ? 3 : 1;
   const order: Record<string, unknown> = {
     symbolID: input.symbolId,
     clOrdID: input.clOrdID,
@@ -299,6 +300,16 @@ function buildSpotNewOrderParams(input: {
     accountID: input.accountId,
     orders: [order],
   };
+}
+
+
+/** Viem recovery is 27/28; SoDEX wire format wants 0/1 (same as AddAPIKey docs). */
+function normalizeRecovery(sig: Hex): Hex {
+  const recovery = Number.parseInt(sig.slice(-2), 16);
+  const wire =
+    sig.slice(0, -2) +
+    (recovery >= 27 ? recovery - 27 : recovery).toString(16).padStart(2, "0");
+  return wire as Hex;
 }
 
 async function signExchangeAction(opts: {
@@ -326,8 +337,8 @@ async function signExchangeAction(opts: {
       nonce: opts.nonce,
     },
   });
-  // Typed signature: prepend 0x01
-  return concatHex(["0x01", signature]);
+  // Typed signature: prepend 0x01; normalize viem 27/28 → 0/1
+  return concatHex(["0x01", normalizeRecovery(signature)]);
 }
 
 /**
@@ -591,32 +602,69 @@ export async function querySpotOrder(orderId: string): Promise<{
     return { ok: false, orderId, error: 'No SoDEX credentials — cannot query live order' };
   }
   const base = requireTestnetOnly(process.env.SODEX_BASE_URL);
+  const master =
+    process.env.SODEX_MASTER_ADDRESS?.trim() ||
+    process.env.SODEX_ACCOUNT_ADDRESS?.trim();
   try {
-    const path = `/api/v1/spot/trade/orders/${encodeURIComponent(orderId)}`;
-    // Public-ish account query still needs signing on some gateways — try unsigned first then signed GET
-    const res = await fetch(`${base}${path}?accountId=${creds.accountId}`, {
-      headers: {
-        Accept: 'application/json',
-        'X-API-Key': creds.apiKeyName,
-      },
-      cache: 'no-store',
-    });
-    const text = await res.text();
-    let raw: unknown = text;
-    try { raw = JSON.parse(text); } catch { /* */ }
-    if (!res.ok) {
-      return { ok: false, orderId, error: `HTTP ${res.status}: ${text.slice(0, 160)}`, raw };
+    // Account order reads are public by address (no signature). Prefer open orders, then history.
+    if (!master) {
+      return {
+        ok: false,
+        orderId,
+        error: "Set SODEX_MASTER_ADDRESS (or SODEX_ACCOUNT_ADDRESS) to query orders by address",
+      };
     }
-    const env = raw as { code?: number; data?: { status?: string; orderId?: string | number }; msg?: string };
-    if (typeof env.code === 'number' && env.code !== 0) {
-      return { ok: false, orderId, error: env.msg || `code ${env.code}`, raw };
+    const paths = [
+      `/api/v1/spot/accounts/${master}/orders?accountID=${creds.accountId}`,
+      `/api/v1/spot/accounts/${master}/orders/history?accountID=${creds.accountId}&limit=100`,
+    ];
+    let lastRaw: unknown = null;
+    for (const path of paths) {
+      const res = await fetch(`${base}${path}`, {
+        headers: { Accept: "application/json" },
+        cache: "no-store",
+      });
+      const text = await res.text();
+      let raw: unknown = text;
+      try {
+        raw = JSON.parse(text);
+      } catch {
+        /* keep */
+      }
+      lastRaw = raw;
+      if (!res.ok) continue;
+      const env = raw as {
+        code?: number;
+        data?: { orders?: Array<Record<string, unknown>> } | Array<Record<string, unknown>>;
+        msg?: string;
+        error?: string;
+      };
+      if (typeof env.code === "number" && env.code !== 0) continue;
+      const data = env.data;
+      const rows: Array<Record<string, unknown>> = Array.isArray(data)
+        ? data
+        : Array.isArray((data as { orders?: unknown } | undefined)?.orders)
+          ? ((data as { orders: Array<Record<string, unknown>> }).orders)
+          : [];
+      const hit = rows.find(
+        (r) =>
+          String(r.orderId ?? r.orderID ?? r.i ?? "") === String(orderId) ||
+          String(r.clOrdID ?? r.clOrdId ?? "") === String(orderId),
+      );
+      if (hit) {
+        return {
+          ok: true,
+          orderId: String(hit.orderId ?? hit.orderID ?? orderId),
+          status: String(hit.status ?? hit.st ?? "unknown"),
+          raw,
+        };
+      }
     }
-    const data = env.data ?? (raw as { status?: string });
     return {
-      ok: true,
-      orderId: String((data as { orderId?: string | number }).orderId ?? orderId),
-      status: (data as { status?: string }).status ?? 'unknown',
-      raw,
+      ok: false,
+      orderId,
+      error: "Order not found in open orders or recent history",
+      raw: lastRaw ?? undefined,
     };
   } catch (e) {
     return { ok: false, orderId, error: e instanceof Error ? e.message : String(e) };
