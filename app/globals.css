@@ -402,3 +402,198 @@ button { font-family: inherit; }
     justify-items: start;
   }
 }
+
+/* —— Hero 3D layer (lazy, after LCP) —— */
+.hero-3d-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.55;
+  mask-image: radial-gradient(ellipse at 70% 40%, #000 20%, transparent 72%);
+}
+.hero-3d-canvas,
+.hero-3d-static {
+  width: 100%;
+  height: 100%;
+  min-height: 340px;
+}
+.hero-3d-static {
+  background: radial-gradient(ellipse at 60% 40%, rgba(255, 79, 32, 0.18), transparent 60%);
+}
+
+/* —— Grok-style voice mode overlay —— */
+.voice-mode-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  background: radial-gradient(ellipse at 50% 35%, #1a0f0c 0%, #0A0A0A 55%, #050505 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 16px 32px;
+}
+.voice-mode-close {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  width: 44px;
+  height: 44px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  color: var(--text);
+  cursor: pointer;
+  font-size: 18px;
+}
+.voice-mode-close:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.voice-mode-stage {
+  width: min(720px, 100%);
+  display: grid;
+  gap: 16px;
+  justify-items: center;
+  text-align: center;
+}
+.voice-mode-orb-wrap {
+  width: min(420px, 88vw);
+  height: min(420px, 52vh);
+}
+.voice-orb-fallback {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255, 79, 32, 0.45), transparent 65%);
+  animation: voice-pulse 1.6s ease-in-out infinite;
+}
+@keyframes voice-pulse {
+  0%, 100% { transform: scale(0.92); opacity: 0.7; }
+  50% { transform: scale(1.05); opacity: 1; }
+}
+.voice-mode-state {
+  margin: 0;
+  font-size: 15px;
+  color: var(--text-muted);
+  letter-spacing: 0.02em;
+}
+.voice-progress {
+  width: min(360px, 90%);
+  display: grid;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-faint);
+}
+.voice-progress-bar {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--surface-3);
+  overflow: hidden;
+}
+.voice-progress-bar > div {
+  height: 100%;
+  background: linear-gradient(90deg, #FF4F20, #FF7637);
+  transition: width 0.2s ease;
+}
+.voice-mode-transcript {
+  width: 100%;
+  max-height: 160px;
+  overflow-y: auto;
+  display: grid;
+  gap: 8px;
+  text-align: left;
+}
+.voice-bubble {
+  padding: 10px 12px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  font-size: 14px;
+  line-height: 1.45;
+  background: var(--surface-2);
+}
+.voice-bubble-user {
+  justify-self: end;
+  background: rgba(255, 79, 32, 0.18);
+  border-radius: 14px 14px 4px 14px;
+}
+.voice-bubble-assistant {
+  justify-self: start;
+  border-radius: 14px 14px 14px 4px;
+}
+.voice-interim {
+  color: var(--text-muted);
+  font-style: italic;
+  font-size: 13px;
+}
+.voice-mode-langs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: center;
+  max-width: 100%;
+}
+.voice-mode-controls {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+}
+.voice-mic {
+  width: 64px !important;
+  height: 64px !important;
+  border-radius: 999px !important;
+  padding: 0 !important;
+  font-size: 22px;
+}
+.voice-mode-type {
+  display: flex;
+  gap: 8px;
+  width: 100%;
+}
+.voice-mode-type input {
+  flex: 1;
+  min-height: 44px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  color: var(--text);
+  padding: 0 14px;
+  font-size: 15px;
+}
+.voice-mode-disclaimer {
+  margin: 0;
+  font-size: 11px;
+  color: var(--text-faint);
+  max-width: 520px;
+  line-height: 1.4;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .voice-orb-fallback { animation: none; }
+  .hero-3d-layer { display: none; }
+}
+.skip-link {
+  position: absolute;
+  left: -999px;
+  top: 8px;
+  z-index: 100;
+  background: var(--accent);
+  color: #fff;
+  padding: 8px 12px;
+  border-radius: 8px;
+}
+.skip-link:focus {
+  left: 8px;
+}
+.skeleton {
+  border-radius: 12px;
+  background: linear-gradient(90deg, var(--surface-2), var(--surface-3), var(--surface-2));
+  background-size: 200% 100%;
+  animation: sk 1.2s ease-in-out infinite;
+}
+@keyframes sk {
+  0% { background-position: 100% 0; }
+  100% { background-position: -100% 0; }
+}

@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased — public launch polish
+
+- Grok-style fullscreen voice mode with react-three-fiber orb (idle/listening/thinking/speaking), mic + TTS AnalyserNode levels, Bloom
+- TTS: Kokoro-82M (kokoro-js) for English; Piper for Hindi/es/fr/pt/it; Web Speech fallback
+- STT: Whisper tiny via transformers.js when loaded; Web Speech fallback
+- Telugu removed from language chips; added French, Portuguese, Italian
+- Lazy 3D hero capital-flow field (r3f) after idle; Lenis smooth scroll; reduced-motion static fallback
+- SEO: metadata, OG, manifest, robots, sitemap; terms/privacy; 404/error/loading; skip link; security headers; API soft rate limit
+- Branch preview: https://flowsentinel-app.vercel.app
+
 ## Unreleased
 
 - SoDEX client rewritten for EIP-712 spot signing (viem); hard-locked to testnet

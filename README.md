@@ -86,7 +86,7 @@ Copy `.env.example` → `.env.local` (never commit secrets).
 Multilingual push-to-talk assistant on the Desk (judge mode friendly):
 
 - **STT / TTS:** browser [Web Speech API](https://developer.mozilla.org/en-US/docs/Web/API/Web_Speech_API) (free, many languages)
-- **Languages:** English, Hindi, Telugu, Spanish, Chinese, Japanese, Korean (+ Auto)
+- **Languages:** English, Hindi, Spanish, French, Portuguese, Italian, Chinese, Japanese, Korean (+ Auto). Telugu removed.
 - **Grounded answers** about thesis, ETF flows, news, risk gate, track record
 - **Commands:** “read thesis”, “explain risk”, “refresh thesis”, “ETF flows”, “news”
 - **Safety:** voice **never** places orders — explicit Confirm checkbox + click still required
@@ -174,3 +174,20 @@ npx tsx scripts/register-testnet-api-key.ts
 ```
 
 That script generates a fresh API-key wallet, has your master wallet sign `AddAPIKey` for testnet only, and writes secrets to a local `*.secret.txt` file (never printed). Copy the three `SODEX_*` lines into `.env`, then delete the secret file.
+
+
+## Open-source credits (voice + 3D)
+
+Free tools only — no paid voice APIs.
+
+| Project | Licence | Use |
+| --- | --- | --- |
+| [kokoro-js](https://github.com/hexgrad/kokoro) / Kokoro-82M | Apache-2.0 | Natural English TTS in-browser (WebGPU/WASM) |
+| [@mintplex-labs/piper-tts-web](https://github.com/Mintplex-Labs/piper-tts-web) + [Piper](https://github.com/rhasspy/piper) voices | MIT | Hindi and Romance-language TTS |
+| [@huggingface/transformers](https://github.com/huggingface/transformers.js) + Whisper tiny | Apache-2.0 | Multilingual STT in-browser |
+| [three.js](https://github.com/mrdoob/three.js) + [@react-three/fiber](https://github.com/pmndrs/react-three-fiber) + [drei](https://github.com/pmndrs/drei) + [postprocessing](https://github.com/pmndrs/postprocessing) | MIT | Voice orb + hero capital-flow scene |
+| [Lenis](https://github.com/darkroomengineering/lenis) | MIT | Smooth scroll |
+| [Framer Motion](https://github.com/motiondivision/motion) | MIT | UI motion / reduced-motion aware |
+| Web Speech API | Browser | Last-resort TTS/STT fallback |
+
+Voice mode never places orders. Models lazy-load on first open with a progress bar and browser cache.

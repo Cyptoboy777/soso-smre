@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Logo } from './Logo';
+import { SmoothScroll } from './SmoothScroll';
 
 const NAV = [
   { href: '/', label: 'Desk' },
@@ -62,8 +63,8 @@ export function Shell({ children }: { children: React.ReactNode }) {
           </span>
         </div>
       </header>
-      <main style={{ flex: 1, maxWidth: 1200, width: '100%', margin: '0 auto', padding: '28px 20px 64px' }}>
-        {children}
+      <main id="main" style={{ flex: 1, maxWidth: 1200, width: '100%', margin: '0 auto', padding: '28px 20px 64px' }}>
+        <SmoothScroll>{children}</SmoothScroll>
       </main>
       <footer
         style={{
@@ -72,9 +73,21 @@ export function Shell({ children }: { children: React.ReactNode }) {
           color: 'var(--text-faint)',
           fontSize: 13,
           textAlign: 'center',
+          display: 'grid',
+          gap: 8,
         }}
       >
-        FlowSentinel · SoSoValue + SoDEX · Public track record · Never presents fallback as live
+        <div>
+          FlowSentinel · SoSoValue + SoDEX · Public track record · Never presents fallback as live
+        </div>
+        <div style={{ maxWidth: 720, margin: '0 auto', lineHeight: 1.45 }}>
+          Not financial advice. SoDEX path is testnet-only. Voice never places orders.
+        </div>
+        <div style={{ display: 'flex', gap: 16, justifyContent: 'center', flexWrap: 'wrap' }}>
+          <Link href="/terms">Terms</Link>
+          <Link href="/privacy">Privacy</Link>
+          <Link href="/demo">Judge path</Link>
+        </div>
       </footer>
     </div>
   );

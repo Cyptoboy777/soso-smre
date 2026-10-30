@@ -3,6 +3,13 @@
 import { motion, useReducedMotion } from 'framer-motion';
 import { LogoMark } from './Logo';
 import { FlowField } from './FlowField';
+import dynamic from 'next/dynamic';
+import { useEffect, useState } from 'react';
+
+const HeroScene = dynamic(() => import('./HeroScene').then((m) => m.HeroScene), {
+  ssr: false,
+  loading: () => null,
+});
 
 const STEPS = [
   { n: '01', title: 'Data', body: 'SoSoValue ETF flows, hot news, SSI' },
@@ -13,6 +20,28 @@ const STEPS = [
 
 export function HeroLanding() {
   const reduce = useReducedMotion();
+  const [show3d, setShow3d] = useState(false);
+  useEffect(() => {
+    if (reduce) return;
+    let cancelled = false;
+    let idleId: number | undefined;
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
+    const go = () => {
+      if (!cancelled) setShow3d(true);
+    };
+    if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
+      idleId = window.requestIdleCallback(go, { timeout: 1200 });
+    } else {
+      timeoutId = setTimeout(go, 400);
+    }
+    return () => {
+      cancelled = true;
+      if (idleId != null && typeof window !== 'undefined' && 'cancelIdleCallback' in window) {
+        window.cancelIdleCallback(idleId);
+      }
+      if (timeoutId != null) clearTimeout(timeoutId);
+    };
+  }, [reduce]);
   return (
     <section
       className="hero-landing glass-hero"
@@ -26,6 +55,11 @@ export function HeroLanding() {
       }}
     >
       <FlowField />
+      {show3d && !reduce ? (
+        <div className="hero-3d-layer">
+          <HeroScene reduceMotion={false} />
+        </div>
+      ) : null}
       <div
         style={{
           position: 'relative',

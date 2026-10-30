@@ -8,8 +8,10 @@ export type VoiceLang =
   | 'auto'
   | 'en-US'
   | 'hi-IN'
-  | 'te-IN'
   | 'es-ES'
+  | 'fr-FR'
+  | 'pt-BR'
+  | 'it-IT'
   | 'zh-CN'
   | 'ja-JP'
   | 'ko-KR';
@@ -18,8 +20,10 @@ export const VOICE_LANGS: { id: VoiceLang; label: string; speech: string }[] = [
   { id: 'auto', label: 'Auto', speech: 'en-US' },
   { id: 'en-US', label: 'English', speech: 'en-US' },
   { id: 'hi-IN', label: 'हिन्दी', speech: 'hi-IN' },
-  { id: 'te-IN', label: 'తెలుగు', speech: 'te-IN' },
   { id: 'es-ES', label: 'Español', speech: 'es-ES' },
+  { id: 'fr-FR', label: 'Français', speech: 'fr-FR' },
+  { id: 'pt-BR', label: 'Português', speech: 'pt-BR' },
+  { id: 'it-IT', label: 'Italiano', speech: 'it-IT' },
   { id: 'zh-CN', label: '中文', speech: 'zh-CN' },
   { id: 'ja-JP', label: '日本語', speech: 'ja-JP' },
   { id: 'ko-KR', label: '한국어', speech: 'ko-KR' },

@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+  <defs>
+    <radialGradient id="g" cx="70%" cy="40%" r="60%">
+      <stop offset="0%" stop-color="#FF4F20" stop-opacity="0.45"/>
+      <stop offset="100%" stop-color="#0A0A0A" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="1200" height="630" fill="#0A0A0A"/>
+  <rect width="1200" height="630" fill="url(#g)"/>
+  <circle cx="920" cy="220" r="120" fill="none" stroke="#FF7637" stroke-width="3" opacity="0.8"/>
+  <circle cx="920" cy="220" r="70" fill="#FF4F20" opacity="0.85"/>
+  <text x="80" y="280" fill="#FFFFFF" font-family="system-ui,sans-serif" font-size="72" font-weight="700">FlowSentinel</text>
+  <text x="80" y="350" fill="#FF7637" font-family="system-ui,sans-serif" font-size="32">Watch the flow. Act with a gate.</text>
+  <text x="80" y="520" fill="#9CA3AF" font-family="system-ui,sans-serif" font-size="22">SoSoValue · SoDEX testnet · Not financial advice</text>
+</svg>
