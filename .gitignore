@@ -4,6 +4,7 @@ node_modules
 .env
 .env.local
 .env.*.local
+.env*
 !.env.example
 npm-debug.log*
 .DS_Store
@@ -15,7 +16,6 @@ data/track-record.json
 # SoDEX local registration secrets
 *.secret.txt
 sodex_*.secret.txt
-.env*
 
 # never commit local testnet keys (path)
 secrets/
