@@ -62,7 +62,7 @@ void main(){
   vNormal = normalize(normalMatrix * normal);
   float n = snoise(normal * 2.4 + uTime * 0.55);
   vNoise = n;
-  float amp = uDistort * (0.55 + uLevel * 1.35);
+  float amp = uDistort * (0.18 + uLevel * 0.42);
   vec3 pos = position + normal * n * amp;
   vec4 world = modelMatrix * vec4(pos, 1.0);
   vWorldPos = world.xyz;
@@ -134,7 +134,7 @@ function OrbMesh({
     uniforms.uTime.value += dt;
     uniforms.uLevel.value = L;
     uniforms.uDistort.value =
-      state === 'listening' || state === 'speaking' ? 0.28 + L * 0.42 : state === 'thinking' ? 0.32 : 0.18;
+      state === 'listening' || state === 'speaking' ? 0.16 + L * 0.22 : state === 'thinking' ? 0.18 : 0.1;
     uniforms.uGlow.value = state === 'speaking' || state === 'listening' ? 0.7 + L : 0.35;
     const c =
       state === 'listening'
@@ -162,6 +162,17 @@ function OrbMesh({
 
   return (
     <group>
+      {/* solid glossy core so the silhouette always reads as a sphere */}
+      <mesh scale={0.92}>
+        <sphereGeometry args={[1.05, 64, 64]} />
+        <meshStandardMaterial
+          color="#FF4F20"
+          emissive="#FF4F20"
+          emissiveIntensity={0.85}
+          metalness={0.55}
+          roughness={0.22}
+        />
+      </mesh>
       <mesh ref={mesh}>
         <sphereGeometry args={[1.05, 128, 128]} />
         <shaderMaterial
@@ -169,17 +180,16 @@ function OrbMesh({
           vertexShader={orbVert}
           fragmentShader={orbFrag}
           transparent
-          depthWrite
+          depthWrite={false}
         />
       </mesh>
       <mesh ref={glow}>
         <sphereGeometry args={[1.05, 48, 48]} />
-        <meshBasicMaterial color="#FF4F20" transparent opacity={0.15} depthWrite={false} />
+        <meshBasicMaterial color="#FF4F20" transparent opacity={0.18} depthWrite={false} blending={THREE.AdditiveBlending} />
       </mesh>
-      {/* soft outer haze — keeps bloom look without EffectComposer opaque clear */}
-      <mesh scale={1.35}>
+      <mesh scale={1.28}>
         <sphereGeometry args={[1.05, 32, 32]} />
-        <meshBasicMaterial color="#FF7637" transparent opacity={0.08} depthWrite={false} blending={THREE.AdditiveBlending} />
+        <meshBasicMaterial color="#FF7637" transparent opacity={0.1} depthWrite={false} blending={THREE.AdditiveBlending} />
       </mesh>
     </group>
   );
