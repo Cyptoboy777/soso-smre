@@ -8,7 +8,7 @@ import { useEffect, useState } from 'react';
 
 const HeroScene = dynamic(() => import('./HeroScene').then((m) => m.HeroScene), {
   ssr: false,
-  loading: () => null,
+  loading: () => <div className="hero-3d-poster" aria-hidden />,
 });
 
 const STEPS = [
@@ -21,6 +21,7 @@ const STEPS = [
 export function HeroLanding() {
   const reduce = useReducedMotion();
   const [show3d, setShow3d] = useState(false);
+
   useEffect(() => {
     if (reduce) return;
     let cancelled = false;
@@ -29,140 +30,86 @@ export function HeroLanding() {
     const go = () => {
       if (!cancelled) setShow3d(true);
     };
+    // Wait for first paint / LCP text before mounting three.js
     if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
-      idleId = window.requestIdleCallback(go, { timeout: 2500 });
+      idleId = window.requestIdleCallback(go, { timeout: 3200 });
     } else {
-      timeoutId = setTimeout(go, 1800);
+      timeoutId = setTimeout(go, 2200);
     }
     return () => {
       cancelled = true;
-      if (idleId != null && typeof window !== 'undefined' && 'cancelIdleCallback' in window) {
-        window.cancelIdleCallback(idleId);
-      }
+      if (idleId != null && 'cancelIdleCallback' in window) window.cancelIdleCallback(idleId);
       if (timeoutId != null) clearTimeout(timeoutId);
     };
   }, [reduce]);
+
   return (
-    <section
-      className="hero-landing glass-hero"
-      style={{
-        position: 'relative',
-        overflow: 'hidden',
-        borderRadius: 'var(--radius-xl)',
-        border: '1px solid var(--line)',
-        marginBottom: 24,
-        minHeight: 340,
-      }}
-    >
+    <section className="hero-landing glass-hero">
       <FlowField />
-      {show3d && !reduce ? (
-        <div className="hero-3d-layer">
-          <HeroScene reduceMotion={false} />
-        </div>
-      ) : null}
-      <div
-        style={{
-          position: 'relative',
-          zIndex: 1,
-          padding: 'clamp(28px, 5vw, 48px)',
-          display: 'grid',
-          gap: 28,
-        }}
-      >
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'auto 1fr',
-            gap: 'clamp(16px, 3vw, 28px)',
-            alignItems: 'center',
-          }}
-          className="hero-top"
-        >
+      <div className="hero-inner">
+        <div className="hero-copy">
           <motion.div
-            initial={reduce ? false : { opacity: 0, scale: 0.86, rotate: -8 }}
-            animate={{ opacity: 1, scale: 1, rotate: 0 }}
-            transition={{ duration: 0.85, ease: [0.16, 1, 0.3, 1] }}
-            style={{ filter: 'drop-shadow(0 18px 40px rgba(255,79,32,0.28))' }}
+            initial={reduce ? false : { opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
+            style={{ filter: 'drop-shadow(0 18px 40px rgba(255,79,32,0.28))', marginBottom: 12 }}
           >
-            <LogoMark size={96} />
+            <LogoMark size={72} />
           </motion.div>
-          <div>
-            <motion.p
-              className="hero-kicker"
-              initial={reduce ? false : { opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.08, duration: 0.5 }}
-            >
-              SoSoValue Wave 3 · FlowSentinel
-            </motion.p>
-            <motion.h1
-              initial={reduce ? false : { opacity: 0, y: 16 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.12, duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
-              style={{
-                margin: '0 0 12px',
-                fontSize: 'clamp(2rem, 5.5vw, 3.4rem)',
-                letterSpacing: '-0.045em',
-                lineHeight: 1.05,
-                fontWeight: 650,
-                textWrap: 'balance',
-                maxWidth: 16 * 28,
-              }}
-            >
-              Watch the flow.
-              <br />
-              <span style={{ color: 'var(--accent-soft)' }}>Act with a gate.</span>
-            </motion.h1>
-            <motion.p
-              initial={reduce ? false : { opacity: 0, y: 12 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.2, duration: 0.55 }}
-              style={{
-                margin: 0,
-                color: 'var(--text-muted)',
-                fontSize: 'clamp(15px, 2vw, 17px)',
-                maxWidth: 520,
-                textWrap: 'pretty',
-              }}
-            >
-              A one-person fund desk: SoSoValue data becomes a daily thesis, a risk check you can
-              read, and a confirmed SoDEX testnet order — with an honest public track record.
-            </motion.p>
-          </div>
+          <motion.p
+            className="hero-kicker"
+            initial={reduce ? false : { opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.06, duration: 0.45 }}
+          >
+            SoSoValue Wave 3 · FlowSentinel
+          </motion.p>
+          <motion.h1
+            initial={reduce ? false : { opacity: 0, y: 14 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.1, duration: 0.65, ease: [0.16, 1, 0.3, 1] }}
+          >
+            Watch the flow.
+            <br />
+            <span style={{ color: 'var(--accent-soft)' }}>Act with a gate.</span>
+          </motion.h1>
+          <motion.p
+            className="hero-lede"
+            initial={reduce ? false : { opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.18, duration: 0.5 }}
+          >
+            A one-person fund desk: SoSoValue data becomes a daily thesis, a risk check you can read, and a
+            confirmed SoDEX testnet order — with an honest public track record.
+          </motion.p>
         </div>
 
-        <ol
-          style={{
-            listStyle: 'none',
-            margin: 0,
-            padding: 0,
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
-            gap: 10,
-          }}
-        >
-          {STEPS.map((s, i) => (
-            <motion.li
-              key={s.n}
-              className="glass-card step-card"
-              initial={reduce ? false : { opacity: 0, y: 14 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{
-                delay: 0.22 + Math.min(i * 0.06, 0.28),
-                duration: 0.45,
-                ease: [0.16, 1, 0.3, 1] as [number, number, number, number],
-              }}
-              style={{ padding: '14px 16px' }}
-            >
-              <div style={{ fontSize: 11, color: 'var(--accent-soft)', fontFamily: 'var(--font-mono)', marginBottom: 6 }}>
-                {s.n}
-              </div>
-              <div style={{ fontWeight: 600, letterSpacing: '-0.02em', marginBottom: 4 }}>{s.title}</div>
-              <div style={{ fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.4 }}>{s.body}</div>
-            </motion.li>
-          ))}
-        </ol>
+        <div className="hero-visual">
+          {/* Static poster for LCP; swapped for live r3f after idle */}
+          {!show3d || reduce ? <div className="hero-3d-poster" aria-hidden /> : null}
+          {show3d && !reduce ? <HeroScene reduceMotion={false} /> : null}
+        </div>
       </div>
+
+      <ol className="hero-steps">
+        {STEPS.map((s, i) => (
+          <motion.li
+            key={s.n}
+            className="glass-card step-card"
+            initial={reduce ? false : { opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{
+              delay: 0.2 + Math.min(i * 0.05, 0.25),
+              duration: 0.4,
+              ease: [0.16, 1, 0.3, 1] as [number, number, number, number],
+            }}
+          >
+            <div className="step-n">{s.n}</div>
+            <div className="step-title">{s.title}</div>
+            <div className="step-body">{s.body}</div>
+          </motion.li>
+        ))}
+      </ol>
     </section>
   );
 }

@@ -403,26 +403,97 @@ button { font-family: inherit; }
   }
 }
 
-/* —— Hero 3D layer (lazy, after LCP) —— */
-.hero-3d-layer {
-  position: absolute;
-  inset: 0;
-  z-index: 0;
-  pointer-events: none;
-  opacity: 0.55;
-  mask-image: radial-gradient(ellipse at 70% 40%, #000 20%, transparent 72%);
+/* —— Hero layout + 3D centerpiece —— */
+.hero-landing {
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--radius-xl);
+  border: 1px solid var(--line);
+  margin-bottom: 24px;
+  min-height: 360px;
+  padding: clamp(24px, 4vw, 40px);
 }
-.hero-3d-canvas,
-.hero-3d-static {
+.hero-inner {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(220px, 0.85fr);
+  gap: clamp(20px, 4vw, 40px);
+  align-items: center;
+}
+.hero-copy h1 {
+  margin: 0 0 12px;
+  font-size: clamp(2rem, 5vw, 3.25rem);
+  letter-spacing: -0.045em;
+  line-height: 1.05;
+  font-weight: 650;
+  text-wrap: balance;
+}
+.hero-lede {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: clamp(15px, 2vw, 17px);
+  max-width: 520px;
+  text-wrap: pretty;
+  line-height: 1.5;
+}
+.hero-visual {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1;
+  max-height: 380px;
+  min-height: 240px;
+  display: grid;
+  place-items: center;
+}
+.hero-3d-canvas {
   width: 100%;
   height: 100%;
-  min-height: 340px;
+  background: transparent !important;
 }
-.hero-3d-static {
-  background: radial-gradient(ellipse at 60% 40%, rgba(255, 79, 32, 0.18), transparent 60%);
+.hero-3d-poster {
+  width: 100%;
+  height: 100%;
+  min-height: 240px;
+  background:
+    radial-gradient(circle at 50% 45%, rgba(255, 118, 55, 0.55), transparent 58%),
+    url('/brand/hero-poster.svg') center / contain no-repeat;
+  filter: drop-shadow(0 0 40px rgba(255, 79, 32, 0.35));
+}
+.hero-steps {
+  list-style: none;
+  margin: 28px 0 0;
+  padding: 0;
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 10px;
+}
+.hero-steps .step-card { padding: 14px 16px; }
+.hero-steps .step-n {
+  font-size: 11px;
+  color: var(--accent-soft);
+  font-family: var(--font-mono);
+  margin-bottom: 6px;
+}
+.hero-steps .step-title {
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  margin-bottom: 4px;
+}
+.hero-steps .step-body {
+  font-size: 13px;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+@media (max-width: 800px) {
+  .hero-inner { grid-template-columns: 1fr; }
+  .hero-visual { max-height: 280px; order: -1; }
 }
 
 /* —— Grok-style voice mode overlay —— */
+
 .voice-mode-overlay {
   position: fixed;
   inset: 0;
@@ -458,14 +529,35 @@ button { font-family: inherit; }
   text-align: center;
 }
 .voice-mode-orb-wrap {
-  width: min(420px, 88vw);
-  height: min(420px, 52vh);
+  width: min(420px, 82vw);
+  height: min(420px, 48vh);
+  min-height: 260px;
+  margin-top: 28px;
+  margin-bottom: 8px;
+  display: grid;
+  place-items: center;
+  background: transparent !important;
+  overflow: visible;
+  padding: 12px;
+  box-sizing: border-box;
 }
-.voice-orb-fallback {
+.voice-orb-canvas-host {
   width: 100%;
   height: 100%;
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+.voice-orb-canvas-host canvas {
+  background: transparent !important;
+  display: block;
+}
+.voice-orb-fallback {
+  width: min(280px, 70%);
+  aspect-ratio: 1;
   border-radius: 50%;
-  background: radial-gradient(circle, rgba(255, 79, 32, 0.45), transparent 65%);
+  background: radial-gradient(circle, rgba(255, 118, 55, 0.75), rgba(255, 79, 32, 0.35) 45%, transparent 70%);
+  box-shadow: 0 0 60px rgba(255, 79, 32, 0.45);
   animation: voice-pulse 1.6s ease-in-out infinite;
 }
 @keyframes voice-pulse {
@@ -572,7 +664,7 @@ button { font-family: inherit; }
 
 @media (prefers-reduced-motion: reduce) {
   .voice-orb-fallback { animation: none; }
-  .hero-3d-layer { display: none; }
+  .hero-visual { display: none; }
 }
 .skip-link {
   position: absolute;

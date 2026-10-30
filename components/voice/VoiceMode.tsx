@@ -11,6 +11,8 @@ import {
   speakText,
   getSpeechRecognition,
   openMicAnalyser,
+  friendlyVoiceMessage,
+  getVoiceCapabilities,
   type VoiceEngineState,
   type LoadProgress,
   type TtsEngineId,
@@ -60,7 +62,7 @@ export function VoiceMode({
     if (!open) return;
     let cancelled = false;
     setState('loading');
-    setProgress({ phase: 'start', loaded: 0, total: 100, pct: 0 });
+    setProgress({ phase: 'start', loaded: 0, total: 100, pct: 0, label: 'Preparing voice…' });
     void ensureVoiceModels((p) => {
       if (!cancelled) setProgress(p);
     })
@@ -69,13 +71,28 @@ export function VoiceMode({
           setReady(true);
           setState('idle');
           setProgress(null);
+          const caps = getVoiceCapabilities();
+          if (caps.tts === 'none' && caps.stt === 'none') {
+            setBubbles((b) => [
+              ...b,
+              {
+                id: `n_${Date.now()}`,
+                role: 'assistant',
+                text: 'Voice models are unavailable here. You can still type questions. Voice never places orders.',
+              },
+            ]);
+          }
         }
       })
-      .catch(() => {
+      .catch((e) => {
         if (!cancelled) {
-          setReady(true); // still usable via Web Speech
+          setReady(true);
           setState('idle');
           setProgress(null);
+          setBubbles((b) => [
+            ...b,
+            { id: `n_${Date.now()}`, role: 'assistant', text: friendlyVoiceMessage(e) },
+          ]);
         }
       });
     return () => {
@@ -113,10 +130,12 @@ export function VoiceMode({
           text,
           lang,
           speechLang,
-          onProgress: setProgress,
+          onProgress: (p) => setProgress(p.pct < 100 ? p : null),
           onLevel: setLevel,
         });
-        setTtsEngine(eng);
+        if (eng) setTtsEngine(eng);
+      } catch (e) {
+        console.warn('[voice] speak failed', e);
       } finally {
         setLevel(0);
         setState('idle');
@@ -154,8 +173,10 @@ export function VoiceMode({
         ]);
         await speak(answer);
       } catch (e) {
-        const msg = e instanceof Error ? e.message : String(e);
-        setBubbles((b) => [...b, { id: `e_${Date.now()}`, role: 'assistant', text: msg }]);
+        setBubbles((b) => [
+          ...b,
+          { id: `e_${Date.now()}`, role: 'assistant', text: friendlyVoiceMessage(e) },
+        ]);
         setState('idle');
       }
     },
@@ -201,7 +222,7 @@ export function VoiceMode({
         {
           id: `e_${Date.now()}`,
           role: 'assistant',
-          text: 'Speech recognition unavailable in this browser. Type below, or try Chrome/Edge. Whisper model may still help on a later pass.',
+          text: 'Live listening is limited here. Type a question below — answers still work, and voice never places orders.',
         },
       ]);
       stopListen();
@@ -276,13 +297,13 @@ export function VoiceMode({
               {state === 'speaking' && `Speaking${ttsEngine ? ` · ${ttsEngine}` : ''}`}
             </p>
 
-            {progress && (
+            {progress && progress.pct < 100 && (
               <div className="voice-progress" role="status">
                 <div className="voice-progress-bar">
-                  <div style={{ width: `${progress.pct}%` }} />
+                  <div style={{ width: `${Math.max(progress.pct, 4)}%` }} />
                 </div>
                 <span>
-                  {progress.phase} · {progress.pct}%
+                  {progress.label || 'Loading…'} · {Math.max(progress.pct, 1)}%
                 </span>
               </div>
             )}

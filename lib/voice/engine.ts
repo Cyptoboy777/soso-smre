@@ -1,14 +1,14 @@
 /**
  * Free in-browser voice stack (no paid APIs).
- * TTS: Kokoro-82M (kokoro-js, Apache-2.0) → Piper (@mintplex-labs/piper-tts-web, MIT) → Web Speech
- * STT: Whisper tiny via @huggingface/transformers → Web Speech
- * Models lazy-load on first voice-mode open; progress reported; Cache Storage / OPFS when available.
+ * TTS: Kokoro-82M → Piper → Web Speech
+ * STT: Whisper tiny (transformers.js) → Web Speech
+ * Models lazy-load on voice-mode open. Never throw raw engine strings to UI.
  */
 
 import type { VoiceLang } from '@/lib/voice-answer';
 
 export type VoiceEngineState = 'idle' | 'loading' | 'listening' | 'thinking' | 'speaking';
-export type LoadProgress = { phase: string; loaded: number; total: number; pct: number };
+export type LoadProgress = { phase: string; loaded: number; total: number; pct: number; label?: string };
 
 export type TtsEngineId = 'kokoro' | 'piper' | 'webspeech';
 export type SttEngineId = 'whisper' | 'webspeech';
@@ -16,28 +16,51 @@ export type SttEngineId = 'whisper' | 'webspeech';
 type ProgressCb = (p: LoadProgress) => void;
 
 const KOKORO_MODEL = 'onnx-community/Kokoro-82M-v1.0-ONNX';
-const WHISPER_MODEL = 'Xenova/whisper-tiny'; // multilingual
+const WHISPER_MODEL = 'Xenova/whisper-tiny';
 
-/** Languages Kokoro English voices handle well (spoken in EN voice for Romance if needed — we prefer Piper/WebSpeech for non-EN). */
 const KOKORO_LANGS = new Set(['en-US', 'auto']);
 
-/** Piper voice ids (Rhasspy, MIT) for Indic / when Kokoro is weak. */
 const PIPER_VOICES: Partial<Record<Exclude<VoiceLang, 'auto'>, string>> = {
   'hi-IN': 'hi_IN-priyamvada-medium',
   'es-ES': 'es_ES-sharvard-medium',
   'fr-FR': 'fr_FR-siwis-medium',
   'pt-BR': 'pt_BR-faber-medium',
   'it-IT': 'it_IT-paola-medium',
-  // zh/ja/ko often better via Web Speech on device; Piper may lack high-quality ids in the web package
 };
 
-let kokoroInstance: { generate: (text: string, opts: { voice: string }) => Promise<{ audio: Float32Array; sampling_rate: number }> } | null = null;
-let whisperPipeline: ((audio: Float32Array | Float32Array[], opts?: Record<string, unknown>) => Promise<{ text: string }>) | null = null;
-let loadPromise: Promise<void> | null = null;
+type KokoroLike = {
+  generate: (text: string, opts: { voice: string }) => Promise<{
+    audio?: Float32Array;
+    data?: Float32Array;
+    sampling_rate?: number;
+    sampleRate?: number;
+  }>;
+};
+
+let kokoroInstance: KokoroLike | null = null;
+let whisperPipeline: ((audio: Float32Array, opts?: Record<string, unknown>) => Promise<{ text: string }>) | null =
+  null;
+let loadPromise: Promise<{ tts: TtsEngineId | 'none'; stt: SttEngineId | 'none' }> | null = null;
+let lastCapabilities: { tts: TtsEngineId | 'none'; stt: SttEngineId | 'none' } = {
+  tts: 'none',
+  stt: 'none',
+};
 
 function pct(loaded: number, total: number) {
   if (!total || total <= 0) return 0;
   return Math.min(100, Math.round((loaded / total) * 100));
+}
+
+function progressFromUnknown(p: unknown, phase: string, label: string): LoadProgress {
+  const info = (p ?? {}) as { loaded?: number; total?: number; status?: string; progress?: number };
+  if (typeof info.progress === 'number' && info.progress > 0 && info.progress <= 1) {
+    return { phase, loaded: info.progress * 100, total: 100, pct: Math.round(info.progress * 100), label };
+  }
+  const loaded = info.loaded ?? 0;
+  const total = info.total && info.total > 0 ? info.total : loaded > 0 ? loaded : 100;
+  // Avoid stuck 0% while "download" status with no bytes yet
+  const base = info.status === 'initiate' || info.status === 'download' ? Math.max(2, pct(loaded, total)) : pct(loaded, total);
+  return { phase, loaded, total, pct: base || (info.status ? 3 : 0), label };
 }
 
 export function prefersKokoro(lang: VoiceLang): boolean {
@@ -49,72 +72,136 @@ export function piperVoiceFor(lang: VoiceLang): string | null {
   return PIPER_VOICES[lang] ?? null;
 }
 
-/** Lazy-load Kokoro + Whisper. Piper downloads per-voice on first use. */
-export async function ensureVoiceModels(onProgress?: ProgressCb): Promise<void> {
-  if (kokoroInstance && whisperPipeline) return;
+export function getVoiceCapabilities() {
+  return lastCapabilities;
+}
+
+function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const t = setTimeout(() => reject(new Error(`${label} timed out`)), ms);
+    p.then(
+      (v) => {
+        clearTimeout(t);
+        resolve(v);
+      },
+      (e) => {
+        clearTimeout(t);
+        reject(e);
+      },
+    );
+  });
+}
+
+function preferWasm(): boolean {
+  if (typeof navigator === 'undefined') return true;
+  // Headless / no WebGPU → wasm
+  if (!('gpu' in navigator)) return true;
+  const ua = navigator.userAgent || '';
+  if (/HeadlessChrome/i.test(ua)) return true;
+  return false;
+}
+
+/** Lazy-load Kokoro + Whisper. Soft-fail to Web Speech. */
+export async function ensureVoiceModels(
+  onProgress?: ProgressCb,
+): Promise<{ tts: TtsEngineId | 'none'; stt: SttEngineId | 'none' }> {
+  if (kokoroInstance || whisperPipeline) {
+    lastCapabilities = {
+      tts: kokoroInstance ? 'kokoro' : 'webspeech',
+      stt: whisperPipeline ? 'whisper' : 'webspeech',
+    };
+    return lastCapabilities;
+  }
   if (loadPromise) return loadPromise;
+
   loadPromise = (async () => {
-    onProgress?.({ phase: 'kokoro', loaded: 0, total: 100, pct: 0 });
+    let ttsCap: TtsEngineId | 'none' = 'webspeech';
+    let sttCap: SttEngineId | 'none' = 'webspeech';
+    const useWasm = preferWasm();
+
+    onProgress?.({ phase: 'kokoro', loaded: 0, total: 100, pct: 2, label: 'Preparing natural voice…' });
     try {
       const { KokoroTTS } = await import('kokoro-js');
-      const device =
-        typeof navigator !== 'undefined' && 'gpu' in navigator ? 'webgpu' : 'wasm';
+      const device = useWasm ? 'wasm' : 'webgpu';
       const dtype = device === 'webgpu' ? 'fp32' : 'q8';
-      const tts = await KokoroTTS.from_pretrained(KOKORO_MODEL, {
-        dtype,
-        device,
-        progress_callback: (p: unknown) => {
-          const info = p as { loaded?: number; total?: number };
-          const loaded = info.loaded ?? 0;
-          const total = info.total ?? 1;
-          onProgress?.({
-            phase: 'kokoro',
-            loaded,
-            total,
-            pct: pct(loaded, total),
-          });
-        },
-      } as never);
-      kokoroInstance = tts as typeof kokoroInstance;
+      const tts = await withTimeout(
+        KokoroTTS.from_pretrained(KOKORO_MODEL, {
+          dtype,
+          device,
+          progress_callback: (p: unknown) => {
+            onProgress?.(progressFromUnknown(p, 'kokoro', 'Downloading Kokoro voice…'));
+          },
+        } as never),
+        120_000,
+        'Kokoro',
+      );
+      kokoroInstance = tts as KokoroLike;
+      // Smoke: tiny generate
+      const probe = await withTimeout(
+        kokoroInstance.generate('Ready.', { voice: 'af_heart' }),
+        60_000,
+        'Kokoro probe',
+      );
+      const audio = probe.audio ?? probe.data;
+      if (audio && audio.length > 100) {
+        let energy = 0;
+        const step = Math.max(1, Math.floor(audio.length / 2000));
+        for (let i = 0; i < audio.length; i += step) energy += Math.abs(audio[i]);
+        if (energy > 0.01) ttsCap = 'kokoro';
+        else {
+          console.warn('[voice] Kokoro probe silent — falling back');
+          kokoroInstance = null;
+        }
+      } else {
+        kokoroInstance = null;
+      }
     } catch (e) {
-      console.warn('[voice] Kokoro load failed — will use Piper/Web Speech', e);
+      console.warn('[voice] Kokoro unavailable', e);
       kokoroInstance = null;
     }
 
-    onProgress?.({ phase: 'whisper', loaded: 0, total: 100, pct: 0 });
+    onProgress?.({ phase: 'whisper', loaded: 0, total: 100, pct: 2, label: 'Preparing speech recognition…' });
     try {
       const { pipeline, env } = await import('@huggingface/transformers');
-      // Prefer browser cache
       env.allowLocalModels = false;
       env.useBrowserCache = true;
-      const device =
-        typeof navigator !== 'undefined' && 'gpu' in navigator ? 'webgpu' : 'wasm';
-      whisperPipeline = (await pipeline('automatic-speech-recognition', WHISPER_MODEL, {
-        device,
-        dtype: device === 'webgpu' ? 'fp32' : 'q8',
-        progress_callback: (p: unknown) => {
-          const info = p as { loaded?: number; total?: number };
-          const loaded = info.loaded ?? 0;
-          const total = info.total ?? 1;
-          onProgress?.({
-            phase: 'whisper',
-            loaded,
-            total,
-            pct: pct(loaded, total),
-          });
-        },
-      })) as typeof whisperPipeline;
+      // Prefer wasm unless WebGPU clearly available (avoids hung 0% in many envs)
+      const device = useWasm ? 'wasm' : 'webgpu';
+      const asr = await withTimeout(
+        pipeline('automatic-speech-recognition', WHISPER_MODEL, {
+          device,
+          dtype: 'q8',
+          progress_callback: (p: unknown) => {
+            onProgress?.(progressFromUnknown(p, 'whisper', 'Downloading Whisper…'));
+          },
+        }),
+        180_000,
+        'Whisper',
+      );
+      whisperPipeline = asr as unknown as typeof whisperPipeline;
+      sttCap = 'whisper';
     } catch (e) {
-      console.warn('[voice] Whisper load failed — will use Web Speech STT', e);
+      console.warn('[voice] Whisper unavailable', e);
       whisperPipeline = null;
+      sttCap = getSpeechRecognition() ? 'webspeech' : 'none';
     }
-    onProgress?.({ phase: 'ready', loaded: 100, total: 100, pct: 100 });
-  })();
-  try {
-    await loadPromise;
-  } finally {
-    /* keep singleton */
-  }
+
+    if (!kokoroInstance) ttsCap = typeof window !== 'undefined' && window.speechSynthesis ? 'webspeech' : 'none';
+
+    onProgress?.({ phase: 'ready', loaded: 100, total: 100, pct: 100, label: 'Voice ready' });
+    lastCapabilities = { tts: ttsCap, stt: sttCap };
+    return lastCapabilities;
+  })().catch((e) => {
+    console.warn('[voice] ensureVoiceModels failed', e);
+    loadPromise = null;
+    lastCapabilities = {
+      tts: typeof window !== 'undefined' && window.speechSynthesis ? 'webspeech' : 'none',
+      stt: getSpeechRecognition() ? 'webspeech' : 'none',
+    };
+    return lastCapabilities;
+  });
+
+  return loadPromise;
 }
 
 function playFloat32(audio: Float32Array, sampleRate: number, onLevel?: (n: number) => void): Promise<void> {
@@ -126,10 +213,8 @@ function playFloat32(audio: Float32Array, sampleRate: number, onLevel?: (n: numb
     src.buffer = buffer;
     const analyser = ctx.createAnalyser();
     analyser.fftSize = 256;
-    const gain = ctx.createGain();
     src.connect(analyser);
-    analyser.connect(gain);
-    gain.connect(ctx.destination);
+    analyser.connect(ctx.destination);
     const data = new Uint8Array(analyser.frequencyBinCount);
     let raf = 0;
     let done = false;
@@ -153,7 +238,7 @@ function playFloat32(audio: Float32Array, sampleRate: number, onLevel?: (n: numb
     };
     raf = requestAnimationFrame(tick);
     src.onended = finish;
-    src.start();
+    void ctx.resume().then(() => src.start());
     setTimeout(finish, (audio.length / sampleRate) * 1000 + 2500);
   });
 }
@@ -161,15 +246,9 @@ function playFloat32(audio: Float32Array, sampleRate: number, onLevel?: (n: numb
 async function speakKokoro(text: string, onLevel?: (n: number) => void): Promise<TtsEngineId> {
   if (!kokoroInstance) throw new Error('kokoro missing');
   const result = await kokoroInstance.generate(text, { voice: 'af_heart' });
-  // kokoro-js RawAudio: .audio + .sampling_rate OR toWav/save
-  const audio =
-    (result as { audio?: Float32Array }).audio ??
-    (result as { data?: Float32Array }).data;
-  const sr =
-    (result as { sampling_rate?: number }).sampling_rate ??
-    (result as { sampleRate?: number }).sampleRate ??
-    24000;
-  if (!audio) throw new Error('kokoro empty audio');
+  const audio = result.audio ?? result.data;
+  const sr = result.sampling_rate ?? result.sampleRate ?? 24000;
+  if (!audio || audio.length < 32) throw new Error('empty audio');
   await playFloat32(audio instanceof Float32Array ? audio : new Float32Array(audio as ArrayLike<number>), sr, onLevel);
   return 'kokoro';
 }
@@ -181,15 +260,10 @@ async function speakPiper(
   onLevel?: (n: number) => void,
 ): Promise<TtsEngineId> {
   const tts = await import('@mintplex-labs/piper-tts-web');
-  await tts.download(voiceId, (progress: { loaded?: number; total?: number; url?: string }) => {
-    const loaded = progress.loaded ?? 0;
-    const total = progress.total ?? 1;
-    onProgress?.({
-      phase: `piper:${voiceId}`,
-      loaded,
-      total,
-      pct: pct(loaded, total),
-    });
+  await tts.download(voiceId, (progress: { loaded?: number; total?: number }) => {
+    onProgress?.(
+      progressFromUnknown(progress, `piper`, 'Downloading language voice…'),
+    );
   });
   const wav = await tts.predict({ text, voiceId });
   const url = URL.createObjectURL(wav);
@@ -244,14 +318,13 @@ function playUrl(url: string, onLevel?: (n: number) => void): Promise<void> {
 function speakWebSpeech(text: string, lang: string, onLevel?: (n: number) => void): Promise<TtsEngineId> {
   return new Promise((resolve, reject) => {
     if (typeof window === 'undefined' || !window.speechSynthesis) {
-      reject(new Error('no speechSynthesis'));
+      reject(new Error('speech unavailable'));
       return;
     }
     window.speechSynthesis.cancel();
     const u = new SpeechSynthesisUtterance(text);
     u.lang = lang;
     u.rate = 1.02;
-    // Approximate level pulse while speaking (no Analyser on speechSynthesis)
     let raf = 0;
     const start = performance.now();
     const tick = () => {
@@ -268,23 +341,23 @@ function speakWebSpeech(text: string, lang: string, onLevel?: (n: number) => voi
     u.onerror = () => {
       cancelAnimationFrame(raf);
       onLevel?.(0);
-      reject(new Error('webspeech error'));
+      reject(new Error('speech unavailable'));
     };
     window.speechSynthesis.speak(u);
   });
 }
 
+/** Friendly speak — never throws engine jargon. Returns engine used or null if silent skip. */
 export async function speakText(opts: {
   text: string;
   lang: VoiceLang;
   speechLang: string;
   onProgress?: ProgressCb;
   onLevel?: (n: number) => void;
-}): Promise<TtsEngineId> {
+}): Promise<TtsEngineId | null> {
   const { text, lang, speechLang, onProgress, onLevel } = opts;
-  if (!text.trim()) return 'webspeech';
+  if (!text.trim()) return null;
 
-  // English → Kokoro
   if (prefersKokoro(lang) && kokoroInstance) {
     try {
       return await speakKokoro(text, onLevel);
@@ -293,7 +366,6 @@ export async function speakText(opts: {
     }
   }
 
-  // Hindi / Romance → Piper when available
   const piperId = piperVoiceFor(lang === 'auto' ? 'en-US' : lang);
   if (piperId) {
     try {
@@ -303,7 +375,6 @@ export async function speakText(opts: {
     }
   }
 
-  // Also try Kokoro for short English answers even if lang is auto
   if (kokoroInstance && /^[\x00-\x7F\s\p{P}]+$/u.test(text) && text.length < 800) {
     try {
       return await speakKokoro(text, onLevel);
@@ -312,7 +383,12 @@ export async function speakText(opts: {
     }
   }
 
-  return speakWebSpeech(text, speechLang, onLevel);
+  try {
+    return await speakWebSpeech(text, speechLang, onLevel);
+  } catch (e) {
+    console.warn('[voice] Web Speech TTS failed', e);
+    return null;
+  }
 }
 
 export function hasWhisper(): boolean {
@@ -331,7 +407,6 @@ export async function transcribeWhisper(
   return { text: (out.text || '').trim(), engine: 'whisper' };
 }
 
-/** Mic analyser helper for orb level while listening. */
 export async function openMicAnalyser(): Promise<{
   stream: MediaStream;
   analyser: AnalyserNode;
@@ -386,4 +461,39 @@ export function getSpeechRecognition(): (new () => SpeechRec) | null {
     webkitSpeechRecognition?: new () => SpeechRec;
   };
   return w.SpeechRecognition || w.webkitSpeechRecognition || null;
+}
+
+/** Map internal failures to user-safe copy (never engine stack traces). */
+export function friendlyVoiceMessage(err: unknown): string {
+  const raw = err instanceof Error ? err.message : String(err);
+  const t = raw.toLowerCase();
+  if (t.includes('not-allowed') || t.includes('permission')) {
+    return 'Microphone permission is off. Allow mic access, or type your question below.';
+  }
+  if (
+    t.includes('speech') ||
+    t.includes('webspeech') ||
+    t.includes('recognition') ||
+    t.includes('websocket') ||
+    t.includes('no-speech')
+  ) {
+    return 'Live listening is limited in this browser. Type a question, or try Chrome/Edge.';
+  }
+  if (
+    t.includes('kokoro') ||
+    t.includes('piper') ||
+    t.includes('whisper') ||
+    t.includes('onnx') ||
+    t.includes('worker') ||
+    t.includes('wasm') ||
+    t.includes('timed out') ||
+    t.includes('transformers')
+  ) {
+    return 'Local voice models are still warming up. You can type a question anytime.';
+  }
+  if (t.includes('network') || t.includes('fetch') || t.includes('cdn') || t.includes('cors')) {
+    return 'Could not download voice models yet. Check your connection — typing still works.';
+  }
+  // Never surface raw engine text
+  return 'Something went wrong with voice. Typing still works, and voice never places orders.';
 }
