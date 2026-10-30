@@ -466,6 +466,21 @@ export async function placeOrder(
       };
     }
     const data = envelope.data as unknown;
+    if (Array.isArray(data)) {
+      const bad = data.find((row) => {
+        if (!row || typeof row !== "object") return false;
+        const r = row as Record<string, unknown>;
+        return (typeof r.code === "number" && r.code !== 0) || Boolean(r.error);
+      }) as Record<string, unknown> | undefined;
+      if (bad) {
+        return {
+          ok: false,
+          dryRun: false,
+          error: `SoDEX order rejected: ${String(bad.error ?? bad.msg ?? bad.code)}`,
+          env,
+        };
+      }
+    }
     const dig = (node: unknown): { id?: string; status?: string } => {
       if (!node) return {};
       if (Array.isArray(node)) return dig(node[0]);
@@ -664,6 +679,73 @@ export async function placeMarketBuyFunds(opts: {
   };
 }
 
+
+/** Cancel a spot order on testnet by orderID (frees locked margin). */
+export async function cancelSpotOrder(opts: {
+  symbol: string;
+  orderId: string;
+  origClOrdID?: string;
+}): Promise<{ ok: boolean; raw?: unknown; error?: string }> {
+  const creds = getSodexCredentials();
+  if (!creds) return { ok: false, error: "No SoDEX credentials" };
+  let symbolId: number | null = null;
+  try {
+    symbolId = await resolveSymbolId(opts.symbol);
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
+  if (symbolId == null) return { ok: false, error: `Unknown symbol ${opts.symbol}` };
+  const clOrdID = `fs-cxl-${Date.now().toString(36)}`.slice(0, 36);
+  const cancel: Record<string, unknown> = {
+    symbolID: symbolId,
+    clOrdID,
+    orderID: Number(opts.orderId),
+  };
+  if (opts.origClOrdID) cancel.origClOrdID = opts.origClOrdID;
+  const params = {
+    accountID: creds.accountId,
+    cancels: [cancel],
+  };
+  const nonce = BigInt(Date.now());
+  const compact = compactSignPayload("batchCancelOrder", params);
+  const payloadHash = keccak256(toHex(compact));
+  let apiSign: Hex;
+  try {
+    apiSign = await signExchangeAction({
+      privateKey: creds.apiKeyPrivateKey,
+      payloadHash,
+      nonce,
+    });
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
+  const base = requireTestnetOnly(process.env.SODEX_BASE_URL);
+  try {
+    const res = await fetch(`${base}/api/v1/spot/trade/orders/batch`, {
+      method: "DELETE",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+        "X-API-Key": creds.apiKeyName,
+        "X-API-Sign": apiSign,
+        "X-API-Nonce": nonce.toString(),
+      },
+      body: JSON.stringify(params),
+      cache: "no-store",
+    });
+    const text = await res.text();
+    let raw: unknown = text;
+    try { raw = JSON.parse(text); } catch { /* */ }
+    if (!res.ok) return { ok: false, error: `HTTP ${res.status}: ${text.slice(0, 200)}`, raw };
+    const env = raw as { code?: number; msg?: string };
+    if (typeof env.code === "number" && env.code !== 0) {
+      return { ok: false, error: `code ${env.code}: ${env.msg ?? ""}`, raw };
+    }
+    return { ok: true, raw };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
+}
 
 /** Query a spot order by id on testnet (requires credentials). */
 export async function querySpotOrder(orderId: string): Promise<{
