@@ -52,8 +52,8 @@ export const metadata: Metadata = {
     images: ['/brand/og.svg'],
   },
   icons: {
-    icon: '/brand/favicon.svg',
-    apple: '/brand/favicon.svg',
+    icon: [{ url: '/brand/favicon.svg' }, { url: '/brand/favicon-32.png', sizes: '32x32', type: 'image/png' }],
+    apple: '/brand/apple-touch-icon.png',
   },
   manifest: '/manifest.webmanifest',
   robots: { index: true, follow: true },

@@ -13,11 +13,17 @@ import {
   openMicAnalyser,
   friendlyVoiceMessage,
   getVoiceCapabilities,
+  transcribeWhisper,
   type VoiceEngineState,
   type LoadProgress,
   type TtsEngineId,
   type SpeechRec,
 } from '@/lib/voice/engine';
+import {
+  createContinuousVad,
+  createEnergyVadFallback,
+  type ContinuousSession,
+} from '@/lib/voice/continuous';
 
 const VoiceOrb = dynamic(() => import('./VoiceOrb').then((m) => m.VoiceOrb), {
   ssr: false,
@@ -47,9 +53,16 @@ export function VoiceMode({
   const [ready, setReady] = useState(false);
   const [ttsEngine, setTtsEngine] = useState<TtsEngineId | null>(null);
   const [mounted, setMounted] = useState(false);
+  const [continuous, setContinuous] = useState(false);
+  const [muted, setMuted] = useState(false);
+  useEffect(() => { mutedRef.current = muted; }, [muted]);
   const recRef = useRef<SpeechRec | null>(null);
   const micRef = useRef<Awaited<ReturnType<typeof openMicAnalyser>> | null>(null);
   const levelRaf = useRef(0);
+  const continuousRef = useRef<ContinuousSession | null>(null);
+  const bargeRef = useRef(false);
+  const mutedRef = useRef(false);
+  const askRef = useRef<(q: string) => Promise<void>>(async () => {});
 
   const speechLang = useMemo(() => {
     if (lang === 'auto') return 'en-US';
@@ -119,12 +132,17 @@ export function VoiceMode({
       micRef.current?.stop();
       cancelAnimationFrame(levelRaf.current);
       if (typeof window !== 'undefined' && window.speechSynthesis) window.speechSynthesis.cancel();
+      continuousRef.current?.destroy();
+      continuousRef.current = null;
     };
   }, [open, onClose]);
 
   const speak = useCallback(
     async (text: string) => {
       setState('speaking');
+      bargeRef.current = false;
+      // Pause VAD while speaking to avoid self-echo, unless barge-in starts
+      continuousRef.current?.pause();
       try {
         const eng = await speakText({
           text,
@@ -138,11 +156,16 @@ export function VoiceMode({
         console.warn('[voice] speak failed', e);
       } finally {
         setLevel(0);
-        setState('idle');
         setProgress(null);
+        if (!bargeRef.current && continuousRef.current && !mutedRef.current) {
+          continuousRef.current.resume();
+          setState('listening');
+        } else {
+          setState('idle');
+        }
       }
     },
-    [lang, speechLang],
+    [lang, speechLang, muted],
   );
 
   const ask = useCallback(
@@ -183,6 +206,16 @@ export function VoiceMode({
     [desk, lang, onRefresh, speak],
   );
 
+  useEffect(() => {
+    askRef.current = ask;
+  }, [ask]);
+
+  const stopContinuous = useCallback(() => {
+    continuousRef.current?.destroy();
+    continuousRef.current = null;
+    setContinuous(false);
+  }, []);
+
   const stopListen = () => {
     try {
       recRef.current?.stop();
@@ -193,10 +226,111 @@ export function VoiceMode({
     micRef.current = null;
     cancelAnimationFrame(levelRaf.current);
     setLevel(0);
-    setState('idle');
+    if (!continuousRef.current) setState('idle');
+  };
+
+  const startContinuous = async () => {
+    if (continuousRef.current) {
+      stopContinuous();
+      stopListen();
+      setState('idle');
+      return;
+    }
+    setMuted(false);
+    const onSpeechEnd = async (pcm: Float32Array) => {
+      if (mutedRef.current) return;
+      // Barge-in: if speaking, cut TTS and take the new utterance
+      if (state === 'speaking' || bargeRef.current) {
+        bargeRef.current = true;
+        try {
+          window.speechSynthesis?.cancel();
+        } catch {
+          /* */
+        }
+      }
+      setState('thinking');
+      continuousRef.current?.pause();
+      try {
+        let text = '';
+        try {
+          const caps = getVoiceCapabilities();
+          if (caps.stt === 'whisper') {
+            const out = await transcribeWhisper(pcm);
+            text = out.text;
+          }
+        } catch (e) {
+          console.warn('[voice] whisper continuous failed', e);
+        }
+        if (!text.trim()) {
+          // soft fail — resume listening without raw errors
+          continuousRef.current?.resume();
+          setState('listening');
+          return;
+        }
+        await askRef.current(text.trim());
+      } catch (e) {
+        setBubbles((b) => [
+          ...b,
+          { id: `e_${Date.now()}`, role: 'assistant', text: friendlyVoiceMessage(e) },
+        ]);
+        continuousRef.current?.resume();
+        setState('listening');
+      }
+    };
+
+    let session = await createContinuousVad({
+      onSpeechStart: () => {
+        if (state === 'speaking') {
+          bargeRef.current = true;
+          try {
+            window.speechSynthesis?.cancel();
+          } catch {
+            /* */
+          }
+        }
+        setState('listening');
+      },
+      onSpeechEnd,
+      onLevel: setLevel,
+      onError: (e) => console.warn('[voice] vad', e),
+    });
+    if (!session) {
+      session = await createEnergyVadFallback({
+        onSpeechStart: () => setState('listening'),
+        onSpeechEnd,
+        onLevel: setLevel,
+      });
+    }
+    if (!session) {
+      setBubbles((b) => [
+        ...b,
+        {
+          id: `e_${Date.now()}`,
+          role: 'assistant',
+          text: 'Continuous mic is unavailable here. Tap push-to-talk, or type. Voice never places orders.',
+        },
+      ]);
+      return;
+    }
+    continuousRef.current = session;
+    setContinuous(true);
+    session.start();
+    setState('listening');
+    setBubbles((b) => [
+      ...b,
+      {
+        id: `n_${Date.now()}`,
+        role: 'assistant',
+        text: 'Continuous conversation on. I will listen, answer, and keep listening. Say stop or hit Mute to pause. Voice never places orders.',
+      },
+    ]);
   };
 
   const toggleListen = async () => {
+    if (continuous) {
+      await startContinuous(); // toggles off
+      return;
+    }
     if (state === 'listening') {
       stopListen();
       return;
@@ -291,8 +425,13 @@ export function VoiceMode({
 
             <p className="voice-mode-state" aria-live="polite">
               {state === 'loading' && 'Loading free local models…'}
-              {state === 'idle' && (ready ? 'Tap the mic · voice never places orders' : 'Preparing…')}
-              {state === 'listening' && 'Listening…'}
+              {state === 'idle' &&
+                (ready
+                  ? continuous
+                    ? 'Continuous mode paused · voice never places orders'
+                    : 'Start continuous talk · voice never places orders'
+                  : 'Preparing…')}
+              {state === 'listening' && (continuous ? 'Listening continuously…' : 'Listening…')}
               {state === 'thinking' && 'Thinking…'}
               {state === 'speaking' && `Speaking${ttsEngine ? ` · ${ttsEngine}` : ''}`}
             </p>
@@ -337,17 +476,59 @@ export function VoiceMode({
               <button
                 type="button"
                 className="btn btn-primary voice-mic"
-                aria-pressed={state === 'listening'}
-                aria-label={state === 'listening' ? 'Stop listening' : 'Start listening'}
-                disabled={state === 'loading' || state === 'thinking' || state === 'speaking'}
-                onClick={() => void toggleListen()}
+                aria-pressed={continuous || state === 'listening'}
+                aria-label={continuous ? 'Stop continuous conversation' : 'Start continuous conversation'}
+                disabled={state === 'loading'}
+                onClick={() => void startContinuous()}
               >
-                {state === 'listening' ? '■' : '🎤'}
+                {continuous ? '● Live' : 'Talk'}
               </button>
-              <button type="button" className="btn" onClick={() => void ask('read thesis')} disabled={state !== 'idle'}>
+              <button
+                type="button"
+                className="btn"
+                aria-pressed={muted}
+                disabled={!continuous}
+                onClick={() => {
+                  const next = !muted;
+                  setMuted(next);
+                  if (next) {
+                    continuousRef.current?.pause();
+                    try {
+                      window.speechSynthesis?.cancel();
+                    } catch {
+                      /* */
+                    }
+                    setState('idle');
+                  } else {
+                    continuousRef.current?.resume();
+                    setState('listening');
+                  }
+                }}
+              >
+                {muted ? 'Unmute' : 'Mute'}
+              </button>
+              <button
+                type="button"
+                className="btn"
+                onClick={() => {
+                  bargeRef.current = true;
+                  try {
+                    window.speechSynthesis?.cancel();
+                  } catch {
+                    /* */
+                  }
+                  void ask('read thesis');
+                }}
+                disabled={state === 'loading' || state === 'thinking'}
+              >
                 Read thesis
               </button>
-              <button type="button" className="btn" onClick={() => void ask('explain risk')} disabled={state !== 'idle'}>
+              <button
+                type="button"
+                className="btn"
+                onClick={() => void ask('explain risk')}
+                disabled={state === 'loading' || state === 'thinking'}
+              >
                 Explain risk
               </button>
             </div>
@@ -370,8 +551,8 @@ export function VoiceMode({
             </form>
 
             <p className="voice-mode-disclaimer">
-              Not financial advice · SoDEX testnet only · Kokoro / Piper / Whisper run locally when available · Web
-              Speech fallback · never places orders by voice
+              Not financial advice · SoDEX testnet only · Continuous VAD (Silero) + Whisper/Kokoro when available ·
+              barge-in supported · never places orders by voice
             </p>
           </div>
         </motion.div>

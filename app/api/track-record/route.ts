@@ -5,14 +5,20 @@ import { fetchSpotTickers } from '@/lib/sodex';
 export const dynamic = 'force-dynamic';
 
 export async function GET() {
-  const market = await fetchSpotTickers();
-  const marks: Record<string, number> = {};
-  for (const t of market.tickers) marks[t.symbol] = t.lastPrice;
-  const rows = resolveOpen(marks);
+  let marks: Record<string, number> = {};
+  let marksSource: unknown = null;
+  try {
+    const market = await fetchSpotTickers();
+    for (const t of market.tickers) marks[t.symbol] = t.lastPrice;
+    marksSource = market.meta;
+  } catch (e) {
+    console.warn('[track-record] tickers failed', e);
+  }
+  const rows = Object.keys(marks).length ? resolveOpen(marks) : listTrackRecord();
   const stats = hitRate(rows);
   return NextResponse.json({
     stats,
     entries: rows,
-    marksSource: market.meta,
+    marksSource,
   });
 }

@@ -901,3 +901,79 @@ body::before {
   .jarvis-caret { animation: none; }
   body::before { display: none; }
 }
+
+
+/* Sentinel Eye logo motion */
+.logo-mark-animated .logo-iris {
+  transform-origin: 32px 32px;
+  animation: logo-breathe 3.6s ease-in-out infinite;
+}
+.logo-mark-animated .logo-flow {
+  stroke-dasharray: 28;
+  animation: logo-flow 2.8s ease-in-out infinite;
+}
+@keyframes logo-breathe {
+  0%, 100% { transform: scale(1); opacity: 0.95; }
+  50% { transform: scale(1.06); opacity: 1; }
+}
+@keyframes logo-flow {
+  0% { stroke-dashoffset: 28; opacity: 0.35; }
+  50% { stroke-dashoffset: 0; opacity: 0.9; }
+  100% { stroke-dashoffset: -28; opacity: 0.35; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .logo-mark-animated .logo-iris,
+  .logo-mark-animated .logo-flow { animation: none; }
+}
+.voice-mic[aria-pressed="true"] {
+  box-shadow: 0 0 0 3px rgba(255,79,32,0.25);
+}
+
+
+.hero-cta-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 22px;
+}
+.hero-proof-strip {
+  list-style: none;
+  margin: 28px 0 0;
+  padding: 14px 0 0;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  border-top: 1px solid rgba(255,255,255,0.08);
+}
+.hero-proof-strip .proof-k {
+  display: block;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 4px;
+}
+.hero-proof-strip .proof-v {
+  display: block;
+  font-size: 13px;
+  font-weight: 560;
+  color: var(--text);
+  letter-spacing: -0.01em;
+}
+.hero-proof-strip .mono {
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
+}
+@media (max-width: 900px) {
+  .hero-proof-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+.empty-invite {
+  border: 1px dashed rgba(255,255,255,0.12);
+  border-radius: 16px;
+  padding: 28px 24px;
+  text-align: left;
+  background: rgba(255,255,255,0.02);
+}
+.empty-invite h3 { margin: 0 0 8px; font-size: 16px; letter-spacing: -0.02em; }
+.empty-invite p { margin: 0; color: var(--muted); font-size: 14px; line-height: 1.5; }

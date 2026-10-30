@@ -70,7 +70,7 @@ export function DeskBelowFold() {
   }, []);
 
   return (
-    <div ref={ref}>
+    <div ref={ref} id="desk">
       {ready ? (
         <DeskClient />
       ) : (

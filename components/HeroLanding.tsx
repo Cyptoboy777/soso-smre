@@ -65,7 +65,7 @@ export function HeroLanding() {
             transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
             style={{ filter: 'drop-shadow(0 18px 40px rgba(255,79,32,0.28))', marginBottom: 12 }}
           >
-            <LogoMark size={72} />
+            <LogoMark size={72} animated />
           </motion.div>
           <motion.p
             className="hero-kicker"
@@ -93,6 +93,45 @@ export function HeroLanding() {
             A one-person fund desk: SoSoValue data becomes a daily thesis, a risk check you can read, and a
             confirmed SoDEX testnet order — with an honest public track record.
           </motion.p>
+          <motion.div
+            className="hero-cta-row"
+            initial={reduce ? false : { opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.24, duration: 0.45 }}
+          >
+            <a className="btn btn-primary" href="#desk">
+              Open live desk
+            </a>
+            <a className="btn btn-ghost" href="/judge">
+              60s judge path
+            </a>
+            <a className="btn btn-ghost" href="/track-record">
+              Verify track record
+            </a>
+          </motion.div>
+          <motion.ul
+            className="hero-proof-strip"
+            initial={reduce ? false : { opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.32, duration: 0.5 }}
+          >
+            <li>
+              <span className="proof-k">Orders</span>
+              <span className="proof-v">TESTNET LIVE EIP-712</span>
+            </li>
+            <li>
+              <span className="proof-k">Proof fills</span>
+              <span className="proof-v mono">1301909841 · 1301909840</span>
+            </li>
+            <li>
+              <span className="proof-k">Advisor</span>
+              <span className="proof-v">Gemini + SoSoValue cites</span>
+            </li>
+            <li>
+              <span className="proof-k">Risk</span>
+              <span className="proof-v">Gate + confirm required</span>
+            </li>
+          </motion.ul>
         </div>
 
         <div className="hero-visual">

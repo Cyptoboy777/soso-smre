@@ -7,8 +7,13 @@ import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
 
-const FILE = path.join(process.cwd(), 'data', 'track-record.json');
 const SEED = path.join(process.cwd(), 'data', 'track-record.seed.json');
+/** Prefer writable /tmp on Vercel; fall back to repo data/ locally. */
+const FILE = process.env.VERCEL
+  ? path.join('/tmp', 'flowsentinel-track-record.json')
+  : path.join(process.cwd(), 'data', 'track-record.json');
+
+let memoryCache: TrackRecordEntry[] | null = null;
 
 function readSeed(): TrackRecordEntry[] {
   try {
@@ -19,36 +24,50 @@ function readSeed(): TrackRecordEntry[] {
   }
 }
 
+function mergeSeed(rows: TrackRecordEntry[]): TrackRecordEntry[] {
+  const seed = readSeed();
+  const ids = new Set(rows.map((r) => r.id));
+  const orderIds = new Set(rows.map((r) => r.orderId).filter(Boolean));
+  for (const s of seed) {
+    if (ids.has(s.id)) continue;
+    if (s.orderId && orderIds.has(s.orderId)) continue;
+    rows.unshift(s);
+  }
+  return rows;
+}
+
 function ensure(): TrackRecordEntry[] {
+  if (memoryCache) return memoryCache;
   try {
-    fs.mkdirSync(path.dirname(FILE), { recursive: true });
     const seed = readSeed();
     if (!fs.existsSync(FILE)) {
-      fs.writeFileSync(FILE, JSON.stringify(seed, null, 2), 'utf8');
-      return seed;
+      memoryCache = mergeSeed([...seed]);
+      try {
+        fs.mkdirSync(path.dirname(FILE), { recursive: true });
+        fs.writeFileSync(FILE, JSON.stringify(memoryCache, null, 2), 'utf8');
+      } catch {
+        /* read-only FS — memory only */
+      }
+      return memoryCache;
     }
     const raw = fs.readFileSync(FILE, 'utf8');
-    const rows = JSON.parse(raw) as TrackRecordEntry[];
-    // Merge seed proofs if missing (idempotent by orderId / id)
-    const ids = new Set(rows.map((r) => r.id));
-    const orderIds = new Set(rows.map((r) => r.orderId).filter(Boolean));
-    let changed = false;
-    for (const s of seed) {
-      if (ids.has(s.id)) continue;
-      if (s.orderId && orderIds.has(s.orderId)) continue;
-      rows.unshift(s);
-      changed = true;
-    }
-    if (changed) save(rows.slice(0, 500));
+    const rows = mergeSeed(JSON.parse(raw) as TrackRecordEntry[]);
+    memoryCache = rows;
     return rows;
   } catch {
-    return readSeed();
+    memoryCache = mergeSeed(readSeed());
+    return memoryCache;
   }
 }
 
 function save(rows: TrackRecordEntry[]) {
-  fs.mkdirSync(path.dirname(FILE), { recursive: true });
-  fs.writeFileSync(FILE, JSON.stringify(rows, null, 2), 'utf8');
+  memoryCache = rows;
+  try {
+    fs.mkdirSync(path.dirname(FILE), { recursive: true });
+    fs.writeFileSync(FILE, JSON.stringify(rows, null, 2), 'utf8');
+  } catch {
+    /* Vercel read-only — keep in-memory for this isolate */
+  }
 }
 
 export function listTrackRecord(): TrackRecordEntry[] {
@@ -64,7 +83,7 @@ export function logIdea(
   const entry: TrackRecordEntry = {
     id: `tr_${crypto.randomBytes(5).toString('hex')}`,
     thesisId: thesis.id,
-    createdAt: thesis.createdAt,
+    createdAt: Number.isFinite(Date.parse(thesis.createdAt)) ? thesis.createdAt : new Date().toISOString(),
     side: thesis.side,
     symbol: thesis.symbol,
     entry: thesis.entry,
@@ -74,8 +93,11 @@ export function logIdea(
     plainEnglish: thesis.plainEnglish,
     orderMode,
     orderId,
-    horizonHours: thesis.horizonHours,
-    resolveAfter: new Date(Date.parse(thesis.createdAt) + thesis.horizonHours * 3600_000).toISOString(),
+    horizonHours: thesis.horizonHours || 24,
+    resolveAfter: new Date(
+      (Number.isFinite(Date.parse(thesis.createdAt)) ? Date.parse(thesis.createdAt) : Date.now()) +
+        (thesis.horizonHours || 24) * 3600_000,
+    ).toISOString(),
     outcome: thesis.side === 'FLAT' ? 'cancelled' : 'open',
     drivers: thesis.drivers,
   };

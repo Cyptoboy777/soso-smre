@@ -57,12 +57,21 @@ export async function POST(req: Request) {
     confirmed: true,
   });
 
-  const row = logIdea(body.thesis, order.mode === 'live' ? 'live' : 'dry-run', order.orderId);
+  let row: { id: string } | null = null;
+  try {
+    row = logIdea(body.thesis, order.mode === 'live' ? 'live' : 'dry-run', order.orderId);
+  } catch (e) {
+    console.warn('[trade] track-record log failed', e);
+  }
   let queried: { status?: string; ok?: boolean } | null = null;
   if (order.mode === 'live' && order.orderId) {
     queried = await querySpotOrder(order.orderId);
-    if (queried.ok && queried.status) {
-      updateOrderStatus(row.id, queried.status);
+    if (row && queried.ok && queried.status) {
+      try {
+        updateOrderStatus(row.id, queried.status);
+      } catch (e) {
+        console.warn('[trade] track-record update failed', e);
+      }
     }
   }
 
@@ -70,7 +79,7 @@ export async function POST(req: Request) {
   return NextResponse.json({
     order,
     risk,
-    trackId: row.id,
+    trackId: row?.id ?? null,
     queried,
     notionalUsd: Number(notional.toFixed(6)),
     maxNotionalUsdc: SODEX_MAX_NOTIONAL_USDC,

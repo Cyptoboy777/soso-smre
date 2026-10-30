@@ -1,4 +1,12 @@
-export function LogoMark({ size = 28, className = '' }: { size?: number; className?: string }) {
+export function LogoMark({
+  size = 28,
+  className = '',
+  animated = false,
+}: {
+  size?: number;
+  className?: string;
+  animated?: boolean;
+}) {
   return (
     <svg
       width={size}
@@ -6,37 +14,26 @@ export function LogoMark({ size = 28, className = '' }: { size?: number; classNa
       viewBox="0 0 64 64"
       fill="none"
       aria-hidden
-      className={className}
+      className={`logo-mark ${animated ? 'logo-mark-animated' : ''} ${className}`.trim()}
       style={{ color: 'var(--accent)' }}
     >
-      {/* Outer soft ring */}
-      <circle cx="32" cy="32" r="28" stroke="currentColor" strokeWidth="1.5" opacity="0.18" />
-      {/* Triple aperture arcs — shared centre, consistent stroke */}
       <path
-        d="M32 6c14.36 0 26 11.64 26 26"
+        className="logo-lid"
+        d="M8 32c9-14 20-21 24-21s15 7 24 21c-9 14-20 21-24 21S17 46 8 32Z"
         stroke="currentColor"
         strokeWidth="3.5"
-        strokeLinecap="round"
-        opacity="0.35"
+        strokeLinejoin="round"
       />
+      <circle className="logo-iris" cx="32" cy="32" r="9" stroke="currentColor" strokeWidth="3" opacity="0.95" />
+      <circle className="logo-pupil" cx="32" cy="32" r="3.5" fill="currentColor" />
       <path
-        d="M58 32c0 14.36-11.64 26-26 26S6 46.36 6 32"
+        className="logo-flow"
+        d="M15 26c5-3 11-5 17-5"
         stroke="currentColor"
-        strokeWidth="3.5"
+        strokeWidth="2"
         strokeLinecap="round"
+        opacity="0.7"
       />
-      <path
-        d="M12 18.5A22 22 0 0 1 32 10"
-        stroke="currentColor"
-        strokeWidth="3.5"
-        strokeLinecap="round"
-      />
-      {/* Inner iris */}
-      <circle cx="32" cy="32" r="12" stroke="currentColor" strokeWidth="2.5" />
-      <circle cx="32" cy="32" r="4.5" fill="currentColor" />
-      {/* Flow tick NE — capital inflow direction */}
-      <path d="M36.5 27.5 50 14" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
-      <circle cx="51.5" cy="12.5" r="3.25" fill="currentColor" />
     </svg>
   );
 }
@@ -44,7 +41,7 @@ export function LogoMark({ size = 28, className = '' }: { size?: number; classNa
 export function Logo({ withWordmark = true }: { withWordmark?: boolean }) {
   return (
     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 10 }}>
-      <LogoMark size={30} />
+      <LogoMark size={30} animated />
       {withWordmark && (
         <span
           style={{
