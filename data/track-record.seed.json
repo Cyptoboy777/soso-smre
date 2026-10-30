@@ -1,0 +1,52 @@
+[
+  {
+    "id": "tr_sodex_1301909841",
+    "thesisId": "proof_mkt_9461764",
+    "createdAt": "2026-10-30T05:30:00.000Z",
+    "side": "LONG",
+    "symbol": "vBTC_vUSDC",
+    "entry": 78619,
+    "stopLoss": 77000,
+    "takeProfit": 82000,
+    "confidence": 70,
+    "plainEnglish": "Live SoDEX testnet MARKET buy (IOC). Proof: orderID 1301909841 FILLED, trade 9461764, qty 0.00005 vBTC @ 78619. See /workspace proof + track record. EIP-712 via account 60539.",
+    "orderMode": "live",
+    "orderId": "1301909841",
+    "orderStatus": "FILLED",
+    "horizonHours": 24,
+    "resolveAfter": "2026-10-31T05:30:00.000Z",
+    "outcome": "open",
+    "drivers": {
+      "etfBtcNetInflow": null,
+      "etfEthNetInflow": null,
+      "ssiChangePct": null,
+      "newsShock": false,
+      "topHeadlines": ["SoDEX testnet fill proof 1301909841"]
+    }
+  },
+  {
+    "id": "tr_sodex_1301909840",
+    "thesisId": "proof_lim_resting",
+    "createdAt": "2026-10-30T05:29:00.000Z",
+    "side": "LONG",
+    "symbol": "vBTC_vUSDC",
+    "entry": 5000,
+    "stopLoss": 4800,
+    "takeProfit": 9000,
+    "confidence": 60,
+    "plainEnglish": "Live SoDEX testnet LIMIT buy resting far from market. Proof: orderID 1301909840 status NEW, qty 0.001 @ 5000. EIP-712 account 60539.",
+    "orderMode": "live",
+    "orderId": "1301909840",
+    "orderStatus": "NEW",
+    "horizonHours": 168,
+    "resolveAfter": "2026-11-06T05:29:00.000Z",
+    "outcome": "open",
+    "drivers": {
+      "etfBtcNetInflow": null,
+      "etfEthNetInflow": null,
+      "ssiChangePct": null,
+      "newsShock": false,
+      "topHeadlines": ["SoDEX testnet resting limit proof 1301909840"]
+    }
+  }
+]

@@ -104,9 +104,15 @@ function requireTestnetOnly(url: string | undefined): string {
 }
 
 export function getSodexCredentials(): SodexCredentials | null {
+  // Canonical Wave 3 env names (Preview branch + Development):
+  // SODEX_ACCOUNT_ID, SODEX_API_KEY_NAME, SODEX_API_KEY_PRIVATE_KEY
+  // Optional: SODEX_MASTER_ADDRESS for public order queries
   const accountIdRaw = process.env.SODEX_ACCOUNT_ID?.trim();
   const apiKeyName = process.env.SODEX_API_KEY_NAME?.trim();
-  const pk = process.env.SODEX_API_KEY_PRIVATE_KEY?.trim();
+  const pk =
+    process.env.SODEX_API_KEY_PRIVATE_KEY?.trim() ||
+    process.env.SODEX_SECRET_KEY?.trim() ||
+    "";
   if (!accountIdRaw || !apiKeyName || !pk) return null;
   const accountId = Number(accountIdRaw);
   if (!Number.isSafeInteger(accountId) || accountId <= 0) return null;
@@ -114,6 +120,9 @@ export function getSodexCredentials(): SodexCredentials | null {
   if (!/^0x[0-9a-fA-F]{64}$/.test(hex)) return null;
   return { accountId, apiKeyName, apiKeyPrivateKey: hex };
 }
+
+/** Hard server-side cap for throwaway testnet account protection. */
+export const SODEX_MAX_NOTIONAL_USDC = 10;
 
 /** True when EIP-712 testnet credentials are present. */
 export function hasSodexCredentials(): boolean {

@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-10-30 — SoDEX testnet live
+
+- Real EIP-712 testnet orders: 1301909841 FILLED, 1301909840 NEW (account 60539).
+- Diag `sodexTrade=true` / `TESTNET_LIVE_EIP712` when credentials present.
+- Server max notional 10 USDC; risk gate + confirm still required.
+- Track record seeded with live order IDs; `/judge` 60s path; JARVIS + Gemini.
+
+
 ## Unreleased — public launch polish
 
 - Grok-style fullscreen voice mode with react-three-fiber orb (idle/listening/thinking/speaking), mic + TTS AnalyserNode levels, Bloom

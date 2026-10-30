@@ -8,18 +8,41 @@ import path from 'path';
 import crypto from 'crypto';
 
 const FILE = path.join(process.cwd(), 'data', 'track-record.json');
+const SEED = path.join(process.cwd(), 'data', 'track-record.seed.json');
+
+function readSeed(): TrackRecordEntry[] {
+  try {
+    if (!fs.existsSync(SEED)) return [];
+    return JSON.parse(fs.readFileSync(SEED, 'utf8')) as TrackRecordEntry[];
+  } catch {
+    return [];
+  }
+}
 
 function ensure(): TrackRecordEntry[] {
   try {
+    fs.mkdirSync(path.dirname(FILE), { recursive: true });
+    const seed = readSeed();
     if (!fs.existsSync(FILE)) {
-      fs.mkdirSync(path.dirname(FILE), { recursive: true });
-      fs.writeFileSync(FILE, '[]', 'utf8');
-      return [];
+      fs.writeFileSync(FILE, JSON.stringify(seed, null, 2), 'utf8');
+      return seed;
     }
     const raw = fs.readFileSync(FILE, 'utf8');
-    return JSON.parse(raw) as TrackRecordEntry[];
+    const rows = JSON.parse(raw) as TrackRecordEntry[];
+    // Merge seed proofs if missing (idempotent by orderId / id)
+    const ids = new Set(rows.map((r) => r.id));
+    const orderIds = new Set(rows.map((r) => r.orderId).filter(Boolean));
+    let changed = false;
+    for (const s of seed) {
+      if (ids.has(s.id)) continue;
+      if (s.orderId && orderIds.has(s.orderId)) continue;
+      rows.unshift(s);
+      changed = true;
+    }
+    if (changed) save(rows.slice(0, 500));
+    return rows;
   } catch {
-    return [];
+    return readSeed();
   }
 }
 

@@ -10,6 +10,19 @@ This Wave 3 work lives on branch `flowsentinel-wave3` (preview / PR — not prod
 
 ---
 
+## SoDEX testnet (live)
+
+FlowSentinel places **real SoDEX testnet** EIP-712 orders when `SODEX_ACCOUNT_ID`, `SODEX_API_KEY_NAME`, and `SODEX_API_KEY_PRIVATE_KEY` are set (Preview branch `flowsentinel-wave3` + Development). Without keys the desk stays labelled **DRY-RUN SIMULATED**.
+
+Proven fills / resting orders (account `60539`):
+
+| orderID | status | notes |
+|---------|--------|-------|
+| 1301909841 | FILLED | MARKET IOC buy ~5.5 USDC; trade 9461764 @ 78619 |
+| 1301909840 | NEW | LIMIT buy 0.001 @ 5000 (resting) |
+
+Server cap: max notional **10 USDC** per confirmed order. Risk gate + confirm checkbox remain mandatory. Mainnet is hard-locked out.
+
 ## Judge path (3 clicks)
 
 1. Open **Desk** (`/`) — thesis, FlowRadar, Live/Fallback panels  

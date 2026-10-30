@@ -15,6 +15,7 @@ export async function GET() {
       sosovalue: hasSosoKey(),
       gemini: hasGeminiKey(),
       sodexTrade: hasSodexCredentials(),
+      sodexMasterAddress: Boolean(process.env.SODEX_MASTER_ADDRESS?.trim() || process.env.SODEX_ACCOUNT_ADDRESS?.trim()),
     },
     geminiModel: hasGeminiKey() ? GEMINI_FAST_MODEL : null,
     labels: {

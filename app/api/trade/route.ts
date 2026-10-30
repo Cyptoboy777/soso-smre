@@ -1,5 +1,10 @@
 import { NextResponse } from 'next/server';
-import { placeLimitOrder, querySpotOrder } from '@/lib/sodex';
+import {
+  placeLimitOrder,
+  querySpotOrder,
+  hasSodexCredentials,
+  SODEX_MAX_NOTIONAL_USDC,
+} from '@/lib/sodex';
 import { evaluateRisk } from '@/lib/risk-engine';
 import { logIdea, updateOrderStatus } from '@/lib/track-record';
 import type { NewsPanel, Thesis } from '@/types/flow';
@@ -30,13 +35,24 @@ export async function POST(req: Request) {
   }
 
   const side = body.thesis.side === 'SHORT' ? 'SELL' : 'BUY';
-  const quantity = body.quantity && body.quantity > 0 ? body.quantity : risk.positionSize;
+  let quantity = body.quantity && body.quantity > 0 ? body.quantity : risk.positionSize;
+  const price = body.thesis.entry;
+  let notional = quantity * price;
+
+  // Server-side max notional cap (protect throwaway testnet account)
+  if (price > 0 && notional > SODEX_MAX_NOTIONAL_USDC) {
+    quantity = SODEX_MAX_NOTIONAL_USDC / price;
+    notional = quantity * price;
+  }
+  if (quantity <= 0 || !Number.isFinite(quantity)) {
+    return NextResponse.json({ error: 'Invalid quantity after risk / notional caps' }, { status: 400 });
+  }
 
   const order = await placeLimitOrder({
     thesisId: body.thesis.id,
     symbol: body.thesis.symbol,
     side,
-    price: body.thesis.entry,
+    price,
     quantity,
     confirmed: true,
   });
@@ -50,5 +66,15 @@ export async function POST(req: Request) {
     }
   }
 
-  return NextResponse.json({ order, risk, trackId: row.id, queried, modeLabel: order.mode === 'live' ? 'TESTNET_LIVE' : 'DRY_RUN_SIMULATED' });
+  const live = hasSodexCredentials() && order.mode === 'live';
+  return NextResponse.json({
+    order,
+    risk,
+    trackId: row.id,
+    queried,
+    notionalUsd: Number(notional.toFixed(6)),
+    maxNotionalUsdc: SODEX_MAX_NOTIONAL_USDC,
+    modeLabel: live ? 'TESTNET_LIVE_EIP712' : 'DRY_RUN_SIMULATED',
+    keys: { sodexTrade: hasSodexCredentials() },
+  });
 }
