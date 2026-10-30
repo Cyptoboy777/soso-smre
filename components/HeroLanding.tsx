@@ -21,20 +21,31 @@ const STEPS = [
 export function HeroLanding() {
   const reduce = useReducedMotion();
   const [show3d, setShow3d] = useState(false);
+  const [flowOk, setFlowOk] = useState(false);
 
   useEffect(() => {
-    if (reduce) return;
+    if (typeof window === 'undefined') return;
+    const narrow = window.innerWidth < 800;
+    const lowEnd =
+      (navigator as Navigator & { hardwareConcurrency?: number }).hardwareConcurrency != null &&
+      (navigator.hardwareConcurrency as number) <= 4;
+    const saveData = Boolean((navigator as Navigator & { connection?: { saveData?: boolean } }).connection?.saveData);
+    // Mobile / low-end: keep static poster only — biggest TBT win
+    if (reduce || narrow || lowEnd || saveData) {
+      setFlowOk(false);
+      return;
+    }
+    setFlowOk(true);
     let cancelled = false;
     let idleId: number | undefined;
     let timeoutId: ReturnType<typeof setTimeout> | undefined;
     const go = () => {
       if (!cancelled) setShow3d(true);
     };
-    // Wait for first paint / LCP text before mounting three.js
-    if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
-      idleId = window.requestIdleCallback(go, { timeout: 3200 });
+    if ('requestIdleCallback' in window) {
+      idleId = window.requestIdleCallback(go, { timeout: 5000 });
     } else {
-      timeoutId = setTimeout(go, 2200);
+      timeoutId = setTimeout(go, 3200);
     }
     return () => {
       cancelled = true;
@@ -45,7 +56,7 @@ export function HeroLanding() {
 
   return (
     <section className="hero-landing glass-hero">
-      <FlowField />
+      {flowOk ? <FlowField /> : null}
       <div className="hero-inner">
         <div className="hero-copy">
           <motion.div

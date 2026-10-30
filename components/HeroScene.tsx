@@ -116,7 +116,7 @@ export function HeroScene({ reduceMotion }: { reduceMotion?: boolean }) {
           <ambientLight intensity={0.55} />
           <pointLight position={[3, 2, 4]} intensity={1.6} color="#FF7637" />
           <pointLight position={[-2.5, -1, -2]} intensity={0.7} color="#FF4F20" />
-          <FlowParticles count={mobile ? 280 : 560} />
+          <FlowParticles count={mobile ? 120 : 320} />
           <CoreOrb />
         </Canvas>
       ) : null}

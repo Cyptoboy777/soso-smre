@@ -1,11 +1,11 @@
 import { HeroLanding } from '@/components/HeroLanding';
-import { DeskClient } from '@/components/DeskClient';
+import { DeskBelowFold } from '@/components/DeskBelowFold';
 
 export default function HomePage() {
   return (
     <>
       <HeroLanding />
-      <DeskClient />
+      <DeskBelowFold />
     </>
   );
 }
