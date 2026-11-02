@@ -1,7 +1,7 @@
 # SOSO SMRE ⚡ Wave 3 Submission Deliverables
 🏆 Wave 2 → Wave 3 Final Delivery Superset
 
-**Live Portal URL:** [https://soso-smre.vercel.app](https://soso-smre.vercel.app/login)  
+**Live Portal URL:** [https://flowsentinel-app.vercel.app](https://flowsentinel-app.vercel.app) (Wave 3 preview; production soso-smre.vercel.app untouched)  
 **Code Repository:** [https://github.com/Cyptoboy777/soso-smre](https://github.com/Cyptoboy777/soso-smre)  
 **Release Tag:** [https://github.com/Cyptoboy777/soso-smre/releases/tag/wave-3-final](https://github.com/Cyptoboy777/soso-smre/releases/tag/wave-3-final)  
 
@@ -12,7 +12,7 @@
 Our platform leverages direct mainnet APIs to power live Web3 execution and AI analytics:
 
 ### 🔴 1. SoDEX API Integration (Live Trading Execution)
-* **API Scope:** Uses `SODEX_API_KEY` and `SODEX_API_SECRET`.
+* **API Scope:** Uses `SODEX_ACCOUNT_ID`, `SODEX_API_KEY_NAME`, and `SODEX_API_KEY_PRIVATE_KEY` (EIP-712 testnet; labelled DRY-RUN when absent).
 * **Application:** Authorizes cryptographic trade payloads, queries live orderbook imbalances, tracks real-time market trades, and executes on-chain and off-chain orders through our Next.js relay pipelines.
 * **Why it matters:** Gives traders low-latency access directly to the SoDEX matching engine, ensuring sub-second execution speeds.
 

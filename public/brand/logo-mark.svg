@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" fill="none" role="img" aria-label="FlowSentinel">
+  <path d="M16 64c18-28 40-42 48-42s30 14 48 42c-18 28-40 42-48 42S34 92 16 64Z" stroke="#FF4F20" stroke-width="8" stroke-linejoin="round"/>
+  <circle cx="64" cy="64" r="17" stroke="#FF7637" stroke-width="7"/>
+  <circle cx="64" cy="64" r="6.5" fill="#FF4F20"/>
+  <path d="M30 52c10-6 22-10 34-10" stroke="#FF9A6B" stroke-width="3.5" stroke-linecap="round" opacity="0.85"/>
+</svg>

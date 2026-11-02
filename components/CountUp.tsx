@@ -1,52 +1,61 @@
 'use client';
+
 import { useEffect, useRef, useState } from 'react';
 
-/**
- * useCountUp — animates a number from 0 to `target` on mount
- * @param target  final value
- * @param duration animation ms (default 1400)
- */
-export function useCountUp(target: number, duration = 1400) {
-  const [value, setValue] = useState(0);
-  const raf = useRef<number | null>(null);
-
-  useEffect(() => {
-    if (target === 0) { setValue(0); return; }
-    let start: number | null = null;
-    const step = (ts: number) => {
-      if (!start) start = ts;
-      const progress = Math.min((ts - start) / duration, 1);
-      // Ease-out cubic
-      const eased = 1 - Math.pow(1 - progress, 3);
-      setValue(target * eased);
-      if (progress < 1) raf.current = requestAnimationFrame(step);
-      else setValue(target);
-    };
-    raf.current = requestAnimationFrame(step);
-    return () => { if (raf.current) cancelAnimationFrame(raf.current); };
-  }, [target, duration]);
-
-  return value;
-}
-
-/**
- * CountUp — drop-in span that animates to a number
- */
-interface CountUpProps {
+/** Count/roll a number; jumps instantly under prefers-reduced-motion. */
+export function CountUp({
+  value,
+  duration = 700,
+  decimals = 0,
+  prefix = '',
+  suffix = '',
+  className = '',
+}: {
   value: number;
+  duration?: number;
+  decimals?: number;
   prefix?: string;
   suffix?: string;
-  decimals?: number;
-  duration?: number;
-  style?: React.CSSProperties;
   className?: string;
-}
+}) {
+  const [display, setDisplay] = useState(0);
+  const fromRef = useRef(0);
+  const reduced =
+    typeof window !== 'undefined' &&
+    window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-export function CountUp({ value, prefix = '', suffix = '', decimals = 2, duration = 1400, style, className }: CountUpProps) {
-  const animated = useCountUp(value, duration);
+  useEffect(() => {
+    if (!Number.isFinite(value)) {
+      setDisplay(0);
+      return;
+    }
+    if (reduced) {
+      setDisplay(value);
+      fromRef.current = value;
+      return;
+    }
+    const from = fromRef.current;
+    const start = performance.now();
+    let raf = 0;
+    const tick = (now: number) => {
+      const t = Math.min(1, (now - start) / duration);
+      const eased = 1 - Math.pow(1 - t, 3);
+      setDisplay(from + (value - from) * eased);
+      if (t < 1) raf = requestAnimationFrame(tick);
+      else fromRef.current = value;
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [value, duration, reduced]);
+
+  const text = `${prefix}${display.toLocaleString(undefined, {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+  })}${suffix}`;
+
   return (
-    <span style={style} className={className}>
-      {prefix}{animated.toLocaleString('en-US', { minimumFractionDigits: decimals, maximumFractionDigits: decimals })}{suffix}
+    <span className={`tabular ${className}`} aria-label={text}>
+      {text}
     </span>
   );
 }

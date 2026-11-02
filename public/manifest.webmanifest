@@ -1,0 +1,12 @@
+{
+  "name": "FlowSentinel",
+  "short_name": "FlowSentinel",
+  "description": "SoSoValue flows to SoDEX testnet orders with a risk gate and public track record.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0A0A0A",
+  "theme_color": "#0A0A0A",
+  "icons": [
+    { "src": "/brand/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}
