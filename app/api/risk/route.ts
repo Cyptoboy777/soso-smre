@@ -1,10 +1,15 @@
 import { NextResponse } from 'next/server';
 import { evaluateRisk, DEFAULT_RISK_PARAMS } from '@/lib/risk-engine';
+import { clientIp, rejectIfRateLimited } from '@/lib/request-guard';
 import type { NewsPanel, Thesis } from '@/types/flow';
 
 export const dynamic = 'force-dynamic';
 
 export async function POST(req: Request) {
+  const ip = clientIp(req);
+  const limited = rejectIfRateLimited(`risk:${ip}`, 30, 60_000, 'Rate limit exceeded');
+  if (limited) return limited;
+
   const body = (await req.json()) as {
     thesis: Thesis;
     news: NewsPanel;

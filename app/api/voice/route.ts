@@ -1,17 +1,20 @@
 import { NextResponse } from 'next/server';
-import { rateLimit } from '@/lib/rate-limit';
 import { answerWithOptionalGemini, type VoiceLang } from '@/lib/voice-answer';
+import { clientIp, rejectIfRateLimited } from '@/lib/request-guard';
 import type { DeskSnapshot } from '@/types/flow';
 
 export const dynamic = 'force-dynamic';
 
 export async function POST(req: Request) {
+  const ip = clientIp(req);
+  const limited = rejectIfRateLimited(
+    `voice:${ip}`,
+    20,
+    60_000,
+    'Rate limit: Too many voice requests',
+  );
+  if (limited) return limited;
 
-  const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'anon';
-  const rl = rateLimit(`voice:${ip}`, 20, 60_000);
-  if (!rl.ok) {
-    return NextResponse.json({ error: 'Rate limit: Too many voice requests' }, { status: 429 });
-  }
   const body = (await req.json()) as {
     question?: string;
     lang?: VoiceLang;

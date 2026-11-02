@@ -4,10 +4,20 @@ import { fetchSpotTickers } from '@/lib/sodex';
 import { generateThesis } from '@/lib/thesis';
 import { evaluateRisk } from '@/lib/risk-engine';
 import { logIdea } from '@/lib/track-record';
+import { clientIp, rejectIfRateLimited } from '@/lib/request-guard';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(req: Request) {
+  const ip = clientIp(req);
+  const limited = rejectIfRateLimited(
+    `thesis:${ip}`,
+    12,
+    60_000,
+    'Rate limit: thesis/Gemini proxy budget exceeded',
+  );
+  if (limited) return limited;
+
   const url = new URL(req.url);
   const persist = url.searchParams.get('persist') === '1';
 
@@ -41,7 +51,11 @@ export async function GET(req: Request) {
     keys: {
       sosovalue: Boolean(process.env.SOSOVALUE_API_KEY?.trim()),
       gemini: Boolean(process.env.GEMINI_API_KEY?.trim()),
-      sodex: Boolean(process.env.SODEX_ACCOUNT_ID?.trim() && process.env.SODEX_API_KEY_NAME?.trim() && process.env.SODEX_API_KEY_PRIVATE_KEY?.trim()),
+      sodex: Boolean(
+        process.env.SODEX_ACCOUNT_ID?.trim() &&
+          process.env.SODEX_API_KEY_NAME?.trim() &&
+          process.env.SODEX_API_KEY_PRIVATE_KEY?.trim(),
+      ),
     },
   });
 }

@@ -1,10 +1,20 @@
 import { NextResponse } from 'next/server';
 import { cancelSpotOrder, hasSodexCredentials } from '@/lib/sodex';
+import { clientIp, rejectIfRateLimited } from '@/lib/request-guard';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 export async function POST(req: Request) {
+  const ip = clientIp(req);
+  const limited = rejectIfRateLimited(
+    `sodex-cancel:${ip}`,
+    10,
+    60 * 60_000,
+    'Rate limit: max 10 cancel attempts per hour from this IP',
+  );
+  if (limited) return limited;
+
   if (!hasSodexCredentials()) {
     return NextResponse.json({ error: 'SoDEX credentials missing' }, { status: 503 });
   }

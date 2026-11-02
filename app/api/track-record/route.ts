@@ -1,10 +1,15 @@
 import { NextResponse } from 'next/server';
 import { hitRate, listTrackRecord, resolveOpen } from '@/lib/track-record';
 import { fetchSpotTickers } from '@/lib/sodex';
+import { clientIp, rejectIfRateLimited } from '@/lib/request-guard';
 
 export const dynamic = 'force-dynamic';
 
-export async function GET() {
+export async function GET(req: Request) {
+  const ip = clientIp(req);
+  const limited = rejectIfRateLimited(`track:${ip}`, 30, 60_000, 'Rate limit exceeded');
+  if (limited) return limited;
+
   let marks: Record<string, number> = {};
   let marksSource: unknown = null;
   try {
