@@ -1,4 +1,7 @@
-/** In-memory token bucket per IP/route - soft guard for SoSoValue 20/min. */
+/** In-memory token bucket per IP/route.
+ * Soft per-instance guard (Vercel may have many isolates).
+ * Still useful against casual abuse; pair with notional caps on trade.
+ */
 type Bucket = { tokens: number; updated: number };
 
 const buckets = new Map<string, Bucket>();
