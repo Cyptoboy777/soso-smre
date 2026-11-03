@@ -30,6 +30,11 @@ const BuilderTradePanel = dynamic(() => import('./BuilderTradePanel').then((m) =
   loading: () => <div className="panel" style={{ padding: 24, minHeight: 160 }} aria-busy>Loading builder desk…</div>,
 });
 
+const DayTraderDesk = dynamic(() => import('./DayTraderDesk').then((m) => m.DayTraderDesk), {
+  ssr: false,
+  loading: () => <div className="panel" style={{ padding: 24, minHeight: 160 }} aria-busy>Loading day-trader desk…</div>,
+});
+
 type DeskPayload = DeskSnapshot & {
   keys: { sosovalue: boolean; gemini: boolean; sodex: boolean };
   trackId?: string;
@@ -474,6 +479,29 @@ export function DeskClient() {
           </p>
         </div>
       </motion.section>
+
+      <DayTraderDesk
+        onPrefillTicket={(patch) => {
+          setData({
+            ...data,
+            thesis: {
+              ...data.thesis,
+              side: patch.side ?? data.thesis.side,
+              symbol: patch.symbol ?? data.thesis.symbol,
+              entry: patch.entry ?? data.thesis.entry,
+              stopLoss: patch.stopLoss ?? data.thesis.stopLoss,
+              takeProfit: patch.takeProfit ?? data.thesis.takeProfit,
+              plainEnglish: patch.plainEnglish ?? data.thesis.plainEnglish,
+            },
+            risk: {
+              ...data.risk,
+              positionSize: patch.quantity ?? data.risk.positionSize,
+            },
+          });
+          setConfirming(false);
+          setOrder(null);
+        }}
+      />
 
       <BuilderTradePanel thesis={thesis} quantity={risk.positionSize || 0} />
 

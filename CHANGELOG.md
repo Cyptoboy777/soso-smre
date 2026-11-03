@@ -2,6 +2,7 @@
 
 ## Unreleased — builder-codes
 
+- Day Trader Desk: MIT-adapted skills from day-trader-skill (scanner, SoSoValue news, entry/exit, Time Machine, risk/budget, paper ticket prefill, browser alerts).
 - Non-custodial SoDEX Builder Codes path: wallet connect, ApproveBuilderFee, fee disclosure, confirm, relay.
 - Env gates: `SODEX_BUILDER_ID`, `SODEX_MAINNET_TRADING` kill switch, per-order notional cap.
 - Advisor prefill validation; honest builder race metrics.

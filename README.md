@@ -168,6 +168,21 @@ See `CHANGELOG.md` for Wave 3 detail. License: MIT (`LICENSE`).
 
 ---
 
+
+
+## Day Trader skills (MIT attribution)
+
+FlowSentinel's Day Trader Desk adapts open-source skills from
+[jakeschincariol/day-trader-skill](https://github.com/jakeschincariol/day-trader-skill)
+(MIT License © 2026 Jake Schincariol). Full license text: `third_party/day-trader-skill/LICENSE`.
+
+Ported for **SoDEX crypto** + **SoSoValue news**: Chart Scanner, News Monitor, Entry Timer,
+Exit Planner, Time Machine (10,000-run Monte Carlo simulation — labelled, not a prediction),
+Risk Manager, Budget/position sizer, paper Order ticket prefill into Builder Codes confirm,
+and browser Price Alerts. **Skipped:** Pelosi Tracker and Earnings Analyst (US equities only).
+
+The order step **never submits** without your explicit yes; paper mode is the default.
+
 ## Design credits (inspiration only)
 
 | Resource | License | Inspiration |
