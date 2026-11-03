@@ -1,6 +1,6 @@
 /**
  * SoDEX testnet client - EIP-712 signed spot orders.
- * Hard-locked to testnet (chainId 138565). No mainnet path.
+ * Default hard-locked to testnet (chainId 138565). Mainnet only via non-custodial /api/builder with SODEX_BUILDER_ID + SODEX_MAINNET_TRADING=1.
  *
  * Auth (official docs):
  * - X-API-Key = registered key *name* (not address / not private key)
@@ -22,6 +22,12 @@ import type {
   OrderResult,
   SourceMeta,
 } from "@/types/flow";
+import {
+  builderParamsFromConfig,
+  getBuilderConfig,
+  withBatchBuilder,
+} from "@/lib/sodex-builder";
+import { recordDryRun } from "@/lib/builder-metrics";
 
 /** Hard-locked testnet only. */
 export const SODEX_TESTNET = {
@@ -284,6 +290,8 @@ function buildSpotNewOrderParams(input: {
   type: OrderType;
   quantity: string;
   price?: string;
+  /** When set, appended last per SoDEX Builder Codes docs. */
+  attachBuilder?: boolean;
 }): Record<string, unknown> {
   const sideNum = input.side === "buy" ? 1 : 2;
   const typeNum = input.type === "limit" ? 1 : 2;
@@ -305,10 +313,14 @@ function buildSpotNewOrderParams(input: {
   } else {
     order.quantity = String(input.quantity);
   }
-  return {
+  const base: Record<string, unknown> = {
     accountID: input.accountId,
     orders: [order],
   };
+  // Server-key path: tag with Builder ID when configured (still testnet-locked below).
+  const builder =
+    input.attachBuilder !== false ? builderParamsFromConfig(getBuilderConfig()) : null;
+  return withBatchBuilder(base, builder);
 }
 
 
@@ -365,6 +377,11 @@ export async function placeOrder(
     `fs-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 
   if (!creds) {
+    try {
+      recordDryRun();
+    } catch {
+      /* ignore */
+    }
     return {
       ok: true,
       dryRun: true,
@@ -372,7 +389,7 @@ export async function placeOrder(
       clientOrderId,
       status: "dry-run",
       note:
-        "DRY-RUN (no live order). Set SODEX_ACCOUNT_ID + SODEX_API_KEY_NAME + SODEX_API_KEY_PRIVATE_KEY for SoDEX testnet EIP-712 signing. No mainnet path; never share fund keys.",
+        "DRY-RUN (no live order). Set SODEX_ACCOUNT_ID + SODEX_API_KEY_NAME + SODEX_API_KEY_PRIVATE_KEY for SoDEX testnet EIP-712 signing. Prefer non-custodial /api/builder/* with the user's wallet. No mainnet path unless SODEX_BUILDER_ID + SODEX_MAINNET_TRADING=1.",
       env,
     };
   }

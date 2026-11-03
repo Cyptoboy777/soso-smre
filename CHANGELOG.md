@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased — builder-codes
+
+- Non-custodial SoDEX Builder Codes path: wallet connect, ApproveBuilderFee, fee disclosure, confirm, relay.
+- Env gates: `SODEX_BUILDER_ID`, `SODEX_MAINNET_TRADING` kill switch, per-order notional cap.
+- Advisor prefill validation; honest builder race metrics.
+- Server spot batches attach `builder` when Builder ID is set (still testnet-locked for shared-key path).
+
+# Changelog
+
 ## 2026-10-30 (honesty fix)
 
 - Track record: never resolve unfilled SoDEX orders (`NEW`/`RESTING`) against the mark (fixes false +1471% on limit @ 5000 vs ~78k).
