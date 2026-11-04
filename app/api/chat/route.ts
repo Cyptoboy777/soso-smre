@@ -1,3 +1,4 @@
+import { formatPair, formatSideLabel } from '@/lib/display';
 import { NextResponse } from "next/server";
 import { clientIp, rejectIfRateLimited } from "@/lib/request-guard";
 import { geminiGenerate, hasGeminiKey } from "@/lib/gemini";
@@ -77,9 +78,10 @@ export async function POST(req: Request) {
   }
   if (ctx.ideaSide || ctx.ideaSummary) {
     const side =
-      ctx.ideaSide === "LONG" ? "Bullish" : ctx.ideaSide === "SHORT" ? "Bearish" : ctx.ideaSide === "FLAT" ? "Neutral" : String(ctx.ideaSide ?? "n/a");
+      formatSideLabel(ctx.ideaSide ?? "FLAT");
+    const sym = ctx.ideaSymbol ? formatPair(String(ctx.ideaSymbol)) : "";
     ctxLines.push(
-      `Today's idea: ${side} ${ctx.ideaSymbol ?? ""} - ${String(ctx.ideaSummary ?? "").slice(0, 180)}`,
+      `Today's idea: ${side}${sym ? ` on ${sym}` : ""} - ${sanitizeAssistantReply(String(ctx.ideaSummary ?? "")).slice(0, 180)}`,
     );
   }
   const deskBlock = ctxLines.length ? `Desk context (live from app):\n${ctxLines.join("\n")}\n\n` : "";

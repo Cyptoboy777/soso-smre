@@ -1,6 +1,7 @@
 /**
  * Normalize assistant model output into plain chat text.
  */
+import { sanitizePublicText } from '@/lib/display';
 
 export function extractAssistantText(raw: unknown): string {
   if (raw == null) return '';
@@ -51,7 +52,7 @@ export function extractAssistantText(raw: unknown): string {
 }
 
 export function sanitizeAssistantReply(raw: string): string {
-  let text = extractAssistantText(raw);
+  let text = sanitizePublicText(extractAssistantText(raw));
   // No em dashes in UI copy
   text = text.replace(/\u2014/g, ',').replace(/\u2013/g, '-');
   // Drop repeated disclaimer lines (panel footer covers this once)

@@ -11,6 +11,12 @@ import type {
 } from '@/types/flow';
 import { pickPrice } from '@/lib/sodex';
 import {
+  formatPair,
+  formatSideLabel,
+  sanitizePublicText,
+  stripNewsTokens,
+} from '@/lib/display';
+import {
   extractJsonArray,
   geminiGenerate,
   geminiGroundedBrief,
@@ -69,7 +75,7 @@ function ruleIdeas(desk: DeskSnapshot): JarvisIdea[] {
       rank: 1,
       side,
       symbol,
-      title: side === 'FLAT' ? 'Stand aside: conviction gate closed' : `${side} ${symbol.replace('v', '').replace('_', '/')}`,
+      title: side === 'FLAT' ? 'Stand aside: conviction gate closed' : `${formatSideLabel(side)} ${formatPair(symbol)}`,
       reasoning: thesis.plainEnglish,
       citations: [
         { kind: 'etf', label: 'BTC US ETF net', detail: money(btc) },
@@ -194,7 +200,7 @@ News catalog (cite by id): ${JSON.stringify(newsCatalog)}
 SoDEX: ${desk.market.tickers.map((t) => `${t.symbol}=${t.lastPrice}`).join(', ')}
 
 Each idea object MUST include citedNewsIds (array of news catalog ids you used):
-{"rank":1,"side":"LONG"|"SHORT"|"FLAT","symbol":"vBTC_vUSDC"|"vETH_vUSDC","title":"...","reasoning":"2-3 sentences; mention [news:ID]","citedNewsIds":["id1"],"citations":[{"kind":"news|etf|ssi|market","label":"...","detail":"..."}],"confidence":0-100,"riskNote":"...","invalidation":"...","entry":number,"stopLoss":number,"takeProfit":number,"horizonHours":number}
+{"rank":1,"side":"LONG"|"SHORT"|"FLAT","symbol":"vBTC_vUSDC"|"vETH_vUSDC","title":"...","reasoning":"2 short sentences in plain words. Do NOT paste [news:ID] tokens. Put news ids only in citedNewsIds.","citedNewsIds":["id1"],"citations":[{"kind":"news|etf|ssi|market","label":"source name","detail":"one-line summary","url":"optional"}],"confidence":0-100,"riskNote":"...","invalidation":"...","entry":number,"stopLoss":number,"takeProfit":number,"horizonHours":number}
 
 Prefer FLAT when shock or weak conviction. Use SoDEX last prices for entry/stop/target.`;
 
@@ -234,16 +240,21 @@ Prefer FLAT when shock or weak conviction. Use SoDEX last prices for entry/stop/
         ...newsCites,
         ...(Array.isArray(r.citations) ? (r.citations as JarvisCitation[]) : []),
       ].slice(0, 6);
+      const cleanCites = (citations.length ? citations : fb.citations).map((c) => ({
+        ...c,
+        label: stripNewsTokens(String(c.label ?? '')),
+        detail: stripNewsTokens(String(c.detail ?? '')).slice(0, 160),
+      }));
       return {
         rank: i + 1,
         side,
         symbol,
-        title: String(r.title ?? fb.title),
-        reasoning: String(r.reasoning ?? fb.reasoning),
-        citations: citations.length ? citations : fb.citations,
+        title: sanitizePublicText(String(r.title ?? fb.title)),
+        reasoning: sanitizePublicText(String(r.reasoning ?? fb.reasoning)),
+        citations: cleanCites,
         confidence: Math.round(Math.max(0, Math.min(100, Number(r.confidence ?? fb.confidence)))),
-        riskNote: String(r.riskNote ?? fb.riskNote),
-        invalidation: String(r.invalidation ?? fb.invalidation),
+        riskNote: sanitizePublicText(String(r.riskNote ?? fb.riskNote)),
+        invalidation: sanitizePublicText(String(r.invalidation ?? fb.invalidation)),
         entry: Number(r.entry ?? fb.entry) || fb.entry,
         stopLoss: Number(r.stopLoss ?? fb.stopLoss) || fb.stopLoss,
         takeProfit: Number(r.takeProfit ?? fb.takeProfit) || fb.takeProfit,
@@ -285,7 +296,7 @@ export async function buildJarvisBriefing(desk: DeskSnapshot): Promise<JarvisBri
         if (g.text && ideas[0]) {
           ideas[0] = {
             ...ideas[0],
-            reasoning: `${ideas[0].reasoning} Context: ${g.text.slice(0, 280)}`,
+            reasoning: sanitizePublicText(`${ideas[0].reasoning} Context: ${g.text.slice(0, 280)}`),
             citations: [
               ...ideas[0].citations,
               ...groundedSources.slice(0, 3).map((s) => ({
@@ -306,13 +317,26 @@ export async function buildJarvisBriefing(desk: DeskSnapshot): Promise<JarvisBri
     }
   }
 
+  ideas = ideas.map((idea) => ({
+    ...idea,
+    title: sanitizePublicText(idea.title),
+    reasoning: sanitizePublicText(idea.reasoning),
+    riskNote: sanitizePublicText(idea.riskNote),
+    invalidation: sanitizePublicText(idea.invalidation),
+    citations: idea.citations.map((c) => ({
+      ...c,
+      label: stripNewsTokens(c.label).replace(/^\[|\]$/g, '').trim(),
+      detail: stripNewsTokens(c.detail).slice(0, 160),
+    })),
+  }));
+
   const top = ideas[0];
   const greeting = hourGreeting();
-  const spokenSummary = `${greeting}. Here's what moved. ${
+  const spokenSummary = sanitizePublicText(
     top
-      ? `Top idea: ${top.title}. ${top.side} on ${top.symbol.replace(/v/g, '').replace('_', ' ')} with confidence ${top.confidence}. ${top.reasoning} Ticket would be entry ${top.entry}, stop ${top.stopLoss}, target ${top.takeProfit}.`
-      : 'No high-conviction setup. Standing aside.'
-  } The assistant never places orders.`;
+      ? `Top idea: ${top.title}. ${formatSideLabel(top.side)} on ${formatPair(top.symbol)} with confidence ${top.confidence}. ${top.reasoning}`
+      : 'No high-conviction setup. Standing aside.',
+  );
 
   return {
     greeting,

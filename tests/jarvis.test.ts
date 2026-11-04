@@ -84,6 +84,8 @@ describe('jarvis briefing', () => {
     expect(b.ideas[0].rank).toBe(1);
     expect(b.ideas[0].citations.length).toBeGreaterThan(0);
     expect(b.engine).toBe('rules');
-    expect(b.spokenSummary.toLowerCase()).toContain('assistant never places orders');
+    expect(b.spokenSummary.toLowerCase()).toMatch(/neutral|bullish|bearish/);
+    expect(b.spokenSummary).not.toMatch(/\[news:/);
+    expect(b.spokenSummary).not.toMatch(/vBTC_vUSDC/);
   });
 });

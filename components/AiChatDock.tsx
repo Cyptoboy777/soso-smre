@@ -5,6 +5,7 @@ import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import dynamic from 'next/dynamic';
 import ReactMarkdown from 'react-markdown';
 import { sanitizeAssistantReply } from '@/lib/chat-reply';
+import { formatPair, formatSideLabel, sanitizePublicText } from '@/lib/display';
 
 const AiOrb = dynamic(() => import('./AiOrb').then((m) => m.AiOrb), { ssr: false });
 
@@ -45,9 +46,9 @@ async function readDeskContext(): Promise<DeskContext> {
       solPrice: find(/SOL/i),
       btcEtfFlow: desk?.etfBtc?.latest?.totalNetInflow ?? null,
       ethEtfFlow: desk?.etfEth?.latest?.totalNetInflow ?? null,
-      ideaSide: thesis?.side ?? null,
-      ideaSymbol: thesis?.symbol ?? null,
-      ideaSummary: thesis?.plainEnglish ?? null,
+      ideaSide: thesis?.side ? formatSideLabel(thesis.side) : null,
+      ideaSymbol: thesis?.symbol ? formatPair(thesis.symbol) : null,
+      ideaSummary: thesis?.plainEnglish ? sanitizePublicText(thesis.plainEnglish) : null,
     };
   } catch {
     return {};

@@ -3,25 +3,19 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
 import dynamic from 'next/dynamic';
-import type { JarvisBriefing, JarvisIdea, SodexMarketBundle } from '@/types/flow';
+import type { JarvisBriefing, JarvisCitation, JarvisIdea, SodexMarketBundle } from '@/types/flow';
 import { validateAdvisorSuggestion } from '@/lib/advisor-suggestions';
+import {
+  formatPair,
+  formatPrice,
+  formatSideLabel,
+  riskReward,
+  sanitizePublicText,
+  stripNewsTokens,
+  timeAgo,
+} from '@/lib/display';
 import { PairSelector } from './PairSelector';
 import { LivePrice } from './LivePrice';
-
-function directionLabel(side: string) {
-  if (side === 'LONG') return 'Bullish';
-  if (side === 'SHORT') return 'Bearish';
-  return 'Neutral';
-}
-
-function stripNewsIds(s: string) {
-  return String(s ?? '')
-    .replace(/\[news:?\s*\d+\]/gi, '')
-    .replace(/\[\d{6,}\]/g, '')
-    .replace(/\s{2,}/g, ' ')
-    .trim();
-}
-
 
 const SodexPriceChart = dynamic(() => import('./SodexPriceChart').then((m) => m.SodexPriceChart), {
   ssr: false,
@@ -32,7 +26,7 @@ const SodexDepth = dynamic(() => import('./SodexDepth').then((m) => m.SodexDepth
   loading: () => <div className="skeleton" style={{ height: 180 }} />,
 });
 
-function useTypewriter(text: string, active: boolean, cps = 42) {
+function useTypewriter(text: string, active: boolean, cps = 48) {
   const [out, setOut] = useState('');
   useEffect(() => {
     if (!active) {
@@ -45,17 +39,131 @@ function useTypewriter(text: string, active: boolean, cps = 42) {
       i += 1;
       setOut(text.slice(0, i));
       if (i >= text.length) window.clearInterval(id);
-    }, Math.max(12, 1000 / cps));
+    }, Math.max(10, 1000 / cps));
     return () => window.clearInterval(id);
   }, [text, active, cps]);
   return out;
 }
 
-export function JarvisPanel({
-  onPrefill,
+function sourceIcon(kind: JarvisCitation['kind']) {
+  if (kind === 'etf') return '◈';
+  if (kind === 'ssi') return '◉';
+  if (kind === 'market') return '◎';
+  return '✦';
+}
+
+function sourceKindLabel(kind: JarvisCitation['kind']) {
+  if (kind === 'etf') return 'ETF flow';
+  if (kind === 'ssi') return 'SSI';
+  if (kind === 'market') return 'Market';
+  return 'News';
+}
+
+function cleanLabel(label: string) {
+  return stripNewsTokens(label)
+    .replace(/^\[([^\]]+)\]\s*/g, '$1 · ')
+    .replace(/^news\s*[:·-]\s*/i, '')
+    .trim();
+}
+
+function BriefingBody({ text }: { text: string }) {
+  const [expanded, setExpanded] = useState(false);
+  const limit = 220;
+  const needs = text.length > limit;
+  const shown = !needs || expanded ? text : `${text.slice(0, text.lastIndexOf(' ', limit) > 80 ? text.lastIndexOf(' ', limit) : limit).trimEnd()}…`;
+  return (
+    <div className="jarvis-briefing-body">
+      <p className="jarvis-type" aria-live="polite">
+        {shown}
+      </p>
+      {needs ? (
+        <button type="button" className="linkish" onClick={() => setExpanded((v) => !v)}>
+          {expanded ? 'Show less' : 'Read more'}
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
+function TradePlanCard({
+  idea,
+  mid,
 }: {
-  onPrefill?: (idea: JarvisIdea) => void;
+  idea: JarvisIdea;
+  mid: number | null;
 }) {
+  const rr = riskReward(idea.entry, idea.stopLoss, idea.takeProfit, idea.side);
+  const side = idea.side;
+  return (
+    <div className="trade-plan" aria-label="Trade plan">
+      <div className="trade-plan-head">
+        <h3>Trade plan</h3>
+        {rr ? <span className="trade-plan-rr">Risk : reward {rr}</span> : null}
+      </div>
+      <div className="trade-plan-grid">
+        <div className="trade-plan-cell is-entry">
+          <span className="tp-label">Entry</span>
+          <strong className="tabular">{formatPrice(idea.entry)}</strong>
+        </div>
+        <div className={`trade-plan-cell is-stop ${side === 'LONG' ? 'loss' : 'gain'}`}>
+          <span className="tp-label">Stop</span>
+          <strong className="tabular">{formatPrice(idea.stopLoss)}</strong>
+        </div>
+        <div className={`trade-plan-cell is-target ${side === 'LONG' ? 'gain' : 'loss'}`}>
+          <span className="tp-label">Target</span>
+          <strong className="tabular">{formatPrice(idea.takeProfit)}</strong>
+        </div>
+        <div className="trade-plan-cell is-mid">
+          <span className="tp-label">Mid price</span>
+          <strong className="tabular">{mid != null ? formatPrice(mid) : '—'}</strong>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SourcesList({ citations, asOf }: { citations: JarvisCitation[]; asOf?: string }) {
+  if (!citations.length) return <p className="muted">No sources for this idea yet.</p>;
+  return (
+    <ul className="source-list">
+      {citations.map((c, idx) => {
+        const title = cleanLabel(c.label) || sourceKindLabel(c.kind);
+        const detail = sanitizePublicText(c.detail).slice(0, 140);
+        const ago = timeAgo(asOf);
+        const inner = (
+          <>
+            <span className="source-icon" aria-hidden>
+              {sourceIcon(c.kind)}
+            </span>
+            <span className="source-body">
+              <span className="source-top">
+                <strong>{title}</strong>
+                <span className="source-meta">
+                  {sourceKindLabel(c.kind)}
+                  {ago ? ` · ${ago}` : ''}
+                </span>
+              </span>
+              {detail ? <span className="source-detail">{detail}</span> : null}
+            </span>
+          </>
+        );
+        return (
+          <li key={`${c.kind}-${idx}`} className="source-card">
+            {c.url ? (
+              <a href={c.url} target="_blank" rel="noreferrer noopener" className="source-link">
+                {inner}
+              </a>
+            ) : (
+              <div className="source-link">{inner}</div>
+            )}
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+export function JarvisPanel({ onPrefill }: { onPrefill?: (idea: JarvisIdea) => void }) {
   const reduce = useReducedMotion();
   const [briefing, setBriefing] = useState<JarvisBriefing | null>(null);
   const [bundle, setBundle] = useState<SodexMarketBundle | null>(null);
@@ -75,6 +183,7 @@ export function JarvisPanel({
       setBriefing(json.briefing);
       setSelected(0);
       const sym = json.briefing.ideas[0]?.symbol || 'vBTC_vUSDC';
+      setSymbol(sym);
       const m = await fetch(`/api/sodex/market?symbol=${encodeURIComponent(sym)}`, { cache: 'no-store' });
       if (m.ok) setBundle((await m.json()) as SodexMarketBundle);
     } catch (e) {
@@ -89,7 +198,8 @@ export function JarvisPanel({
   }, [load]);
 
   const idea = briefing?.ideas[selected] ?? null;
-  const typed = useTypewriter(stripNewsIds(briefing?.spokenSummary ?? ''), Boolean(briefing) && !reduce);
+  const summary = sanitizePublicText(briefing?.spokenSummary ?? '');
+  const typed = useTypewriter(summary, Boolean(briefing) && !reduce && summary.length < 280);
 
   useEffect(() => {
     if (idea?.symbol && idea.symbol !== symbol) setSymbol(idea.symbol);
@@ -118,15 +228,26 @@ export function JarvisPanel({
   }, [symbol, interval]);
 
   const mid = useMemo(() => {
-    if (!bundle?.orderbook) return null;
+    if (!bundle?.orderbook) return bundle?.ticker?.lastPrice ?? null;
     const bid = bundle.orderbook.bids[0]?.price;
     const ask = bundle.orderbook.asks[0]?.price;
     if (bid && ask) return (bid + ask) / 2;
     return bundle.ticker?.lastPrice ?? null;
   }, [bundle]);
 
+  const newsChips = useMemo(() => {
+    if (!idea) return [];
+    return idea.citations
+      .filter((c) => c.kind === 'news' && (c.url || c.label))
+      .slice(0, 3)
+      .map((c) => ({
+        label: cleanLabel(c.label).slice(0, 64),
+        url: c.url,
+      }));
+  }, [idea]);
+
   return (
-    <section className="jarvis-panel glass-card" aria-label="JARVIS briefing">
+    <section className="jarvis-panel glass-card" aria-label="Desk briefing">
       <header className="jarvis-head">
         <div>
           <p className="hero-kicker" style={{ margin: 0 }}>
@@ -143,9 +264,12 @@ export function JarvisPanel({
           </h2>
         </div>
         <div className="jarvis-badges">
-          <span className="pill">Live prices</span>
-          <span className="pill">Practice mode</span>
-          {briefing?.newsShock ? <span className="pill pill-warn">News alert</span> : null}
+          <span className="status-pill is-live">
+            <span className="live-dot" aria-hidden />
+            Live prices
+          </span>
+          <span className="status-pill">Practice mode</span>
+          {briefing?.newsShock ? <span className="status-pill is-warn">News alert</span> : null}
         </div>
       </header>
 
@@ -155,14 +279,16 @@ export function JarvisPanel({
           <span className="skel-line" />
           <span className="skel-line skel-line-short" />
         </div>
-      ) : (
-        <p className="jarvis-type" aria-live="polite">
-          {typed}
-          {!reduce && typed && typed.length < (briefing?.spokenSummary.length ?? 0) ? (
-            <span className="jarvis-caret">▋</span>
-          ) : null}
-        </p>
-      )}
+      ) : briefing ? (
+        reduce || summary.length >= 280 ? (
+          <BriefingBody text={summary} />
+        ) : (
+          <p className="jarvis-type" aria-live="polite">
+            {typed}
+            {typed.length < summary.length ? <span className="jarvis-caret">▋</span> : null}
+          </p>
+        )
+      ) : null}
 
       {error ? <p className="error">{error}</p> : null}
 
@@ -182,11 +308,26 @@ export function JarvisPanel({
               <>
                 <div className="jarvis-idea-top">
                   <span className="step-n">0{it.rank}</span>
-                  <span className={`side-tag side-${it.side.toLowerCase()}`}>{directionLabel(it.side)}</span>
+                  <span className={`side-tag side-${it.side.toLowerCase()}`}>{formatSideLabel(it.side)}</span>
                   <span className="conf">{it.confidence}%</span>
                 </div>
-                <strong>{it.title}</strong>
-                <p>{stripNewsIds(it.reasoning)}</p>
+                <strong>{sanitizePublicText(it.title)}</strong>
+                <p>{sanitizePublicText(it.reasoning)}</p>
+                {selected === i && newsChips.length ? (
+                  <div className="news-chip-row" onClick={(e) => e.stopPropagation()}>
+                    {newsChips.map((chip, idx) =>
+                      chip.url ? (
+                        <a key={idx} className="news-chip" href={chip.url} target="_blank" rel="noreferrer noopener">
+                          {chip.label}
+                        </a>
+                      ) : (
+                        <span key={idx} className="news-chip">
+                          {chip.label}
+                        </span>
+                      ),
+                    )}
+                  </div>
+                ) : null}
               </>
             ) : (
               <div className="skeleton" style={{ height: 88 }} />
@@ -204,27 +345,20 @@ export function JarvisPanel({
           transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
         >
           <div className="jarvis-detail-grid">
-            <div>
-              <h3 style={{ marginTop: 0 }}>Citations</h3>
-              <ul className="jarvis-cites">
-                {idea.citations.map((c, idx) => (
-                  <li key={`${c.kind}-${idx}`}>
-                    <span className="pill">{c.kind}</span> <strong>{c.label}</strong>: {stripNewsIds(c.detail)}
-                  </li>
-                ))}
-              </ul>
-              <p>
-                <strong>Risk:</strong> {stripNewsIds(idea.riskNote)}
-              </p>
-              <p>
-                <strong>Invalidation:</strong> {stripNewsIds(idea.invalidation)}
-              </p>
-              <div className="jarvis-levels">
-                <span>Entry {idea.entry.toLocaleString()}</span>
-                <span>Stop {idea.stopLoss.toLocaleString()}</span>
-                <span>Target {idea.takeProfit.toLocaleString()}</span>
-                {mid != null ? <span>Book mid {mid.toLocaleString()}</span> : null}
+            <div className="jarvis-detail-main">
+              <h3 style={{ marginTop: 0 }}>Sources</h3>
+              <SourcesList citations={idea.citations} asOf={briefing?.asOf} />
+              <div className="risk-block">
+                <p>
+                  <strong>Risk</strong>
+                  <span>{sanitizePublicText(idea.riskNote)}</span>
+                </p>
+                <p>
+                  <strong>Invalidation</strong>
+                  <span>{sanitizePublicText(idea.invalidation)}</span>
+                </p>
               </div>
+              <TradePlanCard idea={idea} mid={mid} />
               <button
                 type="button"
                 className="btn btn-accent"
@@ -235,7 +369,6 @@ export function JarvisPanel({
                     setError(`Prefill blocked: ${v.error}`);
                     return;
                   }
-                  // Advisor may only prefill - never submit an order.
                   onPrefill({
                     ...idea,
                     side: v.suggestion.side,
@@ -248,19 +381,23 @@ export function JarvisPanel({
                   });
                 }}
               >
-                Prefill SoDEX ticket
+                Prefill practice ticket
               </button>
             </div>
             <div className="jarvis-market">
               <div className="jarvis-market-head">
                 <PairSelector value={symbol} onChange={setSymbol} />
                 <div className="jarvis-market-pills">
-                  <span className="pill">Live prices</span>
-                  <span className="pill">Practice mode</span>
+                  <span className="status-pill is-live">
+                    <span className="live-dot" aria-hidden />
+                    Live prices
+                  </span>
+                  <span className="status-pill">Practice mode</span>
                 </div>
               </div>
               <div className="jarvis-last">
-                Last <LivePrice value={bundle?.ticker?.lastPrice ?? mid} />
+                <span className="muted">{formatPair(symbol)}</span>
+                <LivePrice value={bundle?.ticker?.lastPrice ?? mid} />
                 {bundle?.ticker ? (
                   <span className={bundle.ticker.changePct24h >= 0 ? 'up' : 'down'}>
                     {bundle.ticker.changePct24h >= 0 ? '+' : ''}
@@ -274,7 +411,7 @@ export function JarvisPanel({
                 interval={interval}
                 onInterval={setIntervalTf}
               />
-              <SodexDepth book={bundle?.orderbook ?? null} height={280} />
+              <SodexDepth book={bundle?.orderbook ?? null} height={260} />
             </div>
           </div>
         </motion.div>
