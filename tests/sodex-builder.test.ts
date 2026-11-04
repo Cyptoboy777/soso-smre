@@ -81,7 +81,9 @@ describe('sodex-builder config gates', () => {
   });
 
   it('formats fee units', () => {
-    expect(formatTenthsOfBp(10)).toContain('1 bp');
+    expect(formatTenthsOfBp(10)).toBe('1 bp (0.01%)');
+    expect(formatTenthsOfBp(200)).toBe('20 bp (0.20%)');
+    expect(formatTenthsOfBp(2000)).toBe('200 bp (2.00%)');
     expect(BUILDER_FEE_CAPS.spot).toBe(2000);
     expect(BUILDER_FEE_CAPS.perps).toBe(200);
   });

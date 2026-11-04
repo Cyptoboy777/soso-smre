@@ -79,8 +79,8 @@ function envFlagOn(name: string): boolean {
 /** Format tenths-of-bp as human percent / bp. */
 export function formatTenthsOfBp(tenths: number): string {
   const bp = tenths / 10;
-  const pct = tenths / 10000;
-  return `${bp} bp (${(pct * 100).toFixed(4)}%)`;
+  const pct = tenths / 1000; // 10 tenths = 1 bp = 0.01%
+  return `${bp} bp (${pct.toFixed(pct < 0.01 ? 3 : 2)}%)`;
 }
 
 /**
