@@ -60,7 +60,7 @@ function ruleIdeas(desk: DeskSnapshot): JarvisIdea[] {
   const citeNews = (i: number): JarvisCitation[] => {
     const n = topNews[i];
     if (!n) return [];
-    return [{ kind: 'news', label: n.title.slice(0, 72), detail: n.summary.slice(0, 140), url: n.url }];
+    return [{ kind: 'news', label: n.title.slice(0, 72), detail: n.summary.slice(0, 140), url: n.url, publishedAt: n.publishedAt }];
   };
 
   const ideas: JarvisIdea[] = [];
@@ -235,6 +235,7 @@ Prefer FLAT when shock or weak conviction. Use SoDEX last prices for entry/stop/
           label: n!.title.slice(0, 72),
           detail: n!.summary.slice(0, 140),
           url: n!.url,
+          publishedAt: n!.publishedAt,
         }));
       const citations = [
         ...newsCites,
@@ -327,6 +328,7 @@ export async function buildJarvisBriefing(desk: DeskSnapshot): Promise<JarvisBri
       ...c,
       label: stripNewsTokens(c.label).replace(/^\[|\]$/g, '').trim(),
       detail: stripNewsTokens(c.detail).slice(0, 160),
+      publishedAt: c.publishedAt,
     })),
   }));
 

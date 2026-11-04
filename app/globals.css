@@ -42,7 +42,7 @@
   --orb-b: #ff7637;
   --orb-glow: rgba(255, 79, 32, 0.42);
   --panel-glass: rgba(22, 20, 18, 0.86);
-  --header-bg: rgba(11, 10, 9, 0.82);
+  --header-bg: rgba(11, 10, 9, 0.94);
 
   --radius-sm: 8px;
   --radius-md: 12px;
@@ -86,7 +86,7 @@ html.light {
   --orb-b: #fd7537;
   --orb-glow: rgba(192, 55, 16, 0.28);
   --panel-glass: rgba(255, 255, 255, 0.92);
-  --header-bg: rgba(255, 248, 245, 0.88);
+  --header-bg: rgba(255, 248, 245, 0.96);
   --shadow-panel: 0 1px 0 rgba(255,255,255,0.9) inset, 0 18px 40px -22px rgba(127, 39, 17, 0.16);
 }
 
@@ -1039,11 +1039,16 @@ body::before {
 .shell-header {
   position: sticky;
   top: 0;
-  z-index: 40;
-  backdrop-filter: blur(16px) saturate(1.2);
+  z-index: 50;
+  backdrop-filter: blur(18px) saturate(1.25);
+  -webkit-backdrop-filter: blur(18px) saturate(1.25);
   background: var(--header-bg);
   border-bottom: 1px solid var(--line);
+  box-shadow: 0 8px 24px color-mix(in oklab, #000 18%, transparent);
   transition: var(--transition-theme);
+}
+html.light .shell-header {
+  box-shadow: 0 8px 20px color-mix(in oklab, #7f2711 10%, transparent);
 }
 .shell-header-inner {
   max-width: 1160px;
@@ -1817,7 +1822,7 @@ a.news-chip:hover {
   .jarvis-detail-main, .jarvis-market { grid-column: span 12; }
 }
 
-.jarvis-briefing-body { display: grid; gap: 6px; }
+.jarvis-briefing-body { display: grid; gap: 10px; margin-bottom: 6px; }
 .linkish {
   appearance: none;
   border: 0;
@@ -1827,7 +1832,9 @@ a.news-chip:hover {
   font-weight: 600;
   cursor: pointer;
   width: fit-content;
-  padding: 0;
+  padding: 2px 0 8px;
+  margin-top: 2px;
+  line-height: 1.3;
 }
 .linkish:hover { text-decoration: underline; }
 
@@ -1841,16 +1848,17 @@ a.news-chip:hover {
 .source-card {
   border: 1px solid var(--line);
   border-radius: 12px;
-  background: color-mix(in oklab, var(--panel) 92%, transparent);
+  background: var(--bg-elev);
   overflow: hidden;
 }
 .source-link {
   display: grid;
-  grid-template-columns: 28px 1fr;
+  grid-template-columns: 28px minmax(0, 1fr);
   gap: 10px;
-  padding: 10px 12px;
+  padding: 12px;
   text-decoration: none;
   color: inherit;
+  min-width: 0;
 }
 .source-link:hover { background: color-mix(in oklab, var(--accent) 8%, transparent); }
 .source-icon {
@@ -1859,25 +1867,30 @@ a.news-chip:hover {
   border-radius: 8px;
   display: grid;
   place-items: center;
-  background: color-mix(in oklab, var(--accent) 14%, var(--panel));
+  background: color-mix(in oklab, var(--accent) 14%, var(--bg-elev));
   color: var(--accent-soft);
   font-size: 13px;
+  flex-shrink: 0;
 }
-.source-body { display: grid; gap: 4px; min-width: 0; }
-.source-top {
-  display: flex;
-  justify-content: space-between;
-  gap: 8px;
-  align-items: baseline;
-}
-.source-top strong {
+.source-body { display: grid; gap: 4px; min-width: 0; overflow: hidden; }
+.source-title {
   font-size: 13px;
   letter-spacing: -0.01em;
+  line-height: 1.35;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  word-break: break-word;
+}
+.source-meta {
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.3;
+  white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
 }
-.source-meta { color: var(--text-muted); font-size: 11px; white-space: nowrap; }
 .source-detail {
   color: var(--text-muted);
   font-size: 12.5px;
@@ -1894,7 +1907,7 @@ a.news-chip:hover {
   padding: 12px;
   border-radius: 12px;
   border: 1px solid var(--line);
-  background: color-mix(in oklab, var(--panel) 90%, transparent);
+  background: var(--bg-elev);
 }
 .risk-block p {
   margin: 0;
@@ -1910,21 +1923,49 @@ a.news-chip:hover {
   border: 1px solid var(--line);
   border-radius: 14px;
   padding: 12px;
-  background: color-mix(in oklab, var(--panel) 94%, transparent);
+  background: var(--bg-elev);
   display: grid;
   gap: 10px;
 }
+.trade-plan.is-expired { opacity: 0.78; border-style: dashed; }
 .trade-plan-head {
   display: flex;
   justify-content: space-between;
   gap: 8px;
   align-items: center;
+  flex-wrap: wrap;
 }
 .trade-plan-head h3 { margin: 0; font-size: 14px; }
+.trade-plan-head-meta { display: inline-flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .trade-plan-rr {
   font-size: 12px;
   color: var(--text-muted);
   font-variant-numeric: tabular-nums;
+}
+.trade-plan-badge {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+}
+.trade-plan-badge.is-expired {
+  color: var(--loss);
+  border-color: color-mix(in oklab, var(--loss) 40%, var(--line));
+  background: color-mix(in oklab, var(--loss) 12%, transparent);
+}
+.trade-plan-badge.is-fresh {
+  color: var(--accent-soft);
+  border-color: color-mix(in oklab, var(--accent) 35%, var(--line));
+  background: color-mix(in oklab, var(--accent) 10%, transparent);
+}
+.trade-plan-note {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.4;
 }
 .trade-plan-grid {
   display: grid;
@@ -1937,7 +1978,7 @@ a.news-chip:hover {
   padding: 10px 12px;
   display: grid;
   gap: 4px;
-  background: color-mix(in oklab, var(--bg) 55%, transparent);
+  background: color-mix(in oklab, var(--bg) 55%, var(--bg-elev));
 }
 .trade-plan-cell .tp-label {
   font-size: 11px;
@@ -1951,8 +1992,11 @@ a.news-chip:hover {
 .trade-plan-cell.is-stop.gain strong, .trade-plan-cell.is-target.gain strong { color: var(--gain); }
 .trade-plan-cell.is-mid strong { color: var(--text); }
 
-.pair-selector { position: relative; min-width: min(280px, 100%); z-index: 5; }
+.pair-selector { position: relative; min-width: min(280px, 100%); z-index: 6; }
+.pair-selector.is-open { z-index: 60; }
 .pair-selector-trigger {
+  position: relative;
+  z-index: 2;
   width: 100%;
   display: flex;
   justify-content: space-between;
@@ -1961,31 +2005,56 @@ a.news-chip:hover {
   padding: 10px 12px;
   border-radius: 12px;
   border: 1px solid var(--line);
-  background: color-mix(in oklab, var(--panel) 92%, transparent);
+  background: var(--bg-elev);
   color: var(--text);
   cursor: pointer;
 }
 .pair-selector-trigger .pair-name { font-weight: 700; letter-spacing: -0.02em; }
 .pair-selector-trigger .pair-meta { display: inline-flex; gap: 8px; align-items: baseline; color: var(--text-muted); font-size: 12.5px; }
+.pair-palette-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  background: color-mix(in oklab, #000 42%, transparent);
+  cursor: pointer;
+}
+html.light .pair-palette-backdrop {
+  background: color-mix(in oklab, #1a1210 28%, transparent);
+}
 .pair-palette {
   position: absolute;
   top: calc(100% + 8px);
   left: 0;
   width: min(460px, 94vw);
-  z-index: 40;
+  max-height: min(340px, 46vh);
+  z-index: 3;
   border-radius: 14px;
-  border: 1px solid var(--line);
-  background: var(--panel);
-  box-shadow: 0 18px 50px color-mix(in oklab, #000 45%, transparent);
+  border: 1px solid var(--line-strong);
+  background: var(--bg-elev);
+  color: var(--text);
+  box-shadow:
+    0 1px 0 color-mix(in oklab, #fff 6%, transparent) inset,
+    0 22px 50px color-mix(in oklab, #000 55%, transparent);
   padding: 10px;
   display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
   gap: 8px;
+  overflow: hidden;
+}
+html.light .pair-palette {
+  background: #ffffff;
+  box-shadow:
+    0 1px 0 rgba(255,255,255,0.9) inset,
+    0 18px 44px color-mix(in oklab, #7f2711 22%, transparent);
 }
 .pair-palette input {
   width: 100%;
   border-radius: 10px;
   border: 1px solid var(--line);
-  background: color-mix(in oklab, var(--bg) 70%, transparent);
+  background: var(--bg);
   color: var(--text);
   padding: 10px 12px;
   font: inherit;
@@ -2005,7 +2074,7 @@ a.news-chip:hover {
   letter-spacing: 0.04em;
 }
 .pair-palette-list {
-  max-height: 280px;
+  min-height: 0;
   overflow: auto;
   display: grid;
   gap: 2px;
@@ -2033,21 +2102,27 @@ a.news-chip:hover {
 .pair-option .vol, .pair-option .price { color: var(--text-muted); }
 .tabular { font-variant-numeric: tabular-nums; font-family: var(--font-mono), ui-monospace, monospace; }
 
-.news-chip-row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.news-chip-row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; max-width: 100%; }
 .news-chip {
-  display: inline-flex;
-  max-width: 100%;
+  display: inline-block;
+  max-width: min(220px, 100%);
   padding: 4px 8px;
   border-radius: 999px;
   border: 1px solid var(--line);
-  background: color-mix(in oklab, var(--bg) 55%, transparent);
+  background: color-mix(in oklab, var(--bg) 55%, var(--bg-elev));
   color: var(--text-muted);
   font-size: 11.5px;
+  line-height: 1.25;
   text-decoration: none;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  vertical-align: top;
 }
 .news-chip:hover { color: var(--text); border-color: color-mix(in oklab, var(--accent) 40%, var(--line)); }
 
 .jarvis-levels { display: none; } /* replaced by trade-plan */
+
+/* Keep market column from painting over open palette list height into orderbook */
+.jarvis-market-head { position: relative; z-index: 5; overflow: visible; }
+.sodex-ladder, .sodex-chart, .jarvis-last { position: relative; z-index: 0; }

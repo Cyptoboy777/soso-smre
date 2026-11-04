@@ -210,6 +210,8 @@ export interface JarvisCitation {
   label: string;
   detail: string;
   url?: string;
+  /** ISO publish time for news (or as-of for flow/market cites). */
+  publishedAt?: string;
 }
 
 export interface JarvisIdea {

@@ -14,6 +14,7 @@ import {
   stripNewsTokens,
   timeAgo,
 } from '@/lib/display';
+import { resolveLiveTradePlan } from '@/lib/trade-plan';
 import { PairSelector } from './PairSelector';
 import { LivePrice } from './LivePrice';
 
@@ -92,25 +93,45 @@ function TradePlanCard({
   idea: JarvisIdea;
   mid: number | null;
 }) {
-  const rr = riskReward(idea.entry, idea.stopLoss, idea.takeProfit, idea.side);
+  const live = resolveLiveTradePlan({
+    side: idea.side,
+    entry: idea.entry,
+    stopLoss: idea.stopLoss,
+    takeProfit: idea.takeProfit,
+    livePrice: mid,
+  });
+  const expired = live.status === 'expired';
+  const rr = expired
+    ? null
+    : riskReward(live.entry, live.stopLoss, live.takeProfit, idea.side);
   return (
-    <div className="trade-plan" aria-label="Trade plan">
+    <div
+      className={`trade-plan ${expired ? 'is-expired' : ''} ${live.status === 'recomputed' ? 'is-recomputed' : ''}`}
+      aria-label="Trade plan"
+    >
       <div className="trade-plan-head">
         <h3>Trade plan</h3>
-        {rr ? <span className="trade-plan-rr">Risk : reward {rr}</span> : null}
+        <div className="trade-plan-head-meta">
+          {expired ? <span className="trade-plan-badge is-expired">Expired</span> : null}
+          {live.status === 'recomputed' ? (
+            <span className="trade-plan-badge is-fresh">Updated from live</span>
+          ) : null}
+          {rr ? <span className="trade-plan-rr">Risk : reward {rr}</span> : null}
+        </div>
       </div>
+      {live.reason ? <p className="trade-plan-note">{live.reason}</p> : null}
       <div className="trade-plan-grid">
         <div className="trade-plan-cell is-entry">
           <span className="tp-label">Entry</span>
-          <strong className="tabular">{formatPrice(idea.entry)}</strong>
+          <strong className="tabular">{formatPrice(live.entry)}</strong>
         </div>
         <div className="trade-plan-cell is-stop loss">
           <span className="tp-label">Stop</span>
-          <strong className="tabular">{formatPrice(idea.stopLoss)}</strong>
+          <strong className="tabular">{formatPrice(live.stopLoss)}</strong>
         </div>
         <div className="trade-plan-cell is-target gain">
           <span className="tp-label">Target</span>
-          <strong className="tabular">{formatPrice(idea.takeProfit)}</strong>
+          <strong className="tabular">{formatPrice(live.takeProfit)}</strong>
         </div>
         <div className="trade-plan-cell is-mid">
           <span className="tp-label">Mid price</span>
@@ -121,26 +142,24 @@ function TradePlanCard({
   );
 }
 
-function SourcesList({ citations, asOf }: { citations: JarvisCitation[]; asOf?: string }) {
+function SourcesList({ citations }: { citations: JarvisCitation[] }) {
   if (!citations.length) return <p className="muted">No sources for this idea yet.</p>;
   return (
     <ul className="source-list">
       {citations.map((c, idx) => {
         const title = cleanLabel(c.label) || sourceKindLabel(c.kind);
         const detail = sanitizePublicText(c.detail).slice(0, 140);
-        const ago = timeAgo(asOf);
+        const ago = timeAgo(c.publishedAt);
         const inner = (
           <>
             <span className="source-icon" aria-hidden>
               {sourceIcon(c.kind)}
             </span>
             <span className="source-body">
-              <span className="source-top">
-                <strong>{title}</strong>
-                <span className="source-meta">
-                  {sourceKindLabel(c.kind)}
-                  {ago ? ` · ${ago}` : ''}
-                </span>
+              <strong className="source-title">{title}</strong>
+              <span className="source-meta">
+                {sourceKindLabel(c.kind)}
+                {ago ? ` · ${ago}` : ''}
               </span>
               {detail ? <span className="source-detail">{detail}</span> : null}
             </span>
@@ -234,13 +253,24 @@ export function JarvisPanel({ onPrefill }: { onPrefill?: (idea: JarvisIdea) => v
     return bundle.ticker?.lastPrice ?? null;
   }, [bundle]);
 
+  const livePlan = useMemo(() => {
+    if (!idea) return null;
+    return resolveLiveTradePlan({
+      side: idea.side,
+      entry: idea.entry,
+      stopLoss: idea.stopLoss,
+      takeProfit: idea.takeProfit,
+      livePrice: mid,
+    });
+  }, [idea, mid]);
+
   const newsChips = useMemo(() => {
     if (!idea) return [];
     return idea.citations
       .filter((c) => c.kind === 'news' && (c.url || c.label))
       .slice(0, 3)
       .map((c) => ({
-        label: cleanLabel(c.label).slice(0, 64),
+        label: cleanLabel(c.label),
         url: c.url,
       }));
   }, [idea]);
@@ -346,7 +376,7 @@ export function JarvisPanel({ onPrefill }: { onPrefill?: (idea: JarvisIdea) => v
           <div className="jarvis-detail-grid">
             <div className="jarvis-detail-main">
               <h3 style={{ marginTop: 0 }}>Sources</h3>
-              <SourcesList citations={idea.citations} asOf={briefing?.asOf} />
+              <SourcesList citations={idea.citations} />
               <div className="risk-block">
                 <p>
                   <strong>Risk</strong>
@@ -361,15 +391,22 @@ export function JarvisPanel({ onPrefill }: { onPrefill?: (idea: JarvisIdea) => v
               <button
                 type="button"
                 className="btn btn-accent"
+                disabled={!livePlan || livePlan.status === 'expired'}
                 onClick={() => {
-                  if (!idea || !onPrefill) return;
-                  const v = validateAdvisorSuggestion(idea);
+                  if (!idea || !onPrefill || !livePlan || livePlan.status === 'expired') return;
+                  const candidate = {
+                    ...idea,
+                    entry: livePlan.entry,
+                    stopLoss: livePlan.stopLoss,
+                    takeProfit: livePlan.takeProfit,
+                  };
+                  const v = validateAdvisorSuggestion(candidate);
                   if (!v.ok) {
                     setError(`Prefill blocked: ${v.error}`);
                     return;
                   }
                   onPrefill({
-                    ...idea,
+                    ...candidate,
                     side: v.suggestion.side,
                     symbol: v.suggestion.symbol,
                     entry: v.suggestion.entry,
@@ -380,7 +417,7 @@ export function JarvisPanel({ onPrefill }: { onPrefill?: (idea: JarvisIdea) => v
                   });
                 }}
               >
-                Prefill practice ticket
+                {livePlan?.status === 'expired' ? 'Plan expired' : 'Prefill practice ticket'}
               </button>
             </div>
             <div className="jarvis-market">

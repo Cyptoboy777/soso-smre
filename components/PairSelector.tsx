@@ -78,7 +78,15 @@ export function PairSelector({ value, onChange }: Props) {
   }
 
   return (
-    <div className="pair-selector" ref={rootRef}>
+    <div className={`pair-selector ${open ? 'is-open' : ''}`} ref={rootRef}>
+      {open ? (
+        <button
+          type="button"
+          className="pair-palette-backdrop"
+          aria-label="Close pair list"
+          onClick={() => setOpen(false)}
+        />
+      ) : null}
       <button
         type="button"
         className="pair-selector-trigger"
