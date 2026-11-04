@@ -69,16 +69,22 @@ html.light {
   --line: rgba(127, 39, 17, 0.12);
   --line-strong: rgba(127, 39, 17, 0.22);
   --text: #1a1210;
-  --text-muted: #5c4a44;
-  --text-faint: #8a746c;
+  --text-muted: #4a3b36;
+  --text-faint: #5c4a44;
   --muted: var(--text-muted);
-  --accent: #e6451a;
-  --accent-soft: #c45320;
+  /* Darker flame for AA on white / peach chips */
+  --accent: #c03710;
+  --accent-soft: #9a3412;
   --on-accent: #ffffff;
-  --focus: #e6451a;
+  --focus: #c03710;
+  --gain: #0f7a3e;
+  --loss: #c62828;
+  --success: #0f7a3e;
+  --danger: #c62828;
+  --warn: #9a3412;
   --orb-a: #ff4f20;
   --orb-b: #fd7537;
-  --orb-glow: rgba(230, 69, 26, 0.32);
+  --orb-glow: rgba(192, 55, 16, 0.28);
   --panel-glass: rgba(255, 255, 255, 0.92);
   --header-bg: rgba(255, 248, 245, 0.88);
   --shadow-panel: 0 1px 0 rgba(255,255,255,0.9) inset, 0 18px 40px -22px rgba(127, 39, 17, 0.16);
@@ -152,8 +158,8 @@ button { font-family: inherit; }
   background: var(--surface-2);
   color: var(--text-muted);
 }
-.badge.live { color: var(--success); border-color: rgba(30,168,88,0.35); background: rgba(30,168,88,0.08); }
-.badge.fallback { color: var(--warn); border-color: rgba(253,117,55,0.35); background: rgba(253,117,55,0.08); }
+.badge.live { color: var(--success); border-color: color-mix(in srgb, var(--success) 40%, var(--line)); background: color-mix(in srgb, var(--success) 8%, var(--surface-1)); }
+.badge.fallback { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 40%, var(--line)); background: color-mix(in srgb, var(--warn) 8%, var(--surface-1)); }
 .badge.unavailable { color: var(--danger); border-color: rgba(242,66,55,0.35); background: rgba(242,66,55,0.08); }
 .badge .dot {
   width: 6px; height: 6px; border-radius: 50%;
@@ -184,6 +190,7 @@ button { font-family: inherit; }
   background: var(--accent);
   color: var(--on-accent);
   border-color: transparent;
+  font-weight: 650;
 }
 .btn-primary:hover { background: var(--accent-soft); }
 .btn-primary:disabled {
@@ -1417,6 +1424,8 @@ html.light .glass-hero {
   cursor: pointer;
   border-radius: 50%;
   filter: drop-shadow(0 14px 32px var(--orb-glow));
+}
+.ai-launcher .ai-orb {
   animation: orb-launcher-idle 3.6s ease-in-out infinite;
 }
 .ai-launcher:focus-visible {
@@ -1428,7 +1437,7 @@ html.light .glass-hero {
   50% { transform: translateY(-5px); }
 }
 @media (prefers-reduced-motion: reduce) {
-  .ai-launcher { animation: none; }
+  .ai-launcher .ai-orb { animation: none; }
 }
 .ai-panel {
   width: min(400px, calc(100vw - 32px));

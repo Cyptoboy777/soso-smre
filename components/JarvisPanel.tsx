@@ -6,6 +6,13 @@ import dynamic from 'next/dynamic';
 import type { JarvisBriefing, JarvisIdea, SodexMarketBundle } from '@/types/flow';
 import { validateAdvisorSuggestion } from '@/lib/advisor-suggestions';
 
+function directionLabel(side: string) {
+  if (side === 'LONG') return 'Bullish';
+  if (side === 'SHORT') return 'Bearish';
+  return 'Neutral';
+}
+
+
 const SodexPriceChart = dynamic(() => import('./SodexPriceChart').then((m) => m.SodexPriceChart), {
   ssr: false,
   loading: () => <div className="skeleton" style={{ height: 160 }} />,
@@ -133,7 +140,7 @@ export function JarvisPanel({
               <>
                 <div className="jarvis-idea-top">
                   <span className="step-n">0{it.rank}</span>
-                  <span className={`side-tag side-${it.side.toLowerCase()}`}>{it.side}</span>
+                  <span className={`side-tag side-${it.side.toLowerCase()}`}>{directionLabel(it.side)}</span>
                   <span className="conf">{it.confidence}%</span>
                 </div>
                 <strong>{it.title}</strong>
