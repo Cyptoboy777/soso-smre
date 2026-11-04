@@ -50,10 +50,9 @@ export const MESSAGES: Record<Locale, Dict> = {
     navTrack: "Track record",
     navJudge: "Judge path",
     badgeWave: "Wave 3 · Builder Race",
-    footerLine:
-      "FlowSentinel · SoSoValue + SoDEX · Day Trader skills adapted from day-trader-skill (MIT) · Honest Live/Fallback labels",
+    footerLine: "FlowSentinel",
     footerRisk:
-      "Not financial advice. Testnet by default. Live trading only when it is turned on and you confirm. Voice never places orders.",
+      "Not financial advice. Practice mode by default; real trades only after you confirm.",
     startTitle: "Start in three signatures",
     startLead:
       "Connect your wallet, approve a max builder fee with a clear disclosure, then confirm a guided first trade on testnet. No custody. No bots inventing volume.",
@@ -91,10 +90,9 @@ export const MESSAGES: Record<Locale, Dict> = {
     navTrack: "Historial",
     navJudge: "Ruta juez",
     badgeWave: "Wave 3 · Builder Race",
-    footerLine:
-      "FlowSentinel · SoSoValue + SoDEX · Day Trader (MIT) · Etiquetas Live/Fallback honestas",
+    footerLine: "FlowSentinel",
     footerRisk:
-      "No es consejo financiero. Testnet por defecto. Trading en vivo solo cuando este activado y tu confirmes. La voz nunca ordena.",
+      "No es consejo financiero. Modo practica por defecto; operaciones reales solo despues de confirmar.",
     startTitle: "Empieza en tres firmas",
     startLead:
       "Conecta la wallet, aprueba una tarifa maxima de builder con divulgacion clara, luego confirma tu primer trade en testnet. Sin custodia.",
@@ -132,10 +130,9 @@ export const MESSAGES: Record<Locale, Dict> = {
     navTrack: "Historico",
     navJudge: "Rota juiz",
     badgeWave: "Wave 3 · Builder Race",
-    footerLine:
-      "FlowSentinel · SoSoValue + SoDEX · Day Trader (MIT) · Rotulos Live/Fallback honestos",
+    footerLine: "FlowSentinel",
     footerRisk:
-      "Nao e aconselhamento financeiro. Testnet por padrao. Trading ao vivo so quando estiver ligado e com sua confirmacao. Voz nunca envia ordens.",
+      "Nao e aconselhamento financeiro. Modo pratica por padrao; operacoes reais so depois de confirmar.",
     startTitle: "Comece em tres assinaturas",
     startLead:
       "Conecte a wallet, aprove uma taxa maxima de builder com divulgacao clara e confirme o primeiro trade na testnet. Sem custodia.",
@@ -173,10 +170,8 @@ export const MESSAGES: Record<Locale, Dict> = {
     navTrack: "战绩",
     navJudge: "评审路径",
     badgeWave: "Wave 3 · Builder Race",
-    footerLine:
-      "FlowSentinel · SoSoValue + SoDEX · Day Trader (MIT) · Live/Fallback 如实标注",
-    footerRisk:
-      "非投资建议。默认测试网。实盘仅在开启后且你确认后可用。语音不会下单。",
+    footerLine: "FlowSentinel",
+    footerRisk: "非投资建议。默认练习模式；实盘交易仅在你确认后进行。",
     startTitle: "三步签名上手",
     startLead:
       "连接钱包，在清晰披露后批准最高 builder 费用，再确认一笔测试网引导交易。不托管资金。",
@@ -211,10 +206,9 @@ export const MESSAGES: Record<Locale, Dict> = {
     navTrack: "Historique",
     navJudge: "Parcours juge",
     badgeWave: "Wave 3 · Builder Race",
-    footerLine:
-      "FlowSentinel · SoSoValue + SoDEX · Day Trader (MIT) · Labels Live/Fallback honnetes",
+    footerLine: "FlowSentinel",
     footerRisk:
-      "Pas un conseil financier. Testnet par defaut. Trading live seulement lorsqu il est active et avec votre confirmation. La voix ne place jamais d'ordres.",
+      "Pas un conseil financier. Mode pratique par defaut; trades reels seulement apres confirmation.",
     startTitle: "Demarrez en trois signatures",
     startLead:
       "Connectez le wallet, approuvez un frais builder max avec divulgation claire, puis confirmez un premier trade guide sur testnet. Sans custodie.",

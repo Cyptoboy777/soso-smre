@@ -311,7 +311,7 @@ export async function buildJarvisBriefing(desk: DeskSnapshot): Promise<JarvisBri
     top
       ? `Top idea: ${top.title}. ${top.side} on ${top.symbol.replace(/v/g, '').replace('_', ' ')} with confidence ${top.confidence}. ${top.reasoning} Ticket would be entry ${top.entry}, stop ${top.stopLoss}, target ${top.takeProfit}.`
       : 'No high-conviction setup. Standing aside.'
-  } Voice never places orders.`;
+  } The assistant never places orders.`;
 
   return {
     greeting,

@@ -222,7 +222,7 @@ export function JudgeClient() {
                 </div>
                 <label className="judge-confirm">
                   <input type="checkbox" checked={confirming} onChange={(e) => setConfirming(e.target.checked)} />
-                  I confirm this SoDEX <strong>testnet</strong> ticket. Voice never places orders.
+                  I confirm this SoDEX <strong>testnet</strong> ticket. The assistant never places orders.
                 </label>
                 <button
                   type="button"

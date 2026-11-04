@@ -1,15 +1,17 @@
 import type { Metadata, Viewport } from 'next';
-import { Bricolage_Grotesque, IBM_Plex_Mono } from 'next/font/google';
+import { Inter_Tight, JetBrains_Mono } from 'next/font/google';
 import './globals.css';
 import { Shell } from '@/components/Shell';
+import { AiChatDock } from '@/components/AiChatDock';
+import { ThemeProvider } from '@/components/ThemeProvider';
 
-const sans = Bricolage_Grotesque({
+const sans = Inter_Tight({
   subsets: ['latin'],
   variable: '--font-sans-loaded',
   display: 'swap',
 });
 
-const mono = IBM_Plex_Mono({
+const mono = JetBrains_Mono({
   subsets: ['latin'],
   weight: ['400', '500', '600'],
   variable: '--font-mono-loaded',
@@ -21,34 +23,26 @@ const site = process.env.NEXT_PUBLIC_APP_URL || 'https://flowsentinel-app.vercel
 export const metadata: Metadata = {
   metadataBase: new URL(site),
   title: {
-    default: 'FlowSentinel | SoSoValue Wave 3',
+    default: 'FlowSentinel',
     template: '%s · FlowSentinel',
   },
   description:
-    'AI one-person fund desk: SoSoValue ETF flows and news to a risk-gated SoDEX testnet order and a public track record. Not financial advice.',
+    'AI trading desk for SoSoValue flows and SoDEX practice trades. Clear ideas, risk gates, and you confirm every order.',
   applicationName: 'FlowSentinel',
-  keywords: [
-    'FlowSentinel',
-    'SoSoValue',
-    'SoDEX',
-    'ETF flows',
-    'testnet',
-    'buildathon',
-  ],
+  keywords: ['FlowSentinel', 'SoSoValue', 'SoDEX', 'ETF flows'],
   authors: [{ name: 'Crypto boy' }],
   openGraph: {
     type: 'website',
     url: site,
-    title: 'FlowSentinel. Watch the flow. Act with a gate.',
-    description:
-      'SoSoValue data to thesis, risk gate, and confirmed SoDEX testnet order. Honest Live/Fallback labels.',
+    title: 'FlowSentinel',
+    description: 'Watch the flow. Trade with a gate. You confirm every order.',
     siteName: 'FlowSentinel',
     images: [{ url: '/brand/og.svg', width: 1200, height: 630, alt: 'FlowSentinel' }],
   },
   twitter: {
     card: 'summary_large_image',
     title: 'FlowSentinel',
-    description: 'SoSoValue flows → risk gate → SoDEX testnet. Not financial advice.',
+    description: 'Watch the flow. Trade with a gate.',
     images: ['/brand/og.svg'],
   },
   icons: {
@@ -60,15 +54,18 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: '#0A0A0A',
+  themeColor: [
+    { media: '(prefers-color-scheme: dark)', color: '#0A0A0A' },
+    { media: '(prefers-color-scheme: light)', color: '#FFF8F5' },
+  ],
   width: 'device-width',
   initialScale: 1,
-  colorScheme: 'dark',
+  colorScheme: 'dark light',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`${sans.variable} ${mono.variable}`}>
+    <html lang="en" className={`${sans.variable} ${mono.variable}`} suppressHydrationWarning>
       <body
         style={
           {
@@ -77,10 +74,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           } as React.CSSProperties
         }
       >
-        <a className="skip-link" href="#main">
-          Skip to content
-        </a>
-        <Shell>{children}</Shell>
+        <ThemeProvider>
+          <a className="skip-link" href="#main">
+            Skip to content
+          </a>
+          <Shell>{children}</Shell>
+          <AiChatDock />
+        </ThemeProvider>
       </body>
     </html>
   );

@@ -50,7 +50,7 @@ const nextConfig: NextConfig = {
   typescript: { ignoreBuildErrors: false },
   serverExternalPackages: ['@google/genai'],
   // Client-side ML packages — do not bundle for Node
-  transpilePackages: ['kokoro-js', '@mintplex-labs/piper-tts-web', '@ricky0123/vad-web'],
+  transpilePackages: [],
   experimental: {
     optimizePackageImports: ['framer-motion', 'recharts', 'gsap'],
   },

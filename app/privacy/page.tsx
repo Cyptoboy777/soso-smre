@@ -3,7 +3,7 @@ import Link from 'next/link';
 
 export const metadata: Metadata = {
   title: 'Privacy · FlowSentinel',
-  description: 'Privacy notes for FlowSentinel: local voice models, minimal server logs.',
+  description: 'Privacy notes for FlowSentinel: minimal server logs, no custody of keys.',
 };
 
 export default function PrivacyPage() {
@@ -11,18 +11,17 @@ export default function PrivacyPage() {
     <article className="panel" style={{ padding: 28, maxWidth: 720, margin: '0 auto' }}>
       <h1 style={{ marginTop: 0 }}>Privacy</h1>
       <p style={{ color: 'var(--text-muted)', lineHeight: 1.55 }}>
-        Voice models (Kokoro, Piper, Whisper via transformers.js) download and run in your browser when
-        you open voice mode. Microphone audio for recognition is processed locally when using Whisper, or
-        by the browser Web Speech API when that fallback is used (which may involve the browser vendor).
+        FlowSentinel does not custody private keys. Wallet signing, when you use it, stays in your wallet
+        extension. Theme preference is stored locally in your browser (`fs-theme`).
       </p>
       <p style={{ color: 'var(--text-muted)', lineHeight: 1.55 }}>
-        Desk questions sent to /api/voice include the text you typed or transcribed and a snapshot of
-        public desk data so answers stay grounded. We do not sell personal data. Server logs may retain
-        request metadata for abuse prevention and rate limiting.
+        Desk questions sent to /api/chat include the text you typed and a snapshot of public desk data so
+        answers stay grounded. We do not sell personal data. Server logs may retain request metadata for
+        abuse prevention and rate limiting.
       </p>
       <p style={{ color: 'var(--text-muted)', lineHeight: 1.55 }}>
-        Third-party APIs: SoSoValue (market data) and SoDEX testnet (public tickers / optional signed
-        testnet orders). Review their policies as well.
+        Third-party APIs: SoSoValue (market data) and SoDEX (public tickers / optional signed practice
+        orders). Review their policies as well.
       </p>
       <p>
         <Link href="/">Back to desk</Link>

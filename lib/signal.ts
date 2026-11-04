@@ -13,6 +13,7 @@ import type {
 } from '@/types/flow';
 import { pickPrice } from '@/lib/sodex';
 import crypto from 'crypto';
+import { deriveTradeLevels, normalizeConfidence } from '@/lib/trade-levels';
 
 export interface SignalInputs {
   etfBtc: EtfPanel;
@@ -77,11 +78,16 @@ export function buildRuleThesis(input: SignalInputs): Thesis {
     Math.abs(drivers.etfEthNetInflow ?? 0) > Math.abs(drivers.etfBtcNetInflow ?? 0) * 0.6 &&
     Math.abs(drivers.etfEthNetInflow ?? 0) > 20_000_000;
   const symbol = preferEth ? 'vETH_vUSDC' : 'vBTC_vUSDC';
-  const entry = pickPrice(input.market, symbol);
-  const atrProxy = entry * 0.012; // ~1.2% proxy
-  const stopLoss = side === 'LONG' ? entry - atrProxy * 1.5 : side === 'SHORT' ? entry + atrProxy * 1.5 : entry;
-  const takeProfit = side === 'LONG' ? entry + atrProxy * 2.5 : side === 'SHORT' ? entry - atrProxy * 2.5 : entry;
-  const confidence = side === 'FLAT' ? Math.min(confidenceFromScore(score), 58) : confidenceFromScore(score);
+  const entryRaw = pickPrice(input.market, symbol);
+  const levels = deriveTradeLevels(side, entryRaw);
+  const entry = levels.entry;
+  const stopLoss = levels.stopLoss;
+  const takeProfit = levels.takeProfit;
+  const confidence = normalizeConfidence(confidenceFromScore(score), {
+    side,
+    newsShock: drivers.newsShock,
+    hasSetup: levels.hasSetup,
+  });
 
   const btcFlow = drivers.etfBtcNetInflow;
   const ethFlow = drivers.etfEthNetInflow;
@@ -107,9 +113,9 @@ export function buildRuleThesis(input: SignalInputs): Thesis {
     symbol,
     plainEnglish: plain,
     confidence,
-    entry: Number(entry.toPrecision(7)),
-    stopLoss: Number(stopLoss.toPrecision(7)),
-    takeProfit: Number(takeProfit.toPrecision(7)),
+    entry,
+    stopLoss,
+    takeProfit,
     drivers,
     engine: 'rules',
     horizonHours: 24,

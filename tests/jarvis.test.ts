@@ -84,6 +84,6 @@ describe('jarvis briefing', () => {
     expect(b.ideas[0].rank).toBe(1);
     expect(b.ideas[0].citations.length).toBeGreaterThan(0);
     expect(b.engine).toBe('rules');
-    expect(b.spokenSummary.toLowerCase()).toContain('voice never places orders');
+    expect(b.spokenSummary.toLowerCase()).toContain('assistant never places orders');
   });
 });

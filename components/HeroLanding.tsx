@@ -73,7 +73,7 @@ export function HeroLanding() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.06, duration: 0.45 }}
           >
-            SoSoValue Wave 3 · FlowSentinel
+            SoSoValue × SoDEX · FlowSentinel
           </motion.p>
           <motion.h1
             initial={reduce ? false : { opacity: 0, y: 14 }}
@@ -102,8 +102,8 @@ export function HeroLanding() {
             <a className="btn btn-primary" href="#desk">
               Open live desk
             </a>
-            <a className="btn btn-ghost" href="/judge">
-              60s judge path
+            <a className="btn btn-ghost" href="/start">
+              Get started
             </a>
             <a className="btn btn-ghost" href="/track-record">
               Verify track record

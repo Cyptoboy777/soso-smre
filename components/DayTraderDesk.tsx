@@ -210,11 +210,7 @@ export function DayTraderDesk({ onPrefillTicket }: Props) {
 
       <h3 style={{ margin: '0 0 6px', letterSpacing: '-0.02em' }}>SoDEX chart skills</h3>
       <p style={{ margin: '0 0 14px', color: 'var(--text-muted)', fontSize: 13, maxWidth: 68 * 8 }}>
-        Adapted from{' '}
-        <a href="https://github.com/jakeschincariol/day-trader-skill" target="_blank" rel="noreferrer">
-          day-trader-skill
-        </a>{' '}
-        (MIT © Jake Schincariol). Crypto on SoDEX + SoSoValue news. Paper default. Prefills Builder Codes confirm only — never submits without your yes.
+        Chart skills for SoDEX + SoSoValue news. Paper by default. Prefills Builder Codes confirm only — never submits without your yes.
       </p>
 
       {error ? (
@@ -385,7 +381,7 @@ export function DayTraderDesk({ onPrefillTicket }: Props) {
               </button>
             </div>
             <p style={{ margin: '10px 0 0', fontSize: 11, color: 'var(--text-faint)' }}>
-              Credits: day-trader-skill MIT · SoSoValue/SoDEX colours · FlowSentinel never auto-submits.
+              SoSoValue/SoDEX colours · FlowSentinel never auto-submits.
             </p>
           </div>
 

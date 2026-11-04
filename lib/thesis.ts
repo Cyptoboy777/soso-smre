@@ -5,6 +5,10 @@
 import type { Thesis } from '@/types/flow';
 import { buildRuleThesis, type SignalInputs } from '@/lib/signal';
 import {
+  normalizeConfidence,
+  normalizeTradeLevels,
+} from '@/lib/trade-levels';
+import {
   extractJsonObject,
   geminiGenerate,
   GeminiRateLimitError,
@@ -47,10 +51,10 @@ RULES:
 - side must be LONG, SHORT, or FLAT
 - symbol must be vBTC_vUSDC or vETH_vUSDC
 - confidence 0-100 integer
-- plainEnglish: 2-4 sentences; cite news by id like [news:ID] and name the ETF/SSI figures
-- citedNewsIds: array of news ids you relied on
-- entry/stopLoss/takeProfit: dollar numbers consistent with side and SoDEX last
-- If news shock or weak conviction, prefer FLAT
+- plainEnglish: 2-4 sentences; mention headline topics by title words only (never raw numeric ids)
+- citedNewsIds: array of news ids you relied on (internal only)
+- entry/stopLoss/takeProfit: distinct dollar numbers consistent with side and SoDEX last (LONG: stop<entry<target; SHORT: target<entry<stop). Never set them equal for LONG/SHORT.
+- If news shock or weak conviction, prefer FLAT with confidence <= 55
 
 JSON shape:
 {"side":"LONG"|"SHORT"|"FLAT","symbol":"vBTC_vUSDC"|"vETH_vUSDC","confidence":70,"plainEnglish":"...","citedNewsIds":["..."],"entry":0,"stopLoss":0,"takeProfit":0,"horizonHours":24}`;
@@ -71,43 +75,64 @@ JSON shape:
     const cited = Array.isArray(parsed.citedNewsIds)
       ? (parsed.citedNewsIds as unknown[]).map(String)
       : [];
+    const citedTitles = cited
+      .map((id) => input.news.items.find((x) => x.id === id)?.title)
+      .filter(Boolean)
+      .map((title) => String(title).slice(0, 80));
     const citeNote =
-      cited.length > 0
-        ? ` Cited news: ${cited
-            .map((id) => {
-              const n = input.news.items.find((x) => x.id === id);
-              return n ? `[${id}] ${n.title.slice(0, 60)}` : `[${id}]`;
-            })
-            .join('; ')}.`
+      citedTitles.length > 0
+        ? ` Related: ${citedTitles.join('; ')}.`
         : '';
 
-    let entry = Number(parsed.entry ?? fallback.entry) || fallback.entry;
-    let stopLoss = Number(parsed.stopLoss ?? fallback.stopLoss) || fallback.stopLoss;
-    let takeProfit = Number(parsed.takeProfit ?? fallback.takeProfit) || fallback.takeProfit;
-    if (side === 'FLAT') {
-      stopLoss = entry;
-      takeProfit = entry;
+    const levels = normalizeTradeLevels({
+      side,
+      entry: Number(parsed.entry ?? fallback.entry) || fallback.entry,
+      stopLoss: Number(parsed.stopLoss ?? fallback.stopLoss) || fallback.stopLoss,
+      takeProfit: Number(parsed.takeProfit ?? fallback.takeProfit) || fallback.takeProfit,
+    });
+    // Prefer FLAT when model invented a directional call without a valid setup
+    const finalSide = side !== 'FLAT' && !levels.hasSetup ? 'FLAT' : side;
+    const finalLevels =
+      finalSide === 'FLAT'
+        ? normalizeTradeLevels({
+            side: 'FLAT',
+            entry: levels.entry || fallback.entry,
+            stopLoss: levels.entry || fallback.entry,
+            takeProfit: levels.entry || fallback.entry,
+          })
+        : levels;
+
+    let plain = String(parsed.plainEnglish ?? fallback.plainEnglish);
+    // Strip raw numeric news ids like [2117626848089169921]
+    plain = plain.replace(/\[\d{6,}\]/g, '').replace(/\s{2,}/g, ' ').trim();
+    if (finalSide === 'FLAT' || !finalLevels.hasSetup) {
+      plain = plain || 'No trade setup today. Waiting for a clearer signal.';
+      if (!/no trade setup/i.test(plain)) {
+        plain = `${plain} No trade setup.`;
+      }
     }
+
     return {
       ...fallback,
-      side,
+      side: finalSide,
       symbol,
-      confidence: Math.round(Math.max(0, Math.min(100, Number(parsed.confidence ?? fallback.confidence)))),
-      plainEnglish: `${String(parsed.plainEnglish ?? fallback.plainEnglish)}${citeNote}`,
-      entry,
-      stopLoss,
-      takeProfit,
+      confidence: normalizeConfidence(
+        Number(parsed.confidence ?? fallback.confidence),
+        {
+          side: finalSide,
+          newsShock: input.news.shockActive,
+          hasSetup: finalLevels.hasSetup,
+        },
+      ),
+      plainEnglish: `${plain}${citeNote}`,
+      entry: finalLevels.entry,
+      stopLoss: finalLevels.stopLoss,
+      takeProfit: finalLevels.takeProfit,
       horizonHours: Number(parsed.horizonHours ?? 24) || 24,
       engine: 'gemini',
       drivers: {
         ...fallback.drivers,
-        topHeadlines: [
-          ...cited
-            .map((id) => input.news.items.find((x) => x.id === id)?.title)
-            .filter(Boolean)
-            .map(String),
-          ...fallback.drivers.topHeadlines,
-        ].slice(0, 5),
+        topHeadlines: [...citedTitles, ...fallback.drivers.topHeadlines].slice(0, 5),
       },
     };
   } catch (e) {

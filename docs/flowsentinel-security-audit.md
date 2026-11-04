@@ -21,7 +21,7 @@
 - Server never signs mainnet with held user keys; custodial signing path is testnet-only in `lib/sodex.ts`
 - Critical Next.js advisories addressed by upgrading to 16.4.5
 - Critical vitest/tinypool addressed by upgrading to vitest 5.1.0 (devDependency)
-- Residual high: `sharp` via `kokoro-js` nested transformers (no fix available) — accepted for client TTS path
+- Residual high: none (voice/TTS stack including `kokoro-js`/`sharp` removed)
 
 ## Findings
 
@@ -32,7 +32,7 @@
 | S3 | High | `postcss` XSS / sourcemap disclosure advisories | **Fixed** — resolved via `npm audit fix` with Next upgrade |
 | S4 | High | `protobufjs` DoS / shadowing advisories | **Fixed** — resolved to patched 7.6.x via audit fix |
 | S5 | High | Relay `/api/builder/relay-order` trusted client params for size (notional cap only on prepare) | **Fixed** — `assertRelayOrderParams` re-validates single-order batch, notional/funds vs `SODEX_MAX_NOTIONAL_USDC`, builder id+fee match; body size limit 32KB |
-| S6 | High | `sharp` / libvips via `kokoro-js` → nested `@huggingface/transformers` | **Accepted** — no fix available upstream; client-side TTS only; not used for auth/trading |
+| S6 | High | `sharp` / libvips via `kokoro-js` → nested `@huggingface/transformers` | **Resolved** — voice/TTS stack removed; prod `npm audit --omit=dev` clean |
 | S7 | Medium | Missing HSTS header | **Fixed** — `Strict-Transport-Security: max-age=63072000; includeSubDomains; preload` |
 | S8 | Medium | Missing rate limits on builder GET routes (`account`, `config`, `fee-stats`, `metrics`) | **Fixed** — IP rate limits added |
 | S9 | Medium | `/api/builder/account` could return raw exception strings | **Fixed** — `publicErrorMessage` + server log only |
@@ -74,7 +74,7 @@ Present in `next.config.ts`: CSP, HSTS, X-Frame-Options, X-Content-Type-Options,
 
 - `next`: 16.4.5
 - `vitest`: 5.1.0 (dev)
-- Prod `npm audit --omit=dev`: **3 high** remaining, all `sharp` via `kokoro-js` (no fix)
+- Prod `npm audit --omit=dev`: **0** vulnerabilities after voice/TTS removal
 - Full audit after upgrades: no critical remaining
 
 ## Verification
@@ -96,3 +96,9 @@ Present in `next.config.ts`: CSP, HSTS, X-Frame-Options, X-Content-Type-Options,
 - Did **not** merge PRs
 - Did **not** set `SODEX_MAINNET_TRADING`
 - Did **not** create API keys or print secret values
+
+
+## UI themes (Builder Race redesign)
+
+- Dark + light via `next-themes` (`attribute=class`, system default, `fs-theme` storage, no flash).
+- Brand SoSoValue flame colours retained; WCAG AA muted text targets.

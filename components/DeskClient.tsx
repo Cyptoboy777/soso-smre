@@ -3,15 +3,12 @@
 import { useCallback, useEffect, useState } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
 import type { DeskSnapshot, OrderResult, RiskDecision, SourceMeta } from '@/types/flow';
+import { hasValidTradeSetup } from '@/lib/trade-levels';
 import { LiveBadge } from './LiveBadge';
 import { FlowRadar } from './FlowRadar';
 import { CountUp } from './CountUp';
 import dynamic from 'next/dynamic';
 
-const VoiceAssistant = dynamic(() => import('./VoiceAssistant').then((m) => m.VoiceAssistant), {
-  ssr: false,
-  loading: () => <div className="panel" style={{ padding: 20 }} aria-busy>Loading voice desk…</div>,
-});
 const EtfFlowChart = dynamic(() => import('./EtfFlowChart').then((m) => m.EtfFlowChart), {
   ssr: false,
   loading: () => <div className="skeleton" style={{ height: 128 }} aria-hidden />,
@@ -170,9 +167,6 @@ export function DeskClient() {
         <span className={`mode-pill ${data.keys.sosovalue ? 'live' : 'sim'}`}>
           SoSoValue: {data.keys.sosovalue ? 'Live key' : 'Fallback'}
         </span>
-        <a className="btn btn-ghost" href="/judge" style={{ marginLeft: 'auto' }}>
-          Judge 60s path
-        </a>
       </div>
 
       {/* Thesis hero */}
@@ -214,24 +208,31 @@ export function DeskClient() {
           <p style={{ margin: '0 0 22px', color: 'var(--text-muted)', maxWidth: 54 * 8, textWrap: 'pretty' }}>
             {thesis.plainEnglish}
           </p>
-          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'stretch' }}>
-            <div className="metric-chip">
-              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>Confidence</div>
-              <div style={{ color: 'var(--accent)', fontSize: 26, fontWeight: 650, letterSpacing: '-0.03em' }}>
-                <CountUp value={thesis.confidence} />
-                <span style={{ fontSize: 13, color: 'var(--text-muted)', fontWeight: 500 }}> /100</span>
+          {hasValidTradeSetup(thesis.side, thesis.entry, thesis.stopLoss, thesis.takeProfit) ? (
+            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'stretch' }}>
+              <div className="metric-chip">
+                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>Confidence</div>
+                <div style={{ color: 'var(--accent)', fontSize: 26, fontWeight: 650, letterSpacing: '-0.03em' }}>
+                  <CountUp value={thesis.confidence} />
+                  <span style={{ fontSize: 13, color: 'var(--text-muted)', fontWeight: 500 }}> /100</span>
+                </div>
+              </div>
+              <MetricChip label="Entry" value={thesis.entry} prefix="$" />
+              <MetricChip label="Stop" value={thesis.stopLoss} prefix="$" />
+              <MetricChip label="Target" value={thesis.takeProfit} prefix="$" />
+              <div className="metric-chip">
+                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>Horizon</div>
+                <div className="tabular" style={{ fontSize: 18, fontWeight: 600 }}>
+                  {thesis.horizonHours}h
+                </div>
               </div>
             </div>
-            <MetricChip label="Entry" value={thesis.entry} prefix="$" />
-            <MetricChip label="Stop" value={thesis.stopLoss} prefix="$" />
-            <MetricChip label="Target" value={thesis.takeProfit} prefix="$" />
-            <div className="metric-chip">
-              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>Horizon</div>
-              <div className="tabular" style={{ fontSize: 18, fontWeight: 600 }}>
-                {thesis.horizonHours}h
-              </div>
+          ) : (
+            <div className="no-setup-banner" role="status">
+              <strong style={{ display: 'block', marginBottom: 4 }}>No trade setup</strong>
+              Stand aside — levels stay hidden until the desk has a valid directional idea with distinct entry, stop, and target.
             </div>
-          </div>
+          )}
 
           <div style={{ marginTop: 16 }}>
             <ShareIdeaCard
@@ -494,7 +495,7 @@ export function DeskClient() {
             </p>
           )}
           <p style={{ margin: '14px 0 0', fontSize: 11, color: 'var(--text-faint)' }}>
-            Voice assistant never places orders. Confirmation click required.
+            The assistant never places orders. You confirm every trade.
           </p>
         </div>
       </motion.section>
@@ -526,11 +527,8 @@ export function DeskClient() {
 
       <ApiDiagnostics />
 
-      <VoiceAssistant desk={data} onRefresh={() => void load()} />
-
       <p style={{ fontSize: 12, color: 'var(--text-faint)', margin: 0 }}>
-        Keys: SoSoValue {keys.sosovalue ? '✓' : '✗'} · Gemini {keys.gemini ? '✓' : '✗'} · SoDEX{' '}
-        {keys.sodex ? '✓' : '✗'} · Demo mode {data.demoMode ? 'on' : 'off'}
+        Practice desk · You confirm every order · Not financial advice
       </p>
     </div>
   );

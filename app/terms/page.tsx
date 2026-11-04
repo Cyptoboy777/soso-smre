@@ -11,13 +11,13 @@ export default function TermsPage() {
     <article className="panel" style={{ padding: 28, maxWidth: 720, margin: '0 auto' }}>
       <h1 style={{ marginTop: 0 }}>Terms of use</h1>
       <p style={{ color: 'var(--text-muted)', lineHeight: 1.55 }}>
-        FlowSentinel is a Wave 3 buildathon demo. It is provided as-is for education and judging. It is
+        FlowSentinel is a practice trading desk powered by SoSoValue data and SoDEX. It is provided as-is for education. It is
         not financial, investment, legal, or tax advice. Nothing on this site is an offer to buy or sell
         any asset.
       </p>
       <p style={{ color: 'var(--text-muted)', lineHeight: 1.55 }}>
         Orders, when enabled, target SoDEX testnet only. There is no mainnet trading path in this app.
-        Voice mode never places orders. You are responsible for any keys you load on your own device.
+        The assistant never places orders. You are responsible for any keys you load on your own device.
       </p>
       <p style={{ color: 'var(--text-muted)', lineHeight: 1.55 }}>
         Data from SoSoValue and SoDEX may be delayed, incomplete, or labelled Fallback when live keys or
