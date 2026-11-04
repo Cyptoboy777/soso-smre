@@ -1,5 +1,6 @@
 'use client';
 
+import { formatPair, formatSideLabel } from '@/lib/display';
 import { useCallback, useEffect, useState } from 'react';
 import {
   connectInjectedWallet,
@@ -325,7 +326,7 @@ export function BuilderTradePanel({ thesis, quantity }: Props) {
             onChange={(e) => setConfirmOrder(e.target.checked)}
           />
           <span>
-            I confirm this order: {thesis.side} {thesis.symbol} qty≈{quantity.toPrecision(6)} @{' '}
+            I confirm this order: {formatSideLabel(thesis.side)} {formatPair(thesis.symbol)} qty≈{quantity.toPrecision(6)} @{' '}
             {thesis.entry} ({modeLabel}). Only I submit. The advisor never does.
           </span>
         </label>

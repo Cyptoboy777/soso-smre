@@ -3,6 +3,7 @@
  * Inspired by sodex-grok-trader risk engine ideas (sizing, drawdown, news pause)
  * but rewritten in TypeScript for the Next.js desk - no Python dependency.
  */
+import { formatPair, formatSideLabel } from '@/lib/display';
 import type { NewsPanel, RiskCheck, RiskDecision, Thesis } from '@/types/flow';
 
 export interface RiskParams {
@@ -41,7 +42,7 @@ export function evaluateRisk(
     id: 'direction',
     label: 'Directional thesis',
     passed: notFlat,
-    detail: notFlat ? `${thesis.side} on ${thesis.symbol}` : 'Thesis is FLAT; no order',
+    detail: notFlat ? `${formatSideLabel(thesis.side)} on ${formatPair(thesis.symbol)}` : 'Thesis is Neutral; no order',
   });
 
   // 2. Confidence floor
@@ -63,12 +64,12 @@ export function evaluateRisk(
     geoDetail = 'Entry / stop / target must be positive';
   } else if (thesis.side === 'LONG') {
     geometryOk = sl < entry && tp > entry;
-    geoDetail = geometryOk ? 'SL below entry, TP above' : 'LONG requires SL < entry < TP';
+    geoDetail = geometryOk ? 'Stop below entry, target above' : 'Bullish needs stop < entry < target';
   } else if (thesis.side === 'SHORT') {
     geometryOk = sl > entry && tp < entry;
-    geoDetail = geometryOk ? 'SL above entry, TP below' : 'SHORT requires TP < entry < SL';
+    geoDetail = geometryOk ? 'Stop above entry, target below' : 'Bearish needs target < entry < stop';
   } else {
-    geoDetail = 'No geometry for FLAT';
+    geoDetail = 'No geometry while Neutral';
     geometryOk = false;
   }
   checks.push({

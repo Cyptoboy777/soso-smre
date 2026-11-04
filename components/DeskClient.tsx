@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
 import type { DeskSnapshot, OrderResult, RiskDecision, SourceMeta } from '@/types/flow';
 import { hasValidTradeSetup } from '@/lib/trade-levels';
+import { formatPair, formatSideLabel } from '@/lib/display';
 import { pickNewsChips } from '@/lib/thesis-copy';
 import { useLocale } from './LocaleProvider';
 import { LiveBadge } from './LiveBadge';
@@ -17,7 +18,7 @@ const EtfFlowChart = dynamic(() => import('./EtfFlowChart').then((m) => m.EtfFlo
 });
 const JarvisPanel = dynamic(() => import('./JarvisPanel').then((m) => m.JarvisPanel), {
   ssr: false,
-  loading: () => <div className="panel" style={{ padding: 24, minHeight: 220 }} aria-busy>Loading JARVIS…</div>,
+  loading: () => <div className="panel" style={{ padding: 24, minHeight: 220 }} aria-busy>Loading desk briefing…</div>,
 });
 const BuilderTradePanel = dynamic(() => import('./BuilderTradePanel').then((m) => m.BuilderTradePanel), {
   ssr: false,
@@ -194,7 +195,7 @@ export function DeskClient() {
           >
             {thesis.side === 'FLAT'
               ? t.standAside
-              : `${directionLabel(thesis.side)} on ${thesis.symbol.replace(/v/g, '').replace('_', '/')}`}
+              : `${formatSideLabel(thesis.side)} on ${formatPair(thesis.symbol)}`}
           </h2>
           <p style={{ margin: '0 0 14px', color: 'var(--text-muted)', maxWidth: 54 * 8, textWrap: 'pretty' }}>
             {thesis.plainEnglish}
@@ -436,7 +437,7 @@ export function DeskClient() {
         <div style={{ borderLeft: '1px solid var(--line)', padding: 24, background: 'rgba(255,79,32,0.035)' }}>
           <h2 style={{ margin: '0 0 8px', fontSize: 18, letterSpacing: '-0.02em' }}>Confirm & execute</h2>
           <p style={{ margin: '0 0 16px', color: 'var(--text-muted)', fontSize: 13 }}>
-            Limit {thesis.side === 'SHORT' ? 'SELL' : 'BUY'} {risk.positionSize || '-'} {thesis.symbol} @ $
+            Limit {thesis.side === 'SHORT' ? 'SELL' : 'BUY'} {risk.positionSize || '-'} {formatPair(thesis.symbol)} @ $
             {thesis.entry.toLocaleString()}
             <br />
             Risk ${risk.riskUsd} ({risk.riskPct}% of ${risk.equityUsd.toLocaleString()} equity)
