@@ -97,16 +97,16 @@ export function JarvisPanel({
       <header className="jarvis-head">
         <div>
           <p className="hero-kicker" style={{ margin: 0 }}>
-            JARVIS · FlowSentinel copilot
+            Desk briefing
           </p>
           <h2 style={{ margin: '6px 0 0', letterSpacing: '-0.03em' }}>
-            {briefing ? `${briefing.greeting}. Here's what moved.` : 'Spinning up briefing…'}
+            {briefing ? `${briefing.greeting}. Here is what moved.` : 'Spinning up briefing…'}
           </h2>
         </div>
         <div className="jarvis-badges">
-          <span className="pill">{briefing?.engine === 'gemini' ? 'Gemini' : 'Rules engine'}</span>
-          {briefing?.newsShock ? <span className="pill pill-warn">News shock</span> : null}
-          {bundle ? <span className="pill">SoDEX {bundle.gateway}</span> : null}
+          <span className="pill">Powered by SoSoValue</span>
+          {briefing?.newsShock ? <span className="pill pill-warn">News alert</span> : null}
+          <span className="pill">Practice mode</span>
         </div>
       </header>
 

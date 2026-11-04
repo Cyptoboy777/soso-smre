@@ -17,11 +17,6 @@ const JarvisPanel = dynamic(() => import('./JarvisPanel').then((m) => m.JarvisPa
   ssr: false,
   loading: () => <div className="panel" style={{ padding: 24, minHeight: 220 }} aria-busy>Loading JARVIS…</div>,
 });
-const ApiDiagnostics = dynamic(() => import('./ApiDiagnostics').then((m) => m.ApiDiagnostics), {
-  ssr: false,
-  loading: () => <div className="panel" style={{ padding: 24, minHeight: 160 }} aria-busy>Probing APIs…</div>,
-});
-
 const BuilderTradePanel = dynamic(() => import('./BuilderTradePanel').then((m) => m.BuilderTradePanel), {
   ssr: false,
   loading: () => <div className="panel" style={{ padding: 24, minHeight: 160 }} aria-busy>Loading builder desk…</div>,
@@ -158,15 +153,9 @@ export function DeskClient() {
   return (
     <div style={{ display: 'grid', gap: 20 }}>
       <div className="desk-mode-row" role="status">
-        <span className={`mode-pill ${data.keys.sodex ? 'live' : 'sim'}`}>
-          Orders: {data.keys.sodex ? 'Practice ready' : 'Practice demo'}
-        </span>
-        <span className={`mode-pill ${data.keys.gemini ? 'live' : 'sim'}`}>
-          Advisor: {data.keys.gemini ? 'Gemini' : 'Rules'}
-        </span>
-        <span className={`mode-pill ${data.keys.sosovalue ? 'live' : 'sim'}`}>
-          SoSoValue: {data.keys.sosovalue ? 'Live key' : 'Fallback'}
-        </span>
+        <span className="mode-pill live">Practice mode</span>
+        <span className="mode-pill">Powered by SoSoValue data</span>
+        <span className="mode-pill">You confirm every order</span>
       </div>
 
       {/* Thesis hero */}
@@ -186,10 +175,9 @@ export function DeskClient() {
         <div style={{ padding: '28px 28px 24px' }}>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 14 }}>
             <span className="badge" style={{ color: 'var(--accent-soft)', borderColor: 'rgba(255,79,32,0.35)' }}>
-              Daily thesis
+              Today&apos;s idea
             </span>
-            <span className="badge">{thesis.engine === 'gemini' ? 'Gemini' : 'Rules engine'}</span>
-            <span className={`badge ${thesis.side === 'FLAT' ? 'fallback' : 'live'}`}>{thesis.side}</span>
+            <span className={`badge ${directionClass(thesis.side)}`}>{directionLabel(thesis.side)}</span>
           </div>
           <h2
             style={{
@@ -203,7 +191,7 @@ export function DeskClient() {
           >
             {thesis.side === 'FLAT'
               ? 'Stand aside today'
-              : `${thesis.side} ${thesis.symbol.replace(/v/g, '').replace('_', '/')}`}
+              : `${directionLabel(thesis.side)} on ${thesis.symbol.replace(/v/g, '').replace('_', '/')}`}
           </h2>
           <p style={{ margin: '0 0 22px', color: 'var(--text-muted)', maxWidth: 54 * 8, textWrap: 'pretty' }}>
             {thesis.plainEnglish}
@@ -230,7 +218,7 @@ export function DeskClient() {
           ) : (
             <div className="no-setup-banner" role="status">
               <strong style={{ display: 'block', marginBottom: 4 }}>No trade setup</strong>
-              Stand aside — levels stay hidden until the desk has a valid directional idea with distinct entry, stop, and target.
+              Stand aside. Levels stay hidden until the desk has a valid directional idea with distinct entry, stop, and target.
             </div>
           )}
 
@@ -240,7 +228,7 @@ export function DeskClient() {
               headline={
                 thesis.side === 'FLAT'
                   ? 'Stand aside today'
-                  : `${thesis.side} ${thesis.symbol.replace(/v/g, '').replace('_', '/')}`
+                  : `${directionLabel(thesis.side)} on ${thesis.symbol.replace(/v/g, '').replace('_', '/')}`
               }
               side={thesis.side}
               symbol={thesis.symbol}
@@ -463,7 +451,7 @@ export function DeskClient() {
               disabled={!risk.approved || !confirming || busy || thesis.side === 'FLAT'}
               onClick={() => void execute()}
             >
-              {busy ? 'Submitting…' : keys.sodex ? 'Place practice order' : 'Run practice demo order'}
+              {busy ? 'Submitting…' : 'Place practice order'}
             </button>
             <button className="btn" onClick={() => void load()} disabled={busy}>
               Refresh thesis
@@ -483,7 +471,7 @@ export function DeskClient() {
               }}
             >
               <div style={{ fontWeight: 560, marginBottom: 4 }}>
-                {order.mode === 'dry-run' ? 'Practice demo result' : 'Practice order result'} · {order.status}
+                {order.mode === 'dry-run' ? 'Practice result' : 'Practice order result'} · {order.status}
               </div>
               <div className="tabular">ID {order.orderId}</div>
               <div style={{ color: 'var(--text-muted)', marginTop: 6 }}>{order.note}</div>
@@ -525,13 +513,25 @@ export function DeskClient() {
 
       <BuilderTradePanel thesis={thesis} quantity={risk.positionSize || 0} />
 
-      <ApiDiagnostics />
 
       <p style={{ fontSize: 12, color: 'var(--text-faint)', margin: 0 }}>
         Practice desk · You confirm every order · Not financial advice
       </p>
     </div>
   );
+}
+
+
+function directionLabel(side: string): string {
+  if (side === 'LONG') return 'Bullish';
+  if (side === 'SHORT') return 'Bearish';
+  return 'Neutral';
+}
+
+function directionClass(side: string): string {
+  if (side === 'LONG') return 'dir-bull';
+  if (side === 'SHORT') return 'dir-bear';
+  return 'dir-flat';
 }
 
 function MetricChip({ label, value, prefix = '' }: { label: string; value: number; prefix?: string }) {

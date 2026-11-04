@@ -246,7 +246,7 @@ export function BuilderTradePanel({ thesis, quantity }: Props) {
       <h3 style={{ margin: '0 0 8px', letterSpacing: '-0.02em' }}>Trade with your wallet</h3>
       <p style={{ margin: '0 0 14px', color: 'var(--text-muted)', maxWidth: 62 * 8 }}>
         Non-custodial: you connect and sign. FlowSentinel never holds your keys.
-        Cap per order: {cfg?.maxNotionalUsdc ?? '—'} USDC.
+        Cap per order: {cfg?.maxNotionalUsdc ?? '-'} USDC.
       </p>
 
       {cfg?.feeDisclosure ? (
@@ -288,7 +288,7 @@ export function BuilderTradePanel({ thesis, quantity }: Props) {
           disabled={busy || !address || !accountId || !cfg?.builderId || approved}
           onClick={() => void approveBuilder()}
         >
-          {approved ? 'App fee approved' : `Approve app fee (max ${cfg?.maxApprovalPercent ?? '—'})`}
+          {approved ? 'App fee approved' : `Approve app fee (max ${cfg?.maxApprovalPercent ?? '-'})`}
         </button>
       </div>
 
@@ -326,7 +326,7 @@ export function BuilderTradePanel({ thesis, quantity }: Props) {
           />
           <span>
             I confirm this order: {thesis.side} {thesis.symbol} qty≈{quantity.toPrecision(6)} @{' '}
-            {thesis.entry} ({modeLabel}). Only I submit — the advisor never does.
+            {thesis.entry} ({modeLabel}). Only I submit. The advisor never does.
           </span>
         </label>
         <button

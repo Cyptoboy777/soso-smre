@@ -7,7 +7,7 @@ type Props = {
   size?: number;
 };
 
-/** Smooth CSS 3D orb — lazy-safe, respects reduced motion. */
+/** Smooth CSS 3D orb - lazy-safe, respects reduced motion. */
 export function AiOrb({ active = false, size = 56 }: Props) {
   const reduce = useReducedMotion();
   return (

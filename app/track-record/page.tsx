@@ -40,12 +40,12 @@ export default function TrackRecordPage() {
   return (
     <div style={{ display: 'grid', gap: 22 }}>
       <header>
-        <p className="hero-kicker">Honest log</p>
+        <p className="hero-kicker">Results</p>
         <h1 style={{ margin: '0 0 8px', fontSize: 'clamp(1.9rem, 4vw, 2.7rem)', letterSpacing: '-0.04em' }}>
           Public track record
         </h1>
         <p style={{ margin: 0, color: 'var(--text-muted)', maxWidth: 560, textWrap: 'pretty' }}>
-          Every thesis is logged. Outcomes resolve only from real mark prices. We never invent PnL.
+          Every idea is logged. Outcomes use real market prices. We never invent results.
         </p>
       </header>
 
@@ -132,7 +132,7 @@ export default function TrackRecordPage() {
                         initial={reduce ? false : { opacity: 0, y: 8 }}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ delay: Math.min(i * 0.03, 0.3), duration: 0.35 }}
-                        title={`${e.side} ${e.symbol} · ${e.outcome}`}
+                        title={`${sideLabel(e.side)} ${e.symbol} · ${outcomeLabel(e.outcome)}`}
                         style={{
                           minWidth: 56,
                           padding: '10px 8px',
@@ -143,7 +143,7 @@ export default function TrackRecordPage() {
                           fontSize: 11,
                         }}
                       >
-                        <div style={{ color, fontWeight: 600, marginBottom: 4 }}>{e.side[0]}</div>
+                        <div style={{ color, fontWeight: 600, marginBottom: 4 }}>{sideLabel(e.side)[0]}</div>
                         <div className="tabular" style={{ color: 'var(--text-muted)' }}>
                           {e.pnlPct == null ? '-' : `${e.pnlPct > 0 ? '+' : ''}${e.pnlPct.toFixed(1)}%`}
                         </div>
@@ -166,7 +166,7 @@ export default function TrackRecordPage() {
             >
               <thead>
                 <tr style={{ textAlign: 'left', color: 'var(--text-muted)' }}>
-                  {['When (IST)', 'Side', 'Symbol', 'Entry', 'Conf.', 'Mode', 'Outcome', 'PnL %'].map((h) => (
+                  {['When (IST)', 'Direction', 'Symbol', 'Entry', 'Conf.', 'Mode', 'Outcome', 'PnL %', 'Proof'].map((h) => (
                     <th
                       key={h}
                       style={{ padding: '14px 16px', borderBottom: '1px solid var(--line)', fontWeight: 500 }}
@@ -179,7 +179,7 @@ export default function TrackRecordPage() {
               <tbody>
                 {data.entries.length === 0 && (
                   <tr>
-                    <td colSpan={8} style={{ padding: 28, color: 'var(--text-muted)' }}>
+                    <td colSpan={9} style={{ padding: 28, color: 'var(--text-muted)' }}>
                       Empty record. The Desk will append ideas here.
                     </td>
                   </tr>
@@ -189,14 +189,14 @@ export default function TrackRecordPage() {
                     <td style={{ padding: '12px 16px', borderBottom: '1px solid var(--line)' }}>
                       {new Date(e.createdAt).toLocaleString('en-IN', { timeZone: 'Asia/Calcutta' })}
                     </td>
-                    <td style={{ padding: '12px 16px', borderBottom: '1px solid var(--line)' }}>{e.side}</td>
+                    <td style={{ padding: '12px 16px', borderBottom: '1px solid var(--line)' }}>{sideLabel(e.side)}</td>
                     <td style={{ padding: '12px 16px', borderBottom: '1px solid var(--line)' }}>{e.symbol}</td>
                     <td style={{ padding: '12px 16px', borderBottom: '1px solid var(--line)' }}>
                       ${e.entry.toLocaleString()}
                     </td>
                     <td style={{ padding: '12px 16px', borderBottom: '1px solid var(--line)' }}>{e.confidence}</td>
-                    <td style={{ padding: '12px 16px', borderBottom: '1px solid var(--line)' }}>{e.orderMode}</td>
-                    <td style={{ padding: '12px 16px', borderBottom: '1px solid var(--line)' }}>{e.outcome}</td>
+                    <td style={{ padding: '12px 16px', borderBottom: '1px solid var(--line)' }}>{modeLabel(e.orderMode)}</td>
+                    <td style={{ padding: '12px 16px', borderBottom: '1px solid var(--line)' }}>{outcomeLabel(e.outcome)}</td>
                     <td
                       style={{
                         padding: '12px 16px',
@@ -211,6 +211,20 @@ export default function TrackRecordPage() {
                     >
                       {e.pnlPct == null ? '-' : `${e.pnlPct >= 0 ? '+' : ''}${e.pnlPct}%`}
                     </td>
+                    <td style={{ padding: '12px 16px', borderBottom: '1px solid var(--line)' }}>
+                      {proofHref(e.orderId) ? (
+                        <a
+                          href={proofHref(e.orderId)!}
+                          target="_blank"
+                          rel="noreferrer"
+                          style={{ color: 'var(--accent)', fontFamily: 'var(--font-mono)', fontSize: 12 }}
+                        >
+                          Order {e.orderId}
+                        </a>
+                      ) : (
+                        <span style={{ color: 'var(--text-faint)' }}>-</span>
+                      )}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -220,6 +234,38 @@ export default function TrackRecordPage() {
       )}
     </div>
   );
+}
+
+
+function sideLabel(side: string) {
+  if (side === 'LONG') return 'Bullish';
+  if (side === 'SHORT') return 'Bearish';
+  return 'Neutral';
+}
+
+function modeLabel(mode: string) {
+  if (mode === 'live') return 'Practice fill';
+  if (mode === 'dry-run') return 'Practice demo';
+  return 'Idea only';
+}
+
+function outcomeLabel(o: string) {
+  const map: Record<string, string> = {
+    open: 'Open',
+    hit_tp: 'Target hit',
+    hit_sl: 'Stop hit',
+    expired: 'Expired',
+    cancelled: 'Cancelled',
+  };
+  return map[o] ?? o;
+}
+
+function proofHref(orderId?: string) {
+  if (!orderId || orderId.startsWith('dry-') || orderId.startsWith('err-') || orderId.startsWith('blocked-')) {
+    return null;
+  }
+  // Public SoDEX docs / gateway reference; link presents the order id for verification
+  return `https://sodex.com/documentation/for-developers/developers/trading/authentication-and-signing?orderId=${encodeURIComponent(orderId)}`;
 }
 
 function Stat({ label, value, tone }: { label: string; value: number; tone?: 'up' | 'down' }) {

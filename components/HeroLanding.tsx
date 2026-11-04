@@ -12,10 +12,10 @@ const HeroScene = dynamic(() => import('./HeroScene').then((m) => m.HeroScene), 
 });
 
 const STEPS = [
-  { n: '01', title: 'Data', body: 'SoSoValue ETF flows, hot news, SSI' },
-  { n: '02', title: 'Thesis', body: 'Plain-English idea with confidence' },
-  { n: '03', title: 'Risk', body: 'Size, drawdown, news-shock gate' },
-  { n: '04', title: 'Order', body: 'Confirmed SoDEX testnet limit' },
+  { n: '01', title: 'Watch markets', body: 'ETF flows and news from SoSoValue' },
+  { n: '02', title: 'Get an idea', body: 'Clear direction with confidence' },
+  { n: '03', title: 'Check risk', body: 'Size and safety checks you can read' },
+  { n: '04', title: 'You confirm', body: 'Practice orders only when you say yes' },
 ];
 
 export function HeroLanding() {
@@ -30,7 +30,6 @@ export function HeroLanding() {
       (navigator as Navigator & { hardwareConcurrency?: number }).hardwareConcurrency != null &&
       (navigator.hardwareConcurrency as number) <= 4;
     const saveData = Boolean((navigator as Navigator & { connection?: { saveData?: boolean } }).connection?.saveData);
-    // Mobile / low-end: keep static poster only - biggest TBT win
     if (reduce || narrow || lowEnd || saveData) {
       setFlowOk(false);
       return;
@@ -73,16 +72,16 @@ export function HeroLanding() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.06, duration: 0.45 }}
           >
-            SoSoValue × SoDEX · FlowSentinel
+            Built for SoSoValue traders
           </motion.p>
           <motion.h1
             initial={reduce ? false : { opacity: 0, y: 14 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.1, duration: 0.65, ease: [0.16, 1, 0.3, 1] }}
           >
-            Watch the flow.
+            Smarter crypto moves
             <br />
-            <span style={{ color: 'var(--accent-soft)' }}>Act with a gate.</span>
+            <span style={{ color: 'var(--accent-soft)' }}>from real market news.</span>
           </motion.h1>
           <motion.p
             className="hero-lede"
@@ -90,8 +89,8 @@ export function HeroLanding() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.18, duration: 0.5 }}
           >
-            A one-person fund desk: SoSoValue data becomes a daily thesis, a risk check you can read, and a
-            confirmed SoDEX testnet order, with an honest public track record.
+            FlowSentinel turns SoSoValue flows into a clear idea, a simple risk check, and a practice trade
+            you confirm yourself.
           </motion.p>
           <motion.div
             className="hero-cta-row"
@@ -100,13 +99,13 @@ export function HeroLanding() {
             transition={{ delay: 0.24, duration: 0.45 }}
           >
             <a className="btn btn-primary" href="#desk">
-              Open live desk
+              Open the desk
             </a>
             <a className="btn btn-ghost" href="/start">
               Get started
             </a>
             <a className="btn btn-ghost" href="/track-record">
-              Verify track record
+              See results
             </a>
           </motion.div>
           <motion.ul
@@ -116,26 +115,25 @@ export function HeroLanding() {
             transition={{ delay: 0.32, duration: 0.5 }}
           >
             <li>
-              <span className="proof-k">Orders</span>
-              <span className="proof-v">TESTNET LIVE EIP-712</span>
+              <span className="proof-k">Mode</span>
+              <span className="proof-v">Practice by default</span>
             </li>
             <li>
-              <span className="proof-k">Proof fills</span>
-              <span className="proof-v mono">1301909841 · 1301909840</span>
+              <span className="proof-k">Data</span>
+              <span className="proof-v">Powered by SoSoValue</span>
             </li>
             <li>
-              <span className="proof-k">Advisor</span>
-              <span className="proof-v">Gemini + SoSoValue cites</span>
+              <span className="proof-k">Trading</span>
+              <span className="proof-v">You confirm every order</span>
             </li>
             <li>
-              <span className="proof-k">Risk</span>
-              <span className="proof-v">Gate + confirm required</span>
+              <span className="proof-k">Proof</span>
+              <span className="proof-v">Public track record</span>
             </li>
           </motion.ul>
         </div>
 
         <div className="hero-visual">
-          {/* Static poster for LCP; swapped for live r3f after idle */}
           {!show3d || reduce ? <div className="hero-3d-poster" aria-hidden /> : null}
           {show3d && !reduce ? <HeroScene reduceMotion={false} /> : null}
         </div>

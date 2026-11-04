@@ -210,7 +210,7 @@ export function DayTraderDesk({ onPrefillTicket }: Props) {
 
       <h3 style={{ margin: '0 0 6px', letterSpacing: '-0.02em' }}>SoDEX chart skills</h3>
       <p style={{ margin: '0 0 14px', color: 'var(--text-muted)', fontSize: 13, maxWidth: 68 * 8 }}>
-        Chart skills for SoDEX + SoSoValue news. Paper by default. Prefills Builder Codes confirm only — never submits without your yes.
+        Chart skills for SoDEX + SoSoValue news. Paper by default. Prefills the confirm step only; never submits without your yes.
       </p>
 
       {error ? (
@@ -245,7 +245,7 @@ export function DayTraderDesk({ onPrefillTicket }: Props) {
                   {s.symbol} · {s.gateway}
                 </div>
                 <div className="tabular" style={{ fontSize: 20, fontWeight: 650 }}>
-                  {s.price ? `$${s.price.toLocaleString()}` : '—'}
+                  {s.price ? `$${s.price.toLocaleString()}` : '-'}
                 </div>
                 <div style={{ fontSize: 12, marginTop: 6 }}>
                   {s.labels.length ? s.labels.join(' · ') : 'No daily setup'}
@@ -328,7 +328,7 @@ export function DayTraderDesk({ onPrefillTicket }: Props) {
                 <p style={{ margin: '8px 0 0', fontSize: 12, color: 'var(--text-muted)' }}>
                   Past ORB: {data.focus.history.triggered}/{data.focus.history.sessions} fired ·{' '}
                   {data.focus.history.target} target · {data.focus.history.stop} stop · avg R{' '}
-                  {data.focus.history.avgR ?? '—'}
+                  {data.focus.history.avgR ?? '-'}
                 </p>
               ) : null}
             </div>

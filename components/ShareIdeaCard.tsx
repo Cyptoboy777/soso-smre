@@ -4,6 +4,13 @@ import { useMemo, useState } from 'react';
 import { buildShareUrl, readStoredRef } from '@/lib/referral';
 import { useLocale } from './LocaleProvider';
 
+function directionLabel(side?: string): string {
+  if (side === 'LONG') return 'Bullish';
+  if (side === 'SHORT') return 'Bearish';
+  if (side === 'FLAT') return 'Neutral';
+  return side ?? 'Idea';
+}
+
 type Props = {
   ideaId?: string;
   headline: string;
@@ -55,7 +62,7 @@ export function ShareIdeaCard({
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
         <strong style={{ letterSpacing: '-0.02em' }}>{t.shareTitle}</strong>
         <span className="badge" style={{ color: 'var(--accent-soft)', borderColor: 'rgba(255,79,32,0.35)' }}>
-          {side ?? 'IDEA'} {symbol ?? ''}
+          {directionLabel(side)}{symbol ? ` · ${symbol.replace(/v/g, '').replace('_', '/')}` : ''}
         </span>
       </div>
       <p style={{ margin: 0, color: 'var(--text)', fontSize: 15 }}>{headline}</p>
