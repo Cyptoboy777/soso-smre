@@ -3,6 +3,7 @@ import { getBuilderConfig, type SodexNetworkLabel } from "@/lib/sodex-builder";
 import { relayUserSpotOrder } from "@/lib/sodex-wallet-trade";
 import { recordRoutedOrder } from "@/lib/builder-metrics";
 import { clientIp, rejectIfRateLimited } from "@/lib/request-guard";
+import { jsonPublicError, logServerError, publicErrorMessage } from "@/lib/public-errors";
 
 export const dynamic = "force-dynamic";
 
@@ -12,7 +13,7 @@ export async function POST(req: Request) {
     `builder-order-relay:${ip}`,
     12,
     60 * 60_000,
-    "Rate limit: order relay",
+    "Too many requests. Please wait a minute and try again.",
   );
   if (limited) return limited;
 
@@ -28,16 +29,16 @@ export async function POST(req: Request) {
   };
 
   if (!body.confirmed) {
-    return NextResponse.json({ error: "Explicit confirmation required" }, { status: 400 });
+    return NextResponse.json({ error: "Please confirm the details before continuing." }, { status: 400 });
   }
 
   const userAddress = (body.userAddress ?? "").trim().toLowerCase();
   if (!/^0x[0-9a-f]{40}$/.test(userAddress)) {
-    return NextResponse.json({ error: "Valid userAddress required" }, { status: 400 });
+    return NextResponse.json({ error: "Connect a valid wallet to continue." }, { status: 400 });
   }
   if (!body.params || !body.nonce || !body.signature) {
     return NextResponse.json(
-      { error: "params, nonce, signature required" },
+      { error: "Something is missing from the order request. Please try again." },
       { status: 400 },
     );
   }
@@ -45,8 +46,12 @@ export async function POST(req: Request) {
   const network = body.network === "mainnet" ? "mainnet" : "testnet";
   if (network === "mainnet") {
     if (!cfg.builderId || !cfg.mainnetTradingEnabled) {
+      logServerError("relay-order", "mainnet relay refused");
       return NextResponse.json(
-        { error: "Mainnet trading blocked by kill switch / missing Builder ID" },
+        {
+          error:
+            "Live trading is not available right now. You can keep practicing on the practice network.",
+        },
         { status: 403 },
       );
     }
@@ -56,14 +61,16 @@ export async function POST(req: Request) {
   const b = body.params.builder as { id?: number; fee?: number } | undefined;
   if (cfg.builderId != null) {
     if (!b || b.id !== cfg.builderId) {
+      logServerError("relay-order", "builder id mismatch on order");
       return NextResponse.json(
-        { error: "Order builder.id must match SODEX_BUILDER_ID" },
+        { error: "This order could not be verified. Please try again." },
         { status: 400 },
       );
     }
   } else if (b) {
+    logServerError("relay-order", "unexpected builder tag");
     return NextResponse.json(
-      { error: "Unexpected builder on order while SODEX_BUILDER_ID unset" },
+      { error: "This order could not be verified. Please try again." },
       { status: 400 },
     );
   }
@@ -77,14 +84,16 @@ export async function POST(req: Request) {
   });
 
   if (!result.ok) {
-    return NextResponse.json({ error: result.error }, { status: 502 });
+    logServerError("relay-order", result.error);
+    return NextResponse.json(
+      { error: publicErrorMessage(result.error) },
+      { status: 502 },
+    );
   }
 
   recordRoutedOrder(userAddress);
   return NextResponse.json({
     ok: true,
-    raw: result.raw,
-    network,
-    builderId: cfg.builderId,
+    mode: network === "mainnet" && cfg.mainnetTradingEnabled ? "live" : "practice",
   });
 }

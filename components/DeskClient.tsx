@@ -35,6 +35,10 @@ const DayTraderDesk = dynamic(() => import('./DayTraderDesk').then((m) => m.DayT
   loading: () => <div className="panel" style={{ padding: 24, minHeight: 160 }} aria-busy>Loading day-trader desk…</div>,
 });
 
+const ShareIdeaCard = dynamic(() => import('./ShareIdeaCard').then((m) => m.ShareIdeaCard), {
+  ssr: false,
+});
+
 type DeskPayload = DeskSnapshot & {
   keys: { sosovalue: boolean; gemini: boolean; sodex: boolean };
   trackId?: string;
@@ -158,7 +162,7 @@ export function DeskClient() {
     <div style={{ display: 'grid', gap: 20 }}>
       <div className="desk-mode-row" role="status">
         <span className={`mode-pill ${data.keys.sodex ? 'live' : 'sim'}`}>
-          Orders: {data.keys.sodex ? 'TESTNET LIVE READY' : 'DRY-RUN SIMULATED'}
+          Orders: {data.keys.sodex ? 'Practice ready' : 'Practice demo'}
         </span>
         <span className={`mode-pill ${data.keys.gemini ? 'live' : 'sim'}`}>
           Advisor: {data.keys.gemini ? 'Gemini' : 'Rules'}
@@ -227,6 +231,21 @@ export function DeskClient() {
                 {thesis.horizonHours}h
               </div>
             </div>
+          </div>
+
+          <div style={{ marginTop: 16 }}>
+            <ShareIdeaCard
+              ideaId={thesis.id}
+              headline={
+                thesis.side === 'FLAT'
+                  ? 'Stand aside today'
+                  : `${thesis.side} ${thesis.symbol.replace(/v/g, '').replace('_', '/')}`
+              }
+              side={thesis.side}
+              symbol={thesis.symbol}
+              confidence={thesis.confidence}
+              body={thesis.plainEnglish}
+            />
           </div>
         </div>
         <div
@@ -349,7 +368,7 @@ export function DeskClient() {
         </div>
         <div className="panel-body" style={{ display: 'flex', gap: 20, flexWrap: 'wrap', fontSize: 13 }}>
           {market.tickers.length === 0 ? (
-            <EmptyPanel title="No tickers" body="Public SoDEX tickers will appear when the gateway responds." />
+            <EmptyPanel title="No tickers" body="Market tickers will appear when the feed is available." />
           ) : (
             market.tickers.slice(0, 4).map((t) => (
               <div key={t.symbol}>
@@ -414,7 +433,7 @@ export function DeskClient() {
           </p>
           {!keys.sodex && (
             <p className="badge fallback" style={{ marginBottom: 12, display: 'inline-flex' }}>
-              SoDEX testnet keys absent → labelled DRY-RUN (no live order; no mainnet)
+              Practice mode when live trading keys are not connected
             </p>
           )}
           <label
@@ -443,7 +462,7 @@ export function DeskClient() {
               disabled={!risk.approved || !confirming || busy || thesis.side === 'FLAT'}
               onClick={() => void execute()}
             >
-              {busy ? 'Submitting…' : keys.sodex ? 'Place SoDEX testnet order' : 'Run labelled DRY-RUN order'}
+              {busy ? 'Submitting…' : keys.sodex ? 'Place practice order' : 'Run practice demo order'}
             </button>
             <button className="btn" onClick={() => void load()} disabled={busy}>
               Refresh thesis
@@ -463,7 +482,7 @@ export function DeskClient() {
               }}
             >
               <div style={{ fontWeight: 560, marginBottom: 4 }}>
-                {order.mode === 'dry-run' ? 'DRY-RUN result (nothing submitted)' : 'Testnet order result'} · {order.status}
+                {order.mode === 'dry-run' ? 'Practice demo result' : 'Practice order result'} · {order.status}
               </div>
               <div className="tabular">ID {order.orderId}</div>
               <div style={{ color: 'var(--text-muted)', marginTop: 6 }}>{order.note}</div>

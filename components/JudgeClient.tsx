@@ -104,8 +104,8 @@ export function JudgeClient() {
 
   const modeLabel = useMemo(() => {
     if (!desk) return '…';
-    if (order) return order.mode === 'live' ? 'TESTNET LIVE (EIP-712)' : 'DRY-RUN SIMULATED';
-    return desk.keys.sodex ? 'TESTNET READY' : 'DRY-RUN (no trade keys)';
+    if (order) return order.mode === 'live' ? 'Practice live' : 'Practice demo';
+    return desk.keys.sodex ? 'Practice ready' : 'Practice demo';
   }, [desk, order]);
 
   return (
@@ -245,7 +245,7 @@ export function JudgeClient() {
                   <div className="judge-receipt">
                     <p>
                       <span className={`mode-pill ${order.mode === 'live' ? 'live' : 'sim'}`}>
-                        {order.mode === 'live' ? 'TESTNET LIVE' : 'DRY-RUN SIMULATED'}
+                        {order.mode === 'live' ? 'Practice live' : 'Practice demo'}
                       </span>
                     </p>
                     <p className="tabular">

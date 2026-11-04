@@ -47,10 +47,27 @@ export type BuilderConfig = {
   maxNotionalUsdc: number;
   /** True when Builder ID is set and we may tag orders. */
   builderReady: boolean;
-  /** Human fee strings for UI. */
+  /** Human fee strings (internal/tests). */
   feeLabel: string;
   maxApprovalLabel: string;
+  /** Plain percent strings for user copy. */
+  appFeePercent: string;
+  maxApprovalPercent: string;
+  /** Server-only; keep empty for public payloads. */
   notes: string[];
+  /** Mainnet constants for UI / dry-run readiness (never implies submits are live). */
+  mainnet: {
+    chainId: number;
+    gateway: string;
+    readyWhenEnabled: boolean;
+  };
+  /** Shown whenever the selected network is mainnet or a mainnet dry-run is prepared. */
+  realFundsWarning: string;
+  feeDisclosure: {
+    perpsBothSides: string;
+    spotBuyExempt: string;
+    caps: string;
+  };
 };
 
 function parsePositiveInt(raw: string | undefined): number | null {
@@ -76,11 +93,18 @@ function envFlagOn(name: string): boolean {
   return v === "1" || v === "true" || v === "yes" || v === "on";
 }
 
-/** Format tenths-of-bp as human percent / bp. */
+/** Format tenths-of-bp as human percent / bp (internal / tests). */
 export function formatTenthsOfBp(tenths: number): string {
   const bp = tenths / 10;
   const pct = tenths / 1000; // 10 tenths = 1 bp = 0.01%
   return `${bp} bp (${pct.toFixed(pct < 0.01 ? 3 : 2)}%)`;
+}
+
+/** Plain percent for user-facing app fee copy, e.g. 0.01%. */
+export function formatAppFeePercent(tenths: number): string {
+  const pct = tenths / 1000;
+  const digits = pct < 0.01 ? 3 : pct < 0.1 ? 2 : 2;
+  return `${pct.toFixed(digits)}%`;
 }
 
 /**
@@ -102,27 +126,15 @@ export function getBuilderConfig(): BuilderConfig {
     parseNonNegInt(process.env.SODEX_MAX_NOTIONAL_USDC, 10),
   );
 
-  const notes: string[] = [];
   let network: SodexNetworkLabel = "testnet";
-
-  if (!builderId) {
-    notes.push(
-      "SODEX_BUILDER_ID is not set. Orders stay on testnet / dry-run and are not tagged with a builder fee.",
-    );
-  } else if (!mainnetTradingEnabled) {
-    notes.push(
-      "SODEX_MAINNET_TRADING is off (kill switch). Mainnet submits are refused; testnet / dry-run only.",
-    );
-  } else {
+  if (builderId && mainnetTradingEnabled) {
     network = "mainnet";
-    notes.push(
-      "Mainnet trading kill switch is ON. Users must connect their own wallet, approve the builder fee, and confirm every order.",
-    );
   }
 
-  notes.push(
-    "Spot builder fees do not apply to the buying side of spot trades (SoDEX docs). Perps apply on both sides.",
-  );
+  const readyWhenEnabled =
+    builderId != null && maxApproval > 0 && builderFee > 0 && maxNotionalUsdc > 0;
+  const appFeePercent = formatAppFeePercent(builderFee);
+  const maxApprovalPercent = formatAppFeePercent(maxApproval);
 
   return {
     builderId,
@@ -134,7 +146,24 @@ export function getBuilderConfig(): BuilderConfig {
     builderReady: builderId != null,
     feeLabel: formatTenthsOfBp(builderFee),
     maxApprovalLabel: formatTenthsOfBp(maxApproval),
-    notes,
+    appFeePercent,
+    maxApprovalPercent,
+    /** Server-only diagnostics — never send this array to public clients. */
+    notes: [],
+    mainnet: {
+      chainId: SODEX_NETWORK.mainnet.chainId,
+      gateway: SODEX_NETWORK.mainnet.gateway,
+      readyWhenEnabled,
+    },
+    realFundsWarning:
+      "You are about to use real funds. FlowSentinel never holds your keys. Every order needs your wallet signature and an explicit confirm. Order size is capped.",
+    feeDisclosure: {
+      perpsBothSides:
+        "On perps, the app fee can apply on both buy and sell fills.",
+      spotBuyExempt:
+        "On spot buys, no app fee applies. Spot sells may include the app fee.",
+      caps: `Includes a ${appFeePercent} app fee (you approve up to ${maxApprovalPercent}).`,
+    },
   };
 }
 
@@ -249,15 +278,35 @@ export function buildSpotExchangeTypedData(opts: {
 export function assertTradingAllowed(opts: {
   network: SodexNetworkLabel;
   confirmed: boolean;
+  /** When true, allow preparing mainnet typed data while kill switch is off. Never allows relay. */
+  dryRun?: boolean;
+}): string | null {
+  if (!opts.confirmed && !opts.dryRun) return "Explicit user confirmation required";
+  const cfg = getBuilderConfig();
+  if (opts.network === "mainnet") {
+    if (!cfg.builderId) {
+      return "Live trading is not available right now";
+    }
+    if (!cfg.mainnetTradingEnabled && !opts.dryRun) {
+      return "Live trading is not available right now";
+    }
+  }
+  return null;
+}
+
+/** Relay gate: dry-run never bypasses the kill switch. */
+export function assertRelayAllowed(opts: {
+  network: SodexNetworkLabel;
+  confirmed: boolean;
 }): string | null {
   if (!opts.confirmed) return "Explicit user confirmation required";
   const cfg = getBuilderConfig();
   if (opts.network === "mainnet") {
     if (!cfg.builderId) {
-      return "Mainnet trading blocked: SODEX_BUILDER_ID is not set";
+      return "Live trading is not available right now";
     }
     if (!cfg.mainnetTradingEnabled) {
-      return "Mainnet trading blocked: SODEX_MAINNET_TRADING kill switch is off";
+      return "Live trading is not available right now";
     }
   }
   return null;

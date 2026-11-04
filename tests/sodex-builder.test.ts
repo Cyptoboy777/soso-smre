@@ -4,6 +4,8 @@ import {
   assertTradingAllowed,
   buildApproveBuilderFeeTypedData,
   formatTenthsOfBp,
+  formatAppFeePercent,
+  assertRelayAllowed,
   getBuilderConfig,
   withBatchBuilder,
 } from '@/lib/sodex-builder';
@@ -73,9 +75,9 @@ describe('sodex-builder config gates', () => {
   it('blocks mainnet without builder / kill switch', () => {
     setEnv('SODEX_BUILDER_ID', undefined);
     setEnv('SODEX_MAINNET_TRADING', '0');
-    expect(assertTradingAllowed({ network: 'mainnet', confirmed: true })).toMatch(/BUILDER_ID/);
+    expect(assertTradingAllowed({ network: 'mainnet', confirmed: true })).toMatch(/not available/i);
     setEnv('SODEX_BUILDER_ID', '1');
-    expect(assertTradingAllowed({ network: 'mainnet', confirmed: true })).toMatch(/kill switch/);
+    expect(assertTradingAllowed({ network: 'mainnet', confirmed: true })).toMatch(/not available/i);
     expect(assertTradingAllowed({ network: 'testnet', confirmed: false })).toMatch(/confirmation/);
     expect(assertTradingAllowed({ network: 'testnet', confirmed: true })).toBeNull();
   });
@@ -84,8 +86,31 @@ describe('sodex-builder config gates', () => {
     expect(formatTenthsOfBp(10)).toBe('1 bp (0.01%)');
     expect(formatTenthsOfBp(200)).toBe('20 bp (0.20%)');
     expect(formatTenthsOfBp(2000)).toBe('200 bp (2.00%)');
+    expect(formatAppFeePercent(10)).toBe('0.01%');
     expect(BUILDER_FEE_CAPS.spot).toBe(2000);
     expect(BUILDER_FEE_CAPS.perps).toBe(200);
+  });
+
+  it('exposes plain app fee fields without requiring notes', () => {
+    setEnv('SODEX_BUILDER_ID', '2674');
+    setEnv('SODEX_BUILDER_FEE', '10');
+    setEnv('SODEX_MAINNET_TRADING', '0');
+    const cfg = getBuilderConfig();
+    expect(cfg.appFeePercent).toBe('0.01%');
+    expect(cfg.feeDisclosure.caps).toMatch(/Includes a 0\.01% app fee/);
+    expect(cfg.network).toBe('testnet');
+    expect(cfg.mainnet.chainId).toBe(286623);
+  });
+
+  it('allows mainnet dry-run prepare but never relay when disabled', () => {
+    setEnv('SODEX_BUILDER_ID', '2674');
+    setEnv('SODEX_MAINNET_TRADING', '0');
+    expect(
+      assertTradingAllowed({ network: 'mainnet', confirmed: true, dryRun: true }),
+    ).toBeNull();
+    expect(
+      assertRelayAllowed({ network: 'mainnet', confirmed: true }),
+    ).toMatch(/not available/i);
   });
 });
 
@@ -121,7 +146,7 @@ describe('ApproveBuilderFee typed data', () => {
     const td = buildApproveBuilderFeeTypedData({
       network: 'testnet',
       apiChain: 138565,
-      nonce: 1000n,
+      nonce: BigInt(1000),
       accountId: 7,
       builderId: 456,
       maxFeeRate: 50,

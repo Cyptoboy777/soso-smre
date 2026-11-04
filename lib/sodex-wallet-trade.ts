@@ -8,6 +8,7 @@
  */
 import { keccak256, toHex, type Hex } from "viem";
 import {
+  assertRelayAllowed,
   assertTradingAllowed,
   buildApproveBuilderFeeTypedData,
   buildSpotExchangeTypedData,
@@ -113,7 +114,7 @@ export function prepareBuilderApproval(opts: {
 }): PreparedApproval {
   const cfg = getBuilderConfig();
   if (!cfg.builderId) {
-    throw new Error("SODEX_BUILDER_ID is not set — cannot prepare builder approval");
+    throw new Error("App fee approval is not available right now");
   }
   const network = opts.network ?? cfg.network;
   const maxFeeRate = Math.min(
@@ -225,7 +226,12 @@ export type PreparedOrder = {
     price?: string;
     maxNotionalUsdc: number;
     network: SodexNetworkLabel;
+    chainId: number;
+    gateway: string;
   };
+  dryRun: boolean;
+  realFundsWarning: string | null;
+  feeEngineNotes: string[];
 };
 
 export function prepareUserSpotOrder(opts: {
@@ -239,10 +245,14 @@ export function prepareUserSpotOrder(opts: {
   price?: string;
   clientOrderId?: string;
   confirmed: boolean;
+  /** Build mainnet typed data without enabling relay (kill switch still blocks submit). */
+  dryRun?: boolean;
 }): PreparedOrder {
+  const dryRun = Boolean(opts.dryRun);
   const blocked = assertTradingAllowed({
     network: opts.network,
     confirmed: opts.confirmed,
+    dryRun,
   });
   if (blocked) throw new Error(blocked);
 
@@ -274,6 +284,21 @@ export function prepareUserSpotOrder(opts: {
     nonce,
   });
 
+  const feeEngineNotes = [
+    cfg.feeDisclosure.perpsBothSides,
+    cfg.feeDisclosure.spotBuyExempt,
+    cfg.feeDisclosure.caps,
+  ];
+  if (opts.side === "buy") {
+    feeEngineNotes.unshift(
+      "This is a spot buy: no app fee applies on the buying side.",
+    );
+  } else {
+    feeEngineNotes.unshift(
+      "This is a spot sell: an app fee may apply up to your approval.",
+    );
+  }
+
   return {
     network: opts.network,
     signType: "batchNewOrder",
@@ -287,10 +312,9 @@ export function prepareUserSpotOrder(opts: {
       builderId: builder?.id ?? null,
       feeTenthsOfBp: builder?.fee ?? null,
       feeLabel: builder
-        ? `${builder.fee / 10} bp of fill notional (subject to your approval + engine cap)`
-        : "No builder fee (SODEX_BUILDER_ID unset)",
-      spotBuyNote:
-        "SoDEX: builder fees do not apply to the buying side of spot trades; they apply on spot sells and on both sides of perps.",
+        ? `Includes a ${cfg.appFeePercent} app fee`
+        : "No app fee on this order",
+      spotBuyNote: cfg.feeDisclosure.spotBuyExempt,
     },
     confirmSummary: {
       symbol: opts.symbol,
@@ -300,7 +324,13 @@ export function prepareUserSpotOrder(opts: {
       price: opts.price,
       maxNotionalUsdc: cfg.maxNotionalUsdc,
       network: opts.network,
+      chainId: networkChainId(opts.network),
+      gateway: spotApiBase(opts.network).replace(/\/api\/v1\/spot$/, ""),
     },
+    dryRun,
+    realFundsWarning:
+      opts.network === "mainnet" ? cfg.realFundsWarning : null,
+    feeEngineNotes,
   };
 }
 
@@ -317,7 +347,7 @@ export async function relayUserSpotOrder(opts: {
   /** Optional registered API key name; when set, signature must be from that key. */
   apiKeyName?: string;
 }): Promise<{ ok: true; raw: unknown } | { ok: false; error: string }> {
-  const blocked = assertTradingAllowed({
+  const blocked = assertRelayAllowed({
     network: opts.network,
     confirmed: true,
   });

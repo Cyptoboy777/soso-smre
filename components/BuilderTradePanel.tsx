@@ -10,22 +10,21 @@ import type { Thesis } from '@/types/flow';
 
 type BuilderConfigResp = {
   builderId: number | null;
+  appFeePercent: string;
+  maxApprovalPercent: string;
   builderFee: number;
-  feeLabel: string;
   maxApproval: number;
-  maxApprovalLabel: string;
-  mainnetTradingEnabled: boolean;
-  network: 'mainnet' | 'testnet';
   maxNotionalUsdc: number;
+  mode: 'live' | 'practice';
+  tradingLive: boolean;
   builderReady: boolean;
-  notes: string[];
-  metrics: {
-    ordersRouted: number;
-    uniqueWallets: number;
-    dryRuns: number;
-    lastOrderAt: string | null;
-    note: string;
+  feeLine: string;
+  feeDisclosure?: {
+    perpsBothSides: string;
+    spotBuyExempt: string;
+    caps: string;
   };
+  realFundsWarning: string | null;
 };
 
 type Props = {
@@ -59,11 +58,11 @@ export function BuilderTradePanel({ thesis, quantity }: Props) {
     setBusy(true);
     try {
       if (!hasInjectedWallet()) {
-        throw new Error('No browser wallet found.');
+        throw new Error('No browser wallet found. Install one to continue.');
       }
       const addr = await connectInjectedWallet();
       setAddress(addr);
-      const net = cfg?.network ?? 'testnet';
+      const net = cfg?.tradingLive ? 'mainnet' : 'testnet';
       const acc = await fetch(
         `/api/builder/account?address=${encodeURIComponent(addr)}&network=${net}`,
       );
@@ -72,22 +71,24 @@ export function BuilderTradePanel({ thesis, quantity }: Props) {
         error?: string;
         builders?: { data?: { spot?: Array<{ builderID: number }> } };
       };
-      if (!acc.ok) throw new Error(json.error ?? 'Account lookup failed');
+      if (!acc.ok) throw new Error(json.error ?? 'Could not load your account.');
       setAccountId(json.accountId ?? null);
       const ours = cfg?.builderId;
-      const spot = json.builders && typeof json.builders === 'object'
-        ? (json.builders as { data?: { spot?: Array<{ builderID: number }> } }).data?.spot
-        : undefined;
+      const spot =
+        json.builders && typeof json.builders === 'object'
+          ? (json.builders as { data?: { spot?: Array<{ builderID: number }> } }).data
+              ?.spot
+          : undefined;
       if (ours && Array.isArray(spot) && spot.some((b) => b.builderID === ours)) {
         setApproved(true);
       }
       setStatus(
         json.accountId
-          ? `Connected ${addr.slice(0, 6)}…${addr.slice(-4)} · account ${json.accountId}`
-          : `Connected ${addr.slice(0, 6)}…${addr.slice(-4)} · SoDEX account not activated yet`,
+          ? `Connected ${addr.slice(0, 6)}…${addr.slice(-4)}`
+          : `Connected ${addr.slice(0, 6)}…${addr.slice(-4)}. Activate your SoDEX account to trade.`,
       );
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(e instanceof Error ? e.message : 'Could not connect wallet.');
     } finally {
       setBusy(false);
     }
@@ -104,7 +105,7 @@ export function BuilderTradePanel({ thesis, quantity }: Props) {
         body: JSON.stringify({
           userAddress: address,
           accountId,
-          network: cfg.network,
+          network: cfg.tradingLive ? 'mainnet' : 'testnet',
           maxFeeRate: cfg.maxApproval,
         }),
       });
@@ -121,15 +122,14 @@ export function BuilderTradePanel({ thesis, quantity }: Props) {
           nonce: string;
           requestBody: { accountID: number; builderID: number; maxFeeRate: number };
           network: 'mainnet' | 'testnet';
-          maxFeeLabel: string;
         };
-        disclosure?: { note: string };
+        disclosure?: { maxFeeLabel?: string; note?: string };
       };
       if (!prep.ok || !prepJson.prepared) {
-        throw new Error(prepJson.error ?? 'Prepare approval failed');
+        throw new Error(prepJson.error ?? 'Could not prepare fee approval.');
       }
       setStatus(
-        `Approve max builder fee ${prepJson.prepared.maxFeeLabel} for Builder ID ${cfg.builderId}? Sign in your wallet…`,
+        `Approve up to ${cfg.maxApprovalPercent} app fee in your wallet…`,
       );
       const sig = await signTypedData(address, prepJson.prepared.typedData);
       const relay = await fetch('/api/builder/relay-approval', {
@@ -145,11 +145,11 @@ export function BuilderTradePanel({ thesis, quantity }: Props) {
         }),
       });
       const relayJson = (await relay.json()) as { error?: string };
-      if (!relay.ok) throw new Error(relayJson.error ?? 'Approval relay failed');
+      if (!relay.ok) throw new Error(relayJson.error ?? 'Approval failed.');
       setApproved(true);
-      setStatus('Builder fee approved on SoDEX (spot+perps). You can revoke later with maxFeeRate 0.');
+      setStatus('App fee approved. You can revoke it later from your SoDEX account.');
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(e instanceof Error ? e.message : 'Approval failed.');
     } finally {
       setBusy(false);
     }
@@ -158,7 +158,7 @@ export function BuilderTradePanel({ thesis, quantity }: Props) {
   async function submitUserOrder() {
     if (!address || !accountId || !cfg || !confirmOrder || !feeAck) return;
     if (thesis.side === 'FLAT') {
-      setError('FLAT thesis — nothing to submit');
+      setError('Nothing to submit for a flat thesis.');
       return;
     }
     setBusy(true);
@@ -171,7 +171,7 @@ export function BuilderTradePanel({ thesis, quantity }: Props) {
         body: JSON.stringify({
           userAddress: address,
           accountId,
-          network: cfg.network,
+          network: cfg.tradingLive ? 'mainnet' : 'testnet',
           symbol: thesis.symbol,
           side,
           type: 'limit',
@@ -193,14 +193,14 @@ export function BuilderTradePanel({ thesis, quantity }: Props) {
           nonce: string;
           network: 'mainnet' | 'testnet';
           feeDisclosure: { feeLabel: string; spotBuyNote: string };
-          confirmSummary: Record<string, unknown>;
         };
+        practiceOnly?: boolean;
       };
       if (!prep.ok || !prepJson.prepared) {
-        throw new Error(prepJson.error ?? 'Prepare order failed');
+        throw new Error(prepJson.error ?? 'Could not prepare the order.');
       }
       setStatus(
-        `Sign order · builder fee: ${prepJson.prepared.feeDisclosure.feeLabel}. ${prepJson.prepared.feeDisclosure.spotBuyNote}`,
+        `Sign order · ${prepJson.prepared.feeDisclosure.feeLabel}. ${prepJson.prepared.feeDisclosure.spotBuyNote}`,
       );
       const sig = await signTypedData(address, prepJson.prepared.typedData);
       const relay = await fetch('/api/builder/relay-order', {
@@ -216,46 +216,67 @@ export function BuilderTradePanel({ thesis, quantity }: Props) {
         }),
       });
       const relayJson = (await relay.json()) as { error?: string; ok?: boolean };
-      if (!relay.ok) throw new Error(relayJson.error ?? 'Order relay failed');
-      setStatus('Order relayed to SoDEX with your signature. Check your wallet account for fills.');
+      if (!relay.ok) throw new Error(relayJson.error ?? 'Order failed.');
+      setStatus(
+        prepJson.practiceOnly
+          ? 'Practice order submitted. Check your SoDEX account for status.'
+          : 'Order submitted. Check your SoDEX account for fills.',
+      );
       setConfirmOrder(false);
       setFeeAck(false);
       await loadCfg();
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(e instanceof Error ? e.message : 'Order failed.');
     } finally {
       setBusy(false);
     }
   }
 
+  const modeLabel = cfg?.tradingLive ? 'Live' : 'Practice';
+
   return (
-    <section className="panel" style={{ padding: 22 }} aria-label="Builder Codes trading">
+    <section className="panel" style={{ padding: 22 }} aria-label="Trade with your wallet">
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
         <span className="badge" style={{ color: 'var(--accent-soft)', borderColor: 'rgba(255,79,32,0.35)' }}>
-          Builder Codes
+          Wallet trade
         </span>
-        <span className={`badge ${cfg?.builderReady ? 'live' : 'fallback'}`}>
-          {cfg?.builderReady ? `Builder ID set · ${cfg.network}` : 'Builder ID missing · dry-run / testnet'}
-        </span>
-        <span className={`badge ${cfg?.mainnetTradingEnabled ? 'live' : 'fallback'}`}>
-          Mainnet kill switch: {cfg?.mainnetTradingEnabled ? 'ON' : 'OFF'}
-        </span>
+        <span className={`badge ${cfg?.tradingLive ? 'live' : 'fallback'}`}>{modeLabel}</span>
+        {cfg?.feeLine ? <span className="badge">{cfg.feeLine}</span> : null}
       </div>
       <h3 style={{ margin: '0 0 8px', letterSpacing: '-0.02em' }}>Trade with your wallet</h3>
       <p style={{ margin: '0 0 14px', color: 'var(--text-muted)', maxWidth: 62 * 8 }}>
-        Non-custodial: you connect and sign. FlowSentinel never holds your keys and never places a
-        mainnet order by itself. Builder fee (when configured):{' '}
-        <strong style={{ color: 'var(--text)' }}>{cfg?.feeLabel ?? '—'}</strong>. Cap per order:{' '}
-        {cfg?.maxNotionalUsdc ?? '—'} USDC.
+        Non-custodial: you connect and sign. FlowSentinel never holds your keys.
+        Cap per order: {cfg?.maxNotionalUsdc ?? '—'} USDC.
       </p>
 
-      {cfg?.notes?.length ? (
-        <ul style={{ margin: '0 0 14px', paddingLeft: 18, color: 'var(--text-muted)', fontSize: 13 }}>
-          {cfg.notes.map((n) => (
-            <li key={n.slice(0, 48)}>{n}</li>
-          ))}
-        </ul>
+      {cfg?.feeDisclosure ? (
+        <div
+          className="panel"
+          style={{
+            margin: '0 0 14px',
+            padding: 12,
+            fontSize: 13,
+            color: 'var(--text-muted)',
+            display: 'grid',
+            gap: 6,
+          }}
+        >
+          <strong style={{ color: 'var(--text)' }}>{cfg.feeDisclosure.caps}</strong>
+          <span>{cfg.feeDisclosure.perpsBothSides}</span>
+          <span>{cfg.feeDisclosure.spotBuyExempt}</span>
+        </div>
       ) : null}
+
+      {cfg?.realFundsWarning ? (
+        <p style={{ margin: '0 0 14px', fontSize: 13, color: '#fbbf24' }} role="status">
+          {cfg.realFundsWarning}
+        </p>
+      ) : (
+        <p style={{ margin: '0 0 14px', fontSize: 13, color: 'var(--text-muted)' }}>
+          Practice mode uses the SoDEX practice network. No live funds move from this panel until live
+          trading is turned on.
+        </p>
+      )}
 
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 12 }}>
         <button className="btn btn-primary" type="button" disabled={busy} onClick={() => void connect()}>
@@ -267,7 +288,7 @@ export function BuilderTradePanel({ thesis, quantity }: Props) {
           disabled={busy || !address || !accountId || !cfg?.builderId || approved}
           onClick={() => void approveBuilder()}
         >
-          {approved ? 'Builder approved' : `Approve builder (max ${cfg?.maxApprovalLabel ?? '—'})`}
+          {approved ? 'App fee approved' : `Approve app fee (max ${cfg?.maxApprovalPercent ?? '—'})`}
         </button>
       </div>
 
@@ -291,15 +312,10 @@ export function BuilderTradePanel({ thesis, quantity }: Props) {
         }}
       >
         <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start', fontSize: 13 }}>
-          <input
-            type="checkbox"
-            checked={feeAck}
-            onChange={(e) => setFeeAck(e.target.checked)}
-          />
+          <input type="checkbox" checked={feeAck} onChange={(e) => setFeeAck(e.target.checked)} />
           <span>
-            I understand the builder fee is up to <strong>{cfg?.feeLabel ?? '—'}</strong> of eligible
-            fill notional (subject to my approval and SoDEX caps), and that spot buys do not pay
-            builder fees per SoDEX docs.
+            I understand this {cfg?.feeLine ?? 'Includes an app fee'}. Spot buys pay no app fee. Perps
+            can charge on both sides.
           </span>
         </label>
         <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start', fontSize: 13 }}>
@@ -309,9 +325,8 @@ export function BuilderTradePanel({ thesis, quantity }: Props) {
             onChange={(e) => setConfirmOrder(e.target.checked)}
           />
           <span>
-            I confirm this order ticket: {thesis.side} {thesis.symbol} qty≈{quantity.toPrecision(6)} @{' '}
-            {thesis.entry} on <strong>{cfg?.network}</strong>. JARVIS/advisor never submits — only I
-            do.
+            I confirm this order: {thesis.side} {thesis.symbol} qty≈{quantity.toPrecision(6)} @{' '}
+            {thesis.entry} ({modeLabel}). Only I submit — the advisor never does.
           </span>
         </label>
         <button
@@ -324,21 +339,13 @@ export function BuilderTradePanel({ thesis, quantity }: Props) {
             !confirmOrder ||
             !feeAck ||
             thesis.side === 'FLAT' ||
-            (cfg?.network === 'mainnet' && (!cfg.builderReady || !cfg.mainnetTradingEnabled))
+            !cfg?.builderReady
           }
           onClick={() => void submitUserOrder()}
         >
-          Sign &amp; relay order
+          Sign and submit order
         </button>
       </div>
-
-      {cfg?.metrics ? (
-        <p style={{ margin: '14px 0 0', fontSize: 12, color: 'var(--text-muted)' }}>
-          Race metrics (this deploy only): {cfg.metrics.ordersRouted} orders routed ·{' '}
-          {cfg.metrics.uniqueWallets} unique wallets · {cfg.metrics.dryRuns} dry-runs.{' '}
-          {cfg.metrics.note}
-        </p>
-      ) : null}
     </section>
   );
 }

@@ -1,23 +1,30 @@
 import { NextResponse } from "next/server";
 import { getBuilderConfig } from "@/lib/sodex-builder";
-import { readBuilderMetrics } from "@/lib/builder-metrics";
+import { getBuilderOwnerAddress } from "@/lib/sodex-builder-fee-stats";
 
 export const dynamic = "force-dynamic";
 
-/** Public builder race config — never returns private keys. */
+/**
+ * Public client config only. No env names, notes, gateways, or metrics dumps.
+ */
 export async function GET() {
   const cfg = getBuilderConfig();
+  const live = cfg.network === "mainnet" && cfg.mainnetTradingEnabled;
   return NextResponse.json({
     builderId: cfg.builderId,
+    appFeePercent: cfg.appFeePercent,
+    maxApprovalPercent: cfg.maxApprovalPercent,
+    /** Requested fee in tenths-of-bp for signing payloads only. */
     builderFee: cfg.builderFee,
-    feeLabel: cfg.feeLabel,
     maxApproval: cfg.maxApproval,
-    maxApprovalLabel: cfg.maxApprovalLabel,
-    mainnetTradingEnabled: cfg.mainnetTradingEnabled,
-    network: cfg.network,
     maxNotionalUsdc: cfg.maxNotionalUsdc,
+    /** practice = testnet / non-live; live = real funds path enabled */
+    mode: live ? "live" : "practice",
+    tradingLive: live,
     builderReady: cfg.builderReady,
-    notes: cfg.notes,
-    metrics: readBuilderMetrics(),
+    feeLine: `Includes a ${cfg.appFeePercent} app fee`,
+    feeDisclosure: cfg.feeDisclosure,
+    realFundsWarning: live ? cfg.realFundsWarning : null,
+    statsAvailable: getBuilderOwnerAddress() != null && cfg.builderId != null,
   });
 }

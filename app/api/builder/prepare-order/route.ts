@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
 import { getBuilderConfig, clampNotional, type SodexNetworkLabel } from "@/lib/sodex-builder";
-import { prepareUserSpotOrder } from "@/lib/sodex-wallet-trade";
-import { resolveSymbolIdOnNetwork } from "@/lib/sodex-wallet-trade";
+import { prepareUserSpotOrder, resolveSymbolIdOnNetwork } from "@/lib/sodex-wallet-trade";
 import { isAllowedTradeSymbol } from "@/lib/trade-guard";
 import { clientIp, rejectIfRateLimited } from "@/lib/request-guard";
+import { jsonPublicError, logServerError } from "@/lib/public-errors";
 
 export const dynamic = "force-dynamic";
 
@@ -13,12 +13,12 @@ export async function POST(req: Request) {
     `builder-order-prep:${ip}`,
     40,
     60 * 60_000,
-    "Rate limit: order prepare",
+    "Too many requests. Please wait a minute and try again.",
   );
   if (limited) return limited;
 
   const cfg = getBuilderConfig();
-  const body = (await req.json()) as {
+  let body: {
     userAddress?: string;
     accountId?: number;
     network?: SodexNetworkLabel;
@@ -28,27 +28,44 @@ export async function POST(req: Request) {
     quantity?: string | number;
     price?: string | number;
     confirmed?: boolean;
+    dryRun?: boolean;
   };
+  try {
+    body = (await req.json()) as typeof body;
+  } catch (e) {
+    const { body: b, status } = jsonPublicError("prepare-order", e);
+    return NextResponse.json(b, { status });
+  }
 
-  if (!body.confirmed) {
+  const dryRun = Boolean(body.dryRun);
+  if (!body.confirmed && !dryRun) {
     return NextResponse.json(
-      { error: "Explicit confirmation required to prepare a live ticket" },
+      { error: "Please confirm the details before continuing." },
       { status: 400 },
     );
   }
 
   const userAddress = (body.userAddress ?? "").trim().toLowerCase();
   if (!/^0x[0-9a-f]{40}$/.test(userAddress)) {
-    return NextResponse.json({ error: "Valid userAddress required" }, { status: 400 });
+    return NextResponse.json(
+      { error: "Connect a valid wallet to continue." },
+      { status: 400 },
+    );
   }
   const accountId = Number(body.accountId);
   if (!Number.isSafeInteger(accountId) || accountId <= 0) {
-    return NextResponse.json({ error: "Valid accountId required" }, { status: 400 });
+    return NextResponse.json(
+      { error: "Your trading account is not ready yet." },
+      { status: 400 },
+    );
   }
 
   const symbol = String(body.symbol ?? "").trim();
   if (!isAllowedTradeSymbol(symbol)) {
-    return NextResponse.json({ error: "Symbol not allowlisted" }, { status: 400 });
+    return NextResponse.json(
+      { error: "That market is not available here." },
+      { status: 400 },
+    );
   }
 
   const side = body.side === "sell" ? "sell" : "buy";
@@ -58,7 +75,7 @@ export async function POST(req: Request) {
   const qtyNum = Number(quantity);
   const priceNum = price != null ? Number(price) : 0;
   if (!Number.isFinite(qtyNum) || qtyNum <= 0) {
-    return NextResponse.json({ error: "Invalid quantity" }, { status: 400 });
+    return NextResponse.json({ error: "Enter a valid size." }, { status: 400 });
   }
   if (type === "limit") {
     const notional = qtyNum * priceNum;
@@ -67,7 +84,6 @@ export async function POST(req: Request) {
       quantity = String(capped / priceNum);
     }
   } else if (side === "buy") {
-    // market buy: quantity is quote funds
     quantity = String(clampNotional(qtyNum));
   }
 
@@ -79,10 +95,24 @@ export async function POST(req: Request) {
         : cfg.network;
 
   try {
+    if (network === "mainnet" && !cfg.mainnetTradingEnabled && !dryRun) {
+      logServerError(
+        "prepare-order",
+        "mainnet live prepare refused (trading not enabled)",
+      );
+      return NextResponse.json(
+        {
+          error:
+            "Live trading is not available right now. You can keep practicing on the practice network.",
+        },
+        { status: 403 },
+      );
+    }
+
     const symbolId = await resolveSymbolIdOnNetwork(network, symbol);
     if (symbolId == null) {
       return NextResponse.json(
-        { error: `Unknown symbol on ${network}: ${symbol}` },
+        { error: "That market is not available right now." },
         { status: 400 },
       );
     }
@@ -95,18 +125,51 @@ export async function POST(req: Request) {
       type,
       quantity,
       price: type === "limit" ? price : undefined,
-      confirmed: true,
+      confirmed: Boolean(body.confirmed) || dryRun,
+      dryRun: dryRun || (network === "mainnet" && !cfg.mainnetTradingEnabled),
     });
+
+    // Strip internal fields from client payload
+    const {
+      endpoint: _endpoint,
+      dryRun: isDry,
+      realFundsWarning,
+      feeEngineNotes,
+      feeDisclosure,
+      confirmSummary,
+      ...signable
+    } = prepared;
+    void _endpoint;
+
     return NextResponse.json({
-      prepared,
+      prepared: {
+        ...signable,
+        feeDisclosure: {
+          feeLabel: `Includes a ${cfg.appFeePercent} app fee`,
+          spotBuyNote: cfg.feeDisclosure.spotBuyExempt,
+        },
+        confirmSummary: {
+          symbol: confirmSummary.symbol,
+          side: confirmSummary.side,
+          type: confirmSummary.type,
+          quantity: confirmSummary.quantity,
+          price: confirmSummary.price,
+          maxNotionalUsdc: confirmSummary.maxNotionalUsdc,
+          mode: network === "mainnet" && cfg.mainnetTradingEnabled ? "live" : "practice",
+        },
+        feeNotes: feeEngineNotes,
+        realFundsWarning:
+          network === "mainnet" && cfg.mainnetTradingEnabled
+            ? realFundsWarning
+            : null,
+      },
       userAddress,
       mustConfirmAgain: true,
-      note: "Review fee disclosure, then sign ExchangeAction in your wallet. FlowSentinel relays only — it never submits without your signature.",
+      practiceOnly: isDry || !(network === "mainnet" && cfg.mainnetTradingEnabled),
+      note: "Review the fee, then sign in your wallet. FlowSentinel never holds your keys.",
     });
   } catch (e) {
-    return NextResponse.json(
-      { error: e instanceof Error ? e.message : String(e) },
-      { status: 400 },
-    );
+    const { body: b, status } = jsonPublicError("prepare-order", e);
+    return NextResponse.json(b, { status });
   }
 }

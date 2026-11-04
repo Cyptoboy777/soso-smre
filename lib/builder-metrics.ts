@@ -81,7 +81,7 @@ export function readBuilderMetrics(): Omit<BuilderMetricsSnapshot, "wallets"> & 
     uniqueWallets: s.wallets.length,
     dryRuns: s.dryRuns,
     lastOrderAt: s.lastOrderAt,
-    note: "Counts only FlowSentinel-relayed confirms on this deploy. Dry-runs are separate. Not SoDEX fee revenue.",
+    note: "Counts only confirmed orders relayed by this app. Not protocol fee revenue.",
   };
 }
 

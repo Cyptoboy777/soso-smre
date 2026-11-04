@@ -69,3 +69,8 @@ Rebuild as a single insight-to-action AI fund desk for the AKINDO SoSoValue buil
 ## Earlier waves
 
 Prior production site remains on the default branch / prior deploy for Waves 1–2 history. Wave 3 preview: https://flowsentinel-app.vercel.app
+
+## Builder Race v2
+- Public /stats, /start onboarding, i18n EN/ES/PT/ZH/FR, shareable idea links
+- Mainnet path production-ready behind tradingLive (still off)
+- Public APIs/UI scrubbed of env/debug internals

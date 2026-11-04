@@ -1,3 +1,4 @@
+import { logServerError, publicErrorMessage } from "@/lib/public-errors";
 import { NextResponse } from "next/server";
 import { getBuilderConfig, type SodexNetworkLabel } from "@/lib/sodex-builder";
 import { relayBuilderApproval } from "@/lib/sodex-wallet-trade";
@@ -11,14 +12,14 @@ export async function POST(req: Request) {
     `builder-approve-relay:${ip}`,
     20,
     60 * 60_000,
-    "Rate limit: builder approval relay",
+    "Too many requests. Please wait a minute and try again.",
   );
   if (limited) return limited;
 
   const cfg = getBuilderConfig();
   if (!cfg.builderId) {
     return NextResponse.json(
-      { error: "SODEX_BUILDER_ID is not set" },
+      { error: "App fee approval is not available right now." },
       { status: 400 },
     );
   }
@@ -36,17 +37,17 @@ export async function POST(req: Request) {
 
   const userAddress = (body.userAddress ?? "").trim().toLowerCase();
   if (!/^0x[0-9a-f]{40}$/.test(userAddress)) {
-    return NextResponse.json({ error: "Valid userAddress required" }, { status: 400 });
+    return NextResponse.json({ error: "Connect a valid wallet to continue." }, { status: 400 });
   }
   if (!body.signature || !body.nonce || body.apiChain == null) {
     return NextResponse.json(
-      { error: "signature, nonce, apiChain required" },
+      { error: "Something is missing from the approval request. Please try again." },
       { status: 400 },
     );
   }
   if (body.builderID !== cfg.builderId) {
     return NextResponse.json(
-      { error: "builderID must match server SODEX_BUILDER_ID" },
+      { error: "This approval could not be verified. Please try again." },
       { status: 400 },
     );
   }
@@ -54,7 +55,7 @@ export async function POST(req: Request) {
   const network = body.network === "mainnet" ? "mainnet" : "testnet";
   if (network === "mainnet" && !cfg.mainnetTradingEnabled) {
     return NextResponse.json(
-      { error: "Mainnet blocked: kill switch off" },
+      { error: "Live trading is not available right now. You can keep practicing on the practice network." },
       { status: 403 },
     );
   }
@@ -73,7 +74,8 @@ export async function POST(req: Request) {
   });
 
   if (!result.ok) {
-    return NextResponse.json({ error: result.error }, { status: 502 });
+    logServerError("relay-approval", result.error);
+    return NextResponse.json({ error: publicErrorMessage(result.error) }, { status: 502 });
   }
-  return NextResponse.json({ ok: true, raw: result.raw });
+  return NextResponse.json({ ok: true });
 }

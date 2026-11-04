@@ -31,6 +31,14 @@ const securityHeaders = [
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
+  poweredByHeader: false,
+  productionBrowserSourceMaps: false,
+  compiler: {
+    removeConsole:
+      process.env.NODE_ENV === "production"
+        ? { exclude: ["error"] }
+        : false,
+  },
   // Next 16 defaults to Turbopack; keep webpack aliases for ML WASM packages when --webpack is used.
   turbopack: {
     resolveAlias: {

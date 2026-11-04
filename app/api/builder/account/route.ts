@@ -24,7 +24,7 @@ export async function GET(req: Request) {
     return NextResponse.json(
       {
         error:
-          "Mainnet account queries for trading are blocked until SODEX_BUILDER_ID is set and SODEX_MAINNET_TRADING=1",
+          "Live trading is not available right now.",
         network,
       },
       { status: 403 },

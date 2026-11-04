@@ -6,9 +6,10 @@
     "dev": "node --no-experimental-webstorage ./node_modules/next/dist/bin/next dev --turbopack",
     "build": "node --no-experimental-webstorage ./node_modules/next/dist/bin/next build --webpack",
     "start": "node --no-experimental-webstorage ./node_modules/next/dist/bin/next start",
-    "lint": "next lint",
+    "lint": "tsc --noEmit",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@google/genai": "^1.0.0",
@@ -44,7 +45,7 @@
     "typescript": "^5.7.0",
     "vitest": "^3.0.0"
   },
-  "description": "FlowSentinel — AI one-person fund desk for SoSoValue Wave 3",
+  "description": "FlowSentinel \u2014 AI one-person fund desk for SoSoValue Wave 3",
   "allowScripts": {
     "sharp@0.34.5": true,
     "esbuild@0.28.2": true,
