@@ -317,7 +317,7 @@ export function DayTraderDesk({ onPrefillTicket }: Props) {
                     {(data.focus.timeMachine.pNeither * 100).toFixed(1)}% · avg R{' '}
                     {data.focus.timeMachine.avgR}
                   </div>
-                  <p style={{ margin: '8px 0 0', fontSize: 11, color: 'var(--text-faint)' }}>
+                  <p style={{ margin: '8px 0 0', fontSize: 11, color: 'var(--text-muted)' }}>
                     {data.focus.timeMachine.disclaimer}
                   </p>
                 </>
@@ -380,7 +380,7 @@ export function DayTraderDesk({ onPrefillTicket }: Props) {
                 Arm browser stop/target alerts
               </button>
             </div>
-            <p style={{ margin: '10px 0 0', fontSize: 11, color: 'var(--text-faint)' }}>
+            <p style={{ margin: '10px 0 0', fontSize: 11, color: 'var(--text-muted)' }}>
               SoSoValue/SoDEX colours · FlowSentinel never auto-submits.
             </p>
           </div>

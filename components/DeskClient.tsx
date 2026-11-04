@@ -482,7 +482,7 @@ export function DeskClient() {
               {error}
             </p>
           )}
-          <p style={{ margin: '14px 0 0', fontSize: 11, color: 'var(--text-faint)' }}>
+          <p style={{ margin: '14px 0 0', fontSize: 11, color: 'var(--text-muted)' }}>
             The assistant never places orders. You confirm every trade.
           </p>
         </div>
@@ -514,7 +514,7 @@ export function DeskClient() {
       <BuilderTradePanel thesis={thesis} quantity={risk.positionSize || 0} />
 
 
-      <p style={{ fontSize: 12, color: 'var(--text-faint)', margin: 0 }}>
+      <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: 0 }}>
         Practice desk · You confirm every order · Not financial advice
       </p>
     </div>

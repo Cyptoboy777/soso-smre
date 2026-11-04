@@ -166,7 +166,7 @@ export function BuilderStatsClient() {
       ) : null}
 
       {data?.fetchedAt ? (
-        <p style={{ margin: 0, fontSize: 11, color: 'var(--text-faint)' }}>
+        <p style={{ margin: 0, fontSize: 11, color: 'var(--text-muted)' }}>
           Updated {data.fetchedAt}
         </p>
       ) : null}

@@ -30,7 +30,7 @@
   --line-strong: rgba(255, 247, 237, 0.16);
   --text: #faf7f5;
   --text-muted: #a8a29e;
-  --text-faint: #78716c;
+  --text-faint: #a8a29e;
   --muted: var(--text-muted);
   --accent: #ff4f20;
   --accent-soft: #ff7637;
@@ -77,10 +77,10 @@ html.light {
   --accent-soft: #9a3412;
   --on-accent: #ffffff;
   --focus: #c03710;
-  --gain: #0f7a3e;
-  --loss: #c62828;
-  --success: #0f7a3e;
-  --danger: #c62828;
+  --gain: #0b6b36;
+  --loss: #9f1d1d;
+  --success: #0b6b36;
+  --danger: #9f1d1d;
   --warn: #9a3412;
   --orb-a: #ff4f20;
   --orb-b: #fd7537;
