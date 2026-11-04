@@ -2,11 +2,19 @@
 
 const REF_KEY = "fs_ref";
 const REF_RE = /^[a-zA-Z0-9_-]{2,64}$/;
+const IDEA_RE = /^[a-zA-Z0-9_-]{1,64}$/;
 
 export function normalizeRef(raw: string | null | undefined): string | null {
   if (!raw) return null;
   const t = raw.trim();
   if (!REF_RE.test(t)) return null;
+  return t;
+}
+
+export function normalizeIdeaId(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  const t = raw.trim().slice(0, 64);
+  if (!IDEA_RE.test(t)) return null;
   return t;
 }
 
@@ -39,7 +47,8 @@ export function buildShareUrl(opts: {
   ref?: string | null;
 }): string {
   const url = new URL(opts.path || "/", opts.origin);
-  if (opts.ideaId) url.searchParams.set("idea", opts.ideaId.slice(0, 64));
+  const idea = normalizeIdeaId(opts.ideaId ?? null);
+  if (idea) url.searchParams.set("idea", idea);
   const ref = normalizeRef(opts.ref ?? null);
   if (ref) url.searchParams.set("ref", ref);
   return url.toString();

@@ -66,7 +66,7 @@ export default function DemoPage() {
             <strong style={{ color: 'var(--text)' }}>GEMINI_API_KEY:</strong> LLM thesis (else deterministic rules).
           </li>
           <li>
-            <strong style={{ color: 'var(--text)' }}>SODEX_ACCOUNT_ID + SODEX_API_KEY_NAME + SODEX_API_KEY_PRIVATE_KEY:</strong> EIP-712 signed SoDEX testnet orders (else labelled DRY-RUN). No mainnet path.
+            <strong style={{ color: 'var(--text)' }}>Practice trading credentials:</strong> when present, EIP-712 signed practice-network orders; otherwise a labelled practice demo. Live trading stays off until explicitly enabled.
           </li>
         </ul>
       </section>

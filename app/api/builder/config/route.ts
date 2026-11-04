@@ -1,24 +1,30 @@
 import { NextResponse } from "next/server";
 import { getBuilderConfig } from "@/lib/sodex-builder";
 import { getBuilderOwnerAddress } from "@/lib/sodex-builder-fee-stats";
+import { clientIp, rejectIfRateLimited } from "@/lib/request-guard";
 
 export const dynamic = "force-dynamic";
 
-/**
- * Public client config only. No env names, notes, gateways, or metrics dumps.
- */
-export async function GET() {
+/** Public client config only. No env names, notes, gateways, or metrics dumps. */
+export async function GET(req: Request) {
+  const ip = clientIp(req);
+  const limited = rejectIfRateLimited(
+    `builder-config:${ip}`,
+    120,
+    60_000,
+    "Too many requests. Please wait a minute and try again.",
+  );
+  if (limited) return limited;
+
   const cfg = getBuilderConfig();
   const live = cfg.network === "mainnet" && cfg.mainnetTradingEnabled;
   return NextResponse.json({
     builderId: cfg.builderId,
     appFeePercent: cfg.appFeePercent,
     maxApprovalPercent: cfg.maxApprovalPercent,
-    /** Requested fee in tenths-of-bp for signing payloads only. */
     builderFee: cfg.builderFee,
     maxApproval: cfg.maxApproval,
     maxNotionalUsdc: cfg.maxNotionalUsdc,
-    /** practice = testnet / non-live; live = real funds path enabled */
     mode: live ? "live" : "practice",
     tradingLive: live,
     builderReady: cfg.builderReady,

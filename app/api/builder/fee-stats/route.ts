@@ -2,11 +2,21 @@ import { NextResponse } from "next/server";
 import { fetchBuilderFeeStatsBundle } from "@/lib/sodex-builder-fee-stats";
 import { readBuilderMetrics } from "@/lib/builder-metrics";
 import type { SodexNetworkLabel } from "@/lib/sodex-builder";
+import { clientIp, rejectIfRateLimited } from "@/lib/request-guard";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 export async function GET(req: Request) {
+  const ip = clientIp(req);
+  const limited = rejectIfRateLimited(
+    `builder-fee-stats:${ip}`,
+    40,
+    60_000,
+    "Too many requests. Please wait a minute and try again.",
+  );
+  if (limited) return limited;
+
   const url = new URL(req.url);
   const netRaw = url.searchParams.get("network");
   const network: SodexNetworkLabel =
@@ -27,7 +37,8 @@ export async function GET(req: Request) {
     },
   });
 
-  const { localRelay, emptyReason, summary, daily, builderId, fetchedAt } = bundle;
+  const { localRelay, emptyReason, summary, daily, builderId, fetchedAt } =
+    bundle;
   return NextResponse.json(
     {
       builderId,

@@ -3,7 +3,11 @@ import { getBuilderConfig, type SodexNetworkLabel } from "@/lib/sodex-builder";
 import { relayUserSpotOrder } from "@/lib/sodex-wallet-trade";
 import { recordRoutedOrder } from "@/lib/builder-metrics";
 import { clientIp, rejectIfRateLimited } from "@/lib/request-guard";
-import { jsonPublicError, logServerError, publicErrorMessage } from "@/lib/public-errors";
+import { logServerError, publicErrorMessage } from "@/lib/public-errors";
+import {
+  assertRelayOrderParams,
+  readJsonBodyLimited,
+} from "@/lib/builder-order-guard";
 
 export const dynamic = "force-dynamic";
 
@@ -18,7 +22,11 @@ export async function POST(req: Request) {
   if (limited) return limited;
 
   const cfg = getBuilderConfig();
-  const body = (await req.json()) as {
+  const parsed = await readJsonBodyLimited(req);
+  if (!parsed.ok) {
+    return NextResponse.json({ error: parsed.error }, { status: 413 });
+  }
+  const body = parsed.value as {
     userAddress?: string;
     network?: SodexNetworkLabel;
     params?: Record<string, unknown>;
@@ -73,6 +81,12 @@ export async function POST(req: Request) {
       { error: "This order could not be verified. Please try again." },
       { status: 400 },
     );
+  }
+
+  const paramsCheck = assertRelayOrderParams(body.params);
+  if (!paramsCheck.ok) {
+    logServerError("relay-order", paramsCheck.error);
+    return NextResponse.json({ error: paramsCheck.error }, { status: 400 });
   }
 
   const result = await relayUserSpotOrder({

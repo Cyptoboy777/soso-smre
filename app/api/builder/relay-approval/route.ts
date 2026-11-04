@@ -1,4 +1,5 @@
 import { logServerError, publicErrorMessage } from "@/lib/public-errors";
+import { readJsonBodyLimited } from "@/lib/builder-order-guard";
 import { NextResponse } from "next/server";
 import { getBuilderConfig, type SodexNetworkLabel } from "@/lib/sodex-builder";
 import { relayBuilderApproval } from "@/lib/sodex-wallet-trade";
@@ -24,7 +25,11 @@ export async function POST(req: Request) {
     );
   }
 
-  const body = (await req.json()) as {
+  const _parsedBody = await readJsonBodyLimited(req);
+  if (!_parsedBody.ok) {
+    return NextResponse.json({ error: _parsedBody.error }, { status: 413 });
+  }
+  const body = (_parsedBody.value as any) as {
     userAddress?: string;
     network?: SodexNetworkLabel;
     apiChain?: number;

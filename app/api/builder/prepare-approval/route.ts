@@ -3,6 +3,7 @@ import { getBuilderConfig, type SodexNetworkLabel } from "@/lib/sodex-builder";
 import { prepareBuilderApproval } from "@/lib/sodex-wallet-trade";
 import { clientIp, rejectIfRateLimited } from "@/lib/request-guard";
 import { jsonPublicError, logServerError } from "@/lib/public-errors";
+import { readJsonBodyLimited } from "@/lib/builder-order-guard";
 
 export const dynamic = "force-dynamic";
 
@@ -33,7 +34,11 @@ export async function POST(req: Request) {
     dryRun?: boolean;
   };
   try {
-    body = (await req.json()) as typeof body;
+    const _p = await readJsonBodyLimited(req);
+    if (!_p.ok) {
+      return NextResponse.json({ error: _p.error }, { status: 413 });
+    }
+    body = _p.value as typeof body;
   } catch (e) {
     const { body: b, status } = jsonPublicError("prepare-approval", e);
     return NextResponse.json(b, { status });
