@@ -14,6 +14,14 @@ function directionLabel(side: string) {
   return 'Neutral';
 }
 
+function stripNewsIds(s: string) {
+  return String(s ?? '')
+    .replace(/\[news:?\s*\d+\]/gi, '')
+    .replace(/\[\d{6,}\]/g, '')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+}
+
 
 const SodexPriceChart = dynamic(() => import('./SodexPriceChart').then((m) => m.SodexPriceChart), {
   ssr: false,
@@ -81,7 +89,7 @@ export function JarvisPanel({
   }, [load]);
 
   const idea = briefing?.ideas[selected] ?? null;
-  const typed = useTypewriter(briefing?.spokenSummary ?? '', Boolean(briefing) && !reduce);
+  const typed = useTypewriter(stripNewsIds(briefing?.spokenSummary ?? ''), Boolean(briefing) && !reduce);
 
   useEffect(() => {
     if (idea?.symbol && idea.symbol !== symbol) setSymbol(idea.symbol);
@@ -178,7 +186,7 @@ export function JarvisPanel({
                   <span className="conf">{it.confidence}%</span>
                 </div>
                 <strong>{it.title}</strong>
-                <p>{it.reasoning}</p>
+                <p>{stripNewsIds(it.reasoning)}</p>
               </>
             ) : (
               <div className="skeleton" style={{ height: 88 }} />
@@ -201,15 +209,15 @@ export function JarvisPanel({
               <ul className="jarvis-cites">
                 {idea.citations.map((c, idx) => (
                   <li key={`${c.kind}-${idx}`}>
-                    <span className="pill">{c.kind}</span> <strong>{c.label}</strong>: {c.detail}
+                    <span className="pill">{c.kind}</span> <strong>{c.label}</strong>: {stripNewsIds(c.detail)}
                   </li>
                 ))}
               </ul>
               <p>
-                <strong>Risk:</strong> {idea.riskNote}
+                <strong>Risk:</strong> {stripNewsIds(idea.riskNote)}
               </p>
               <p>
-                <strong>Invalidation:</strong> {idea.invalidation}
+                <strong>Invalidation:</strong> {stripNewsIds(idea.invalidation)}
               </p>
               <div className="jarvis-levels">
                 <span>Entry {idea.entry.toLocaleString()}</span>

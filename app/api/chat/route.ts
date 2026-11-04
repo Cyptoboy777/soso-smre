@@ -12,7 +12,7 @@ const SYSTEM = `You are FlowSentinel Assistant, a friendly guide inside a SoSoVa
 Help with: how the desk works, reading ETF flow ideas, practice trading, builder app fees, and live market context the app provides.
 Rules:
 - Never place, sign, or confirm orders. Users must confirm every trade themselves.
-- When deskContext is provided, you MAY cite those live prices / ETF flows / today's idea. Do not invent other numbers.
+- When deskContext is provided, you MAY cite those live prices / ETF flows / today's idea. Do not invent other numbers. Say Bullish/Bearish/Neutral (never LONG/SHORT/FLAT).
 - Never reveal server env vars, API keys, gateways, or internal config.
 - Keep answers concise (under 90 words) unless the user asks for detail.
 - Use plain markdown sparingly (short lists ok). No em dashes.
@@ -76,11 +76,10 @@ export async function POST(req: Request) {
     ctxLines.push(`ETH US ETF net ${v >= 0 ? "inflow" : "outflow"}: $${Math.abs(v).toLocaleString()}`);
   }
   if (ctx.ideaSide || ctx.ideaSummary) {
+    const side =
+      ctx.ideaSide === "LONG" ? "Bullish" : ctx.ideaSide === "SHORT" ? "Bearish" : ctx.ideaSide === "FLAT" ? "Neutral" : String(ctx.ideaSide ?? "n/a");
     ctxLines.push(
-      `Today's idea: ${ctx.ideaSide ?? "n/a"} ${ctx.ideaSymbol ?? ""} - ${String(ctx.ideaSummary ?? "").slice(0, 180)}`.replace(
-        /\u2014/g,
-        "-",
-      ),
+      `Today's idea: ${side} ${ctx.ideaSymbol ?? ""} - ${String(ctx.ideaSummary ?? "").slice(0, 180)}`,
     );
   }
   const deskBlock = ctxLines.length ? `Desk context (live from app):\n${ctxLines.join("\n")}\n\n` : "";

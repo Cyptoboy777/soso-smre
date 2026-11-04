@@ -19,6 +19,7 @@ import {
   hasGeminiKey,
 } from '@/lib/gemini';
 
+
 function money(n: number | null | undefined): string {
   if (n == null || !Number.isFinite(n)) return 'n/a';
   const abs = Math.abs(n);
