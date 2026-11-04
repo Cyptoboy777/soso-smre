@@ -251,7 +251,7 @@ export function DeskClient() {
               headline={
                 thesis.side === 'FLAT'
                   ? t.standAside
-                  : `${directionLabel(thesis.side)} on ${thesis.symbol.replace(/v/g, '').replace('_', '/')}`
+                  : `${formatSideLabel(thesis.side)} on ${formatPair(thesis.symbol)}`
               }
               side={thesis.side}
               symbol={thesis.symbol}
@@ -383,9 +383,9 @@ export function DeskClient() {
           ) : (
             market.tickers.slice(0, 4).map((t) => (
               <div key={t.symbol}>
-                <div style={{ color: 'var(--text-muted)', marginBottom: 4 }}>{t.symbol}</div>
+                <div style={{ color: 'var(--text-muted)', marginBottom: 4 }}>{formatPair(t.symbol)}</div>
                 <div className="tabular" style={{ fontFamily: 'var(--font-mono)' }}>
-                  $<CountUp value={t.lastPrice} decimals={t.lastPrice >= 100 ? 0 : 2} />{' '}
+                  $<CountUp value={t.lastPrice} decimals={t.lastPrice >= 100 ? 0 : t.lastPrice >= 1 ? 2 : t.lastPrice >= 0.01 ? 4 : 8} />{' '}
                   <span style={{ color: t.changePct24h >= 0 ? 'var(--success)' : 'var(--danger)' }}>
                     {t.changePct24h >= 0 ? '+' : ''}
                     {t.changePct24h.toFixed(2)}%
