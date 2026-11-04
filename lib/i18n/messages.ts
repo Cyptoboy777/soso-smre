@@ -49,7 +49,7 @@ export const MESSAGES: Record<Locale, Dict> = {
     navStats: "Stats",
     navTrack: "Track record",
     navJudge: "Judge path",
-    badgeWave: "Wave 3 · Builder Race",
+    badgeWave: "SoSoValue · SoDEX",
     footerLine: "FlowSentinel",
     footerRisk:
       "Not financial advice. Practice mode by default; real trades only after you confirm.",
@@ -89,7 +89,7 @@ export const MESSAGES: Record<Locale, Dict> = {
     navStats: "Stats",
     navTrack: "Historial",
     navJudge: "Ruta juez",
-    badgeWave: "Wave 3 · Builder Race",
+    badgeWave: "SoSoValue · SoDEX",
     footerLine: "FlowSentinel",
     footerRisk:
       "No es consejo financiero. Modo practica por defecto; operaciones reales solo despues de confirmar.",
@@ -129,7 +129,7 @@ export const MESSAGES: Record<Locale, Dict> = {
     navStats: "Stats",
     navTrack: "Historico",
     navJudge: "Rota juiz",
-    badgeWave: "Wave 3 · Builder Race",
+    badgeWave: "SoSoValue · SoDEX",
     footerLine: "FlowSentinel",
     footerRisk:
       "Nao e aconselhamento financeiro. Modo pratica por padrao; operacoes reais so depois de confirmar.",
@@ -169,7 +169,7 @@ export const MESSAGES: Record<Locale, Dict> = {
     navStats: "数据",
     navTrack: "战绩",
     navJudge: "评审路径",
-    badgeWave: "Wave 3 · Builder Race",
+    badgeWave: "SoSoValue · SoDEX",
     footerLine: "FlowSentinel",
     footerRisk: "非投资建议。默认练习模式；实盘交易仅在你确认后进行。",
     startTitle: "三步签名上手",
@@ -205,7 +205,7 @@ export const MESSAGES: Record<Locale, Dict> = {
     navStats: "Stats",
     navTrack: "Historique",
     navJudge: "Parcours juge",
-    badgeWave: "Wave 3 · Builder Race",
+    badgeWave: "SoSoValue · SoDEX",
     footerLine: "FlowSentinel",
     footerRisk:
       "Pas un conseil financier. Mode pratique par defaut; trades reels seulement apres confirmation.",
