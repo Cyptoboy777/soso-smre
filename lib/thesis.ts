@@ -15,6 +15,10 @@ import {
   hasGeminiKey,
   GEMINI_FAST_MODEL,
 } from '@/lib/gemini';
+import {
+  normalizeThesisPlain,
+  sanitizeHeadline,
+} from '@/lib/thesis-copy';
 
 export { hasGeminiKey, GEMINI_FAST_MODEL };
 
@@ -51,7 +55,7 @@ RULES:
 - side must be LONG, SHORT, or FLAT
 - symbol must be vBTC_vUSDC or vETH_vUSDC
 - confidence 0-100 integer
-- plainEnglish: 2-4 sentences; mention headline topics by title words only (never raw numeric ids)
+- plainEnglish: MAX 2 short sentences in plain words. Do NOT paste headlines. Do NOT say "Related", "on the desk", "No trade setup", or "levels". If ETF dollars are negative say "net outflow" (never "negative inflow"). If positive say "net inflow".
 - citedNewsIds: array of news ids you relied on (internal only)
 - entry/stopLoss/takeProfit: distinct dollar numbers consistent with side and SoDEX last (LONG: stop<entry<target; SHORT: target<entry<stop). Never set them equal for LONG/SHORT.
 - If news shock or weak conviction, prefer FLAT with confidence <= 55
@@ -78,11 +82,8 @@ JSON shape:
     const citedTitles = cited
       .map((id) => input.news.items.find((x) => x.id === id)?.title)
       .filter(Boolean)
-      .map((title) => String(title).slice(0, 80));
-    const citeNote =
-      citedTitles.length > 0
-        ? ` Related: ${citedTitles.join('; ')}.`
-        : '';
+      .map((title) => sanitizeHeadline(String(title)))
+      .filter(Boolean);
 
     const levels = normalizeTradeLevels({
       side,
@@ -102,14 +103,11 @@ JSON shape:
           })
         : levels;
 
-    let plain = String(parsed.plainEnglish ?? fallback.plainEnglish);
-    // Strip raw numeric news ids like [2117626848089169921]
-    plain = plain.replace(/\[\d{6,}\]/g, '').replace(/\s{2,}/g, ' ').trim();
-    if (finalSide === 'FLAT' || !finalLevels.hasSetup) {
-      plain = plain || 'No trade setup today. Waiting for a clearer signal.';
-      if (!/no trade setup/i.test(plain)) {
-        plain = `${plain} No trade setup.`;
-      }
+    let plain = normalizeThesisPlain(String(parsed.plainEnglish ?? fallback.plainEnglish), {
+      maxSentences: 2,
+    });
+    if (!plain) {
+      plain = normalizeThesisPlain(fallback.plainEnglish, { maxSentences: 2 });
     }
 
     return {
@@ -124,7 +122,7 @@ JSON shape:
           hasSetup: finalLevels.hasSetup,
         },
       ),
-      plainEnglish: `${plain}${citeNote}`,
+      plainEnglish: plain,
       entry: finalLevels.entry,
       stopLoss: finalLevels.stopLoss,
       takeProfit: finalLevels.takeProfit,
@@ -132,7 +130,10 @@ JSON shape:
       engine: 'gemini',
       drivers: {
         ...fallback.drivers,
-        topHeadlines: [...citedTitles, ...fallback.drivers.topHeadlines].slice(0, 5),
+        topHeadlines: [...citedTitles, ...fallback.drivers.topHeadlines]
+          .map((h) => sanitizeHeadline(h))
+          .filter(Boolean)
+          .slice(0, 3),
       },
     };
   } catch (e) {

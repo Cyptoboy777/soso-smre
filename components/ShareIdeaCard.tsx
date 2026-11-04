@@ -17,17 +17,11 @@ type Props = {
   side?: string;
   symbol?: string;
   confidence?: number | string;
+  /** @deprecated Full thesis body is not shown on the share card. */
   body?: string;
 };
 
-export function ShareIdeaCard({
-  ideaId,
-  headline,
-  side,
-  symbol,
-  confidence,
-  body,
-}: Props) {
+export function ShareIdeaCard({ ideaId, headline, side, symbol, confidence }: Props) {
   const { t } = useLocale();
   const [copied, setCopied] = useState(false);
 
@@ -54,25 +48,18 @@ export function ShareIdeaCard({
   }
 
   return (
-    <aside
-      className="panel"
-      style={{ padding: 18, display: 'grid', gap: 10 }}
-      aria-label={t.shareTitle}
-    >
+    <aside className="panel" style={{ padding: 18, display: 'grid', gap: 10 }} aria-label={t.shareTitle}>
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
         <strong style={{ letterSpacing: '-0.02em' }}>{t.shareTitle}</strong>
         <span className="badge" style={{ color: 'var(--accent-soft)', borderColor: 'rgba(255,79,32,0.35)' }}>
-          {directionLabel(side)}{symbol ? ` · ${symbol.replace(/v/g, '').replace('_', '/')}` : ''}
+          {directionLabel(side)}
+          {symbol ? ` · ${symbol.replace(/v/g, '').replace('_', '/')}` : ''}
         </span>
       </div>
       <p style={{ margin: 0, color: 'var(--text)', fontSize: 15 }}>{headline}</p>
-      {body ? (
-        <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: 13, lineHeight: 1.45 }}>{body}</p>
-      ) : null}
+      <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: 13, lineHeight: 1.45 }}>{t.shareBlurb}</p>
       {confidence != null ? (
-        <p style={{ margin: 0, fontSize: 12, color: 'var(--text-muted)' }}>
-          Confidence {String(confidence)}
-        </p>
+        <p style={{ margin: 0, fontSize: 12, color: 'var(--text-muted)' }}>Confidence {String(confidence)}</p>
       ) : null}
       <button className="btn btn-ghost" type="button" onClick={() => void copy()} style={{ justifySelf: 'start' }}>
         {copied ? t.shareCopied : t.shareCopy}

@@ -14,6 +14,10 @@ import type {
 import { pickPrice } from '@/lib/sodex';
 import crypto from 'crypto';
 import { deriveTradeLevels, normalizeConfidence } from '@/lib/trade-levels';
+import {
+  buildShortRulePlain,
+  sanitizeHeadline,
+} from '@/lib/thesis-copy';
 
 export interface SignalInputs {
   etfBtc: EtfPanel;
@@ -33,7 +37,7 @@ export function buildDrivers(input: SignalInputs): ThesisDrivers {
     etfEthNetInflow: input.etfEth.latest?.totalNetInflow ?? null,
     ssiChangePct: input.ssi.changePct24h,
     newsShock: input.news.shockActive,
-    topHeadlines: input.news.items.slice(0, 3).map((n) => n.title),
+    topHeadlines: input.news.items.slice(0, 3).map((n) => sanitizeHeadline(n.title)).filter(Boolean),
   };
 }
 
@@ -89,22 +93,13 @@ export function buildRuleThesis(input: SignalInputs): Thesis {
     hasSetup: levels.hasSetup,
   });
 
-  const btcFlow = drivers.etfBtcNetInflow;
-  const ethFlow = drivers.etfEthNetInflow;
-  const flowPhrase = (n: number | null, label: string) =>
-    n == null ? `${label} flow unavailable` : `${label} US ETF net ${n >= 0 ? 'inflow' : 'outflow'} of $${Math.abs(n).toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
-
-  const ssiPct =
-    drivers.ssiChangePct == null ? 'SSI flat/unavailable' : `ssiMAG7 ${drivers.ssiChangePct >= 0 ? '+' : ''}${(drivers.ssiChangePct * 100).toFixed(2)}% 24h`;
-
-  let plain: string;
-  if (side === 'FLAT') {
-    plain = `No trade today. ${flowPhrase(btcFlow, 'BTC')} and ${flowPhrase(ethFlow, 'ETH')}; ${ssiPct}. Flows and index do not clear the conviction threshold${drivers.newsShock ? '; news-shock filter is active' : ''}.`;
-  } else if (side === 'LONG') {
-    plain = `Lean long ${symbol.replace(/v/g, '').replace('_', '/')}. ${flowPhrase(btcFlow, 'BTC')}; ${flowPhrase(ethFlow, 'ETH')}; ${ssiPct}. Plan: buy near $${entry.toLocaleString()}, stop $${stopLoss.toLocaleString()}, target $${takeProfit.toLocaleString()}.`;
-  } else {
-    plain = `Lean short ${symbol.replace(/v/g, '').replace('_', '/')}. ${flowPhrase(btcFlow, 'BTC')}; ${flowPhrase(ethFlow, 'ETH')}; ${ssiPct}. Plan: sell near $${entry.toLocaleString()}, stop $${stopLoss.toLocaleString()}, target $${takeProfit.toLocaleString()}.`;
-  }
+  const plain = buildShortRulePlain({
+    side,
+    symbol,
+    btcFlow: drivers.etfBtcNetInflow,
+    ethFlow: drivers.etfEthNetInflow,
+    newsShock: drivers.newsShock,
+  });
 
   return {
     id: `th_${crypto.randomBytes(5).toString('hex')}`,

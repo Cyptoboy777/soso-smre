@@ -39,6 +39,11 @@ type Dict = {
   shareTitle: string;
   shareCopy: string;
   shareCopied: string;
+  shareBlurb: string;
+  noSetupTitle: string;
+  noSetupBody: string;
+  standAside: string;
+  newsRelated: string;
   onboardingCta: string;
 };
 
@@ -81,6 +86,11 @@ export const MESSAGES: Record<Locale, Dict> = {
     shareTitle: "Share this idea",
     shareCopy: "Copy link",
     shareCopied: "Copied",
+    shareBlurb: "A practice idea from FlowSentinel. Not financial advice.",
+    noSetupTitle: "No trade setup",
+    noSetupBody: "No clear move right now. We'll show entry, stop and target when there is one.",
+    standAside: "Stand aside today",
+    newsRelated: "Related news",
     onboardingCta: "Open the desk",
   },
   es: {
@@ -121,6 +131,11 @@ export const MESSAGES: Record<Locale, Dict> = {
     shareTitle: "Comparte esta idea",
     shareCopy: "Copiar enlace",
     shareCopied: "Copiado",
+    shareBlurb: "Una idea de practica de FlowSentinel. No es consejo financiero.",
+    noSetupTitle: "Sin setup de trade",
+    noSetupBody: "No hay un movimiento claro ahora. Mostraremos entrada, stop y objetivo cuando exista uno.",
+    standAside: "Mejor esperar hoy",
+    newsRelated: "Noticias relacionadas",
     onboardingCta: "Abrir el desk",
   },
   pt: {
@@ -161,6 +176,11 @@ export const MESSAGES: Record<Locale, Dict> = {
     shareTitle: "Compartilhar ideia",
     shareCopy: "Copiar link",
     shareCopied: "Copiado",
+    shareBlurb: "Uma ideia de pratica do FlowSentinel. Nao e aconselhamento financeiro.",
+    noSetupTitle: "Sem setup de trade",
+    noSetupBody: "Nao ha um movimento claro agora. Vamos mostrar entrada, stop e alvo quando houver um.",
+    standAside: "Fique de fora hoje",
+    newsRelated: "Noticias relacionadas",
     onboardingCta: "Abrir o desk",
   },
   zh: {
@@ -197,6 +217,11 @@ export const MESSAGES: Record<Locale, Dict> = {
     shareTitle: "分享这个想法",
     shareCopy: "复制链接",
     shareCopied: "已复制",
+    shareBlurb: "来自 FlowSentinel 的练习观点。不构成投资建议。",
+    noSetupTitle: "暂无交易设置",
+    noSetupBody: "目前没有明确方向。有清晰设置时我们会显示入场、止损和目标。",
+    standAside: "今日观望",
+    newsRelated: "相关新闻",
     onboardingCta: "打开交易台",
   },
   fr: {
@@ -237,6 +262,11 @@ export const MESSAGES: Record<Locale, Dict> = {
     shareTitle: "Partager cette idee",
     shareCopy: "Copier le lien",
     shareCopied: "Copie",
+    shareBlurb: "Une idee pratique de FlowSentinel. Pas un conseil financier.",
+    noSetupTitle: "Pas de setup",
+    noSetupBody: "Pas de mouvement clair pour l'instant. Nous afficherons entree, stop et cible quand il y en aura un.",
+    standAside: "Rester a l'ecart aujourd'hui",
+    newsRelated: "Actus liees",
     onboardingCta: "Ouvrir le desk",
   },
 };

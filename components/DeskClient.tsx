@@ -4,6 +4,8 @@ import { useCallback, useEffect, useState } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
 import type { DeskSnapshot, OrderResult, RiskDecision, SourceMeta } from '@/types/flow';
 import { hasValidTradeSetup } from '@/lib/trade-levels';
+import { pickNewsChips } from '@/lib/thesis-copy';
+import { useLocale } from './LocaleProvider';
 import { LiveBadge } from './LiveBadge';
 import { FlowRadar } from './FlowRadar';
 import { CountUp } from './CountUp';
@@ -61,6 +63,7 @@ const fadeUp = {
 
 export function DeskClient() {
   const reduce = useReducedMotion();
+  const { t } = useLocale();
   const [data, setData] = useState<DeskPayload | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -190,12 +193,31 @@ export function DeskClient() {
             }}
           >
             {thesis.side === 'FLAT'
-              ? 'Stand aside today'
+              ? t.standAside
               : `${directionLabel(thesis.side)} on ${thesis.symbol.replace(/v/g, '').replace('_', '/')}`}
           </h2>
-          <p style={{ margin: '0 0 22px', color: 'var(--text-muted)', maxWidth: 54 * 8, textWrap: 'pretty' }}>
+          <p style={{ margin: '0 0 14px', color: 'var(--text-muted)', maxWidth: 54 * 8, textWrap: 'pretty' }}>
             {thesis.plainEnglish}
           </p>
+          {(() => {
+            const chips = pickNewsChips(thesis.drivers?.topHeadlines, news.items, 3);
+            if (!chips.length) return null;
+            return (
+              <div className="news-chip-row" aria-label={t.newsRelated}>
+                {chips.map((c) =>
+                  c.url ? (
+                    <a key={c.title} className="news-chip" href={c.url} target="_blank" rel="noreferrer">
+                      {c.title}
+                    </a>
+                  ) : (
+                    <span key={c.title} className="news-chip news-chip-static">
+                      {c.title}
+                    </span>
+                  ),
+                )}
+              </div>
+            );
+          })()}
           {hasValidTradeSetup(thesis.side, thesis.entry, thesis.stopLoss, thesis.takeProfit) ? (
             <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'stretch' }}>
               <div className="metric-chip">
@@ -217,8 +239,8 @@ export function DeskClient() {
             </div>
           ) : (
             <div className="no-setup-banner" role="status">
-              <strong style={{ display: 'block', marginBottom: 4 }}>No trade setup</strong>
-              Stand aside. Levels stay hidden until the desk has a valid directional idea with distinct entry, stop, and target.
+              <strong style={{ display: 'block', marginBottom: 4 }}>{t.noSetupTitle}</strong>
+              {t.noSetupBody}
             </div>
           )}
 
@@ -227,13 +249,12 @@ export function DeskClient() {
               ideaId={thesis.id}
               headline={
                 thesis.side === 'FLAT'
-                  ? 'Stand aside today'
+                  ? t.standAside
                   : `${directionLabel(thesis.side)} on ${thesis.symbol.replace(/v/g, '').replace('_', '/')}`
               }
               side={thesis.side}
               symbol={thesis.symbol}
               confidence={thesis.confidence}
-              body={thesis.plainEnglish}
             />
           </div>
         </div>

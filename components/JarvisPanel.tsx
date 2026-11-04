@@ -107,7 +107,13 @@ export function JarvisPanel({
             Desk briefing
           </p>
           <h2 style={{ margin: '6px 0 0', letterSpacing: '-0.03em' }}>
-            {briefing ? `${briefing.greeting}. Here is what moved.` : 'Spinning up briefing…'}
+            {briefing ? (
+              `${briefing.greeting}. Here is what moved.`
+            ) : (
+              <span className="briefing-skel" aria-busy="true" aria-label="Loading briefing">
+                <span className="skel-line skel-line-lg" />
+              </span>
+            )}
           </h2>
         </div>
         <div className="jarvis-badges">
@@ -117,10 +123,20 @@ export function JarvisPanel({
         </div>
       </header>
 
-      <p className="jarvis-type" aria-live="polite">
-        {loading ? 'Reading SoSoValue flows, hot news, and SoDEX books…' : typed}
-        {!reduce && typed && typed.length < (briefing?.spokenSummary.length ?? 0) ? <span className="jarvis-caret">▋</span> : null}
-      </p>
+      {loading && !briefing ? (
+        <div className="briefing-skel-block" aria-busy="true">
+          <span className="skel-line" />
+          <span className="skel-line" />
+          <span className="skel-line skel-line-short" />
+        </div>
+      ) : (
+        <p className="jarvis-type" aria-live="polite">
+          {typed}
+          {!reduce && typed && typed.length < (briefing?.spokenSummary.length ?? 0) ? (
+            <span className="jarvis-caret">▋</span>
+          ) : null}
+        </p>
+      )}
 
       {error ? <p className="error">{error}</p> : null}
 
