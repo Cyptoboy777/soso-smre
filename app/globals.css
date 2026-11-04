@@ -829,9 +829,9 @@ button { font-family: inherit; }
 .jarvis-idea strong { display: block; margin-bottom: 6px; letter-spacing: -0.02em; }
 .jarvis-idea p { margin: 0; font-size: 13px; color: var(--text-muted); line-height: 1.45; }
 .side-tag { font-size: 11px; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--line); }
-.side-long { color: #6ee7b7; border-color: rgba(110,231,183,0.35); }
-.side-short { color: #fca5a5; border-color: rgba(252,165,165,0.35); }
-.side-flat { color: var(--text-faint); }
+.side-long { color: var(--success); border-color: color-mix(in srgb, var(--success) 40%, var(--line)); }
+.side-short { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 40%, var(--line)); }
+.side-flat { color: var(--text-muted); }
 .conf { margin-left: auto; font-family: var(--font-mono); font-size: 12px; color: var(--accent-soft); }
 .jarvis-detail { border-top: 1px solid var(--line); padding-top: 16px; }
 .jarvis-detail-grid {
@@ -877,7 +877,7 @@ button { font-family: inherit; }
 .diag-table th, .diag-table td { padding: 10px 12px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
 .diag-table th { color: var(--text-faint); font-weight: 500; background: var(--surface-2); }
 .diag-table tr.ok td:nth-child(2) { color: #6ee7b7; }
-.diag-table tr.bad td:nth-child(2) { color: #fca5a5; }
+.diag-table tr.bad td:nth-child(2) { color: var(--danger); }
 .diag-url { font-family: var(--font-mono); font-size: 11px; color: var(--text-faint); word-break: break-all; max-width: 360px; }
 
 .judge-page {
@@ -905,11 +905,11 @@ button { font-family: inherit; }
   background: var(--surface-2); font-size: 12px; color: var(--text-faint);
 }
 .judge-step.is-active { border-color: rgba(255,118,55,0.5); color: var(--text); background: rgba(255,79,32,0.08); }
-.judge-step.is-done { color: #6ee7b7; }
+.judge-step.is-done { color: var(--success); }
 .judge-stage { padding: 24px; min-height: 280px; }
 .judge-cites, .judge-checks { padding-left: 18px; color: var(--text-muted); font-size: 14px; }
-.judge-checks .ok { color: #6ee7b7; }
-.judge-checks .fail { color: #fca5a5; }
+.judge-checks .ok { color: var(--success); }
+.judge-checks .fail { color: var(--danger); }
 .judge-ticket {
   display: grid; grid-template-columns: 120px 1fr; gap: 8px 12px;
   margin: 12px 0 16px; font-size: 14px;
