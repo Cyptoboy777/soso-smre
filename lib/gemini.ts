@@ -83,6 +83,9 @@ export async function geminiGenerate(opts: {
   prompt: string;
   cacheKey?: string;
   system?: string;
+  /** Default json for thesis tools; chat must use text. */
+  format?: 'json' | 'text';
+  temperature?: number;
 }): Promise<string> {
   if (!hasGeminiKey()) throw new Error('GEMINI_API_KEY missing');
   if (opts.cacheKey) {
@@ -91,6 +94,7 @@ export async function geminiGenerate(opts: {
   }
   const { GoogleGenAI } = await import('@google/genai');
   const client = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY!.trim() });
+  const format = opts.format ?? 'json';
   let lastErr: unknown;
   for (const model of GEMINI_MODEL_CANDIDATES) {
     try {
@@ -98,8 +102,8 @@ export async function geminiGenerate(opts: {
         model,
         contents: opts.prompt,
         config: {
-          temperature: 0.3,
-          responseMimeType: 'application/json',
+          temperature: opts.temperature ?? (format === 'text' ? 0.45 : 0.3),
+          ...(format === 'json' ? { responseMimeType: 'application/json' as const } : {}),
           ...(opts.system ? { systemInstruction: opts.system } : {}),
         },
       });

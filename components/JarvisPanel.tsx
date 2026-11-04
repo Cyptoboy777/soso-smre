@@ -5,6 +5,8 @@ import { motion, useReducedMotion } from 'framer-motion';
 import dynamic from 'next/dynamic';
 import type { JarvisBriefing, JarvisIdea, SodexMarketBundle } from '@/types/flow';
 import { validateAdvisorSuggestion } from '@/lib/advisor-suggestions';
+import { PairSelector } from './PairSelector';
+import { LivePrice } from './LivePrice';
 
 function directionLabel(side: string) {
   if (side === 'LONG') return 'Bullish';
@@ -52,6 +54,8 @@ export function JarvisPanel({
   const [selected, setSelected] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [symbol, setSymbol] = useState('vBTC_vUSDC');
+  const [interval, setIntervalTf] = useState('1h');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -80,16 +84,30 @@ export function JarvisPanel({
   const typed = useTypewriter(briefing?.spokenSummary ?? '', Boolean(briefing) && !reduce);
 
   useEffect(() => {
-    if (!idea) return;
+    if (idea?.symbol && idea.symbol !== symbol) setSymbol(idea.symbol);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [idea?.symbol]);
+
+  useEffect(() => {
     let cancelled = false;
-    void (async () => {
-      const m = await fetch(`/api/sodex/market?symbol=${encodeURIComponent(idea.symbol)}`, { cache: 'no-store' });
-      if (!cancelled && m.ok) setBundle((await m.json()) as SodexMarketBundle);
-    })();
+    const loadMarket = async () => {
+      try {
+        const m = await fetch(
+          `/api/sodex/market?symbol=${encodeURIComponent(symbol)}&interval=${encodeURIComponent(interval)}`,
+          { cache: 'no-store' },
+        );
+        if (!cancelled && m.ok) setBundle((await m.json()) as SodexMarketBundle);
+      } catch {
+        /* ignore */
+      }
+    };
+    void loadMarket();
+    const id = window.setInterval(loadMarket, 2000);
     return () => {
       cancelled = true;
+      window.clearInterval(id);
     };
-  }, [idea?.symbol]);
+  }, [symbol, interval]);
 
   const mid = useMemo(() => {
     if (!bundle?.orderbook) return null;
@@ -117,9 +135,9 @@ export function JarvisPanel({
           </h2>
         </div>
         <div className="jarvis-badges">
-          <span className="pill">Powered by SoSoValue</span>
-          {briefing?.newsShock ? <span className="pill pill-warn">News alert</span> : null}
+          <span className="pill">Live prices</span>
           <span className="pill">Practice mode</span>
+          {briefing?.newsShock ? <span className="pill pill-warn">News alert</span> : null}
         </div>
       </header>
 
@@ -209,7 +227,7 @@ export function JarvisPanel({
                     setError(`Prefill blocked: ${v.error}`);
                     return;
                   }
-                  // Advisor may only prefill — never submit an order.
+                  // Advisor may only prefill - never submit an order.
                   onPrefill({
                     ...idea,
                     side: v.suggestion.side,
@@ -225,21 +243,40 @@ export function JarvisPanel({
                 Prefill SoDEX ticket
               </button>
             </div>
-            <div>
-              <h3 style={{ marginTop: 0 }}>
-                {idea.symbol} · SoDEX {bundle?.gateway ?? '…'}
-                {bundle?.fundingRate != null ? ` · funding ${(bundle.fundingRate * 100).toFixed(4)}%` : ''}
-              </h3>
-              <SodexPriceChart klines={bundle?.klines ?? []} />
-              <SodexDepth book={bundle?.orderbook ?? null} />
+            <div className="jarvis-market">
+              <div className="jarvis-market-head">
+                <PairSelector value={symbol} onChange={setSymbol} />
+                <div className="jarvis-market-pills">
+                  <span className="pill">Live prices</span>
+                  <span className="pill">Practice mode</span>
+                </div>
+              </div>
+              <div className="jarvis-last">
+                Last <LivePrice value={bundle?.ticker?.lastPrice ?? mid} />
+                {bundle?.ticker ? (
+                  <span className={bundle.ticker.changePct24h >= 0 ? 'up' : 'down'}>
+                    {bundle.ticker.changePct24h >= 0 ? '+' : ''}
+                    {bundle.ticker.changePct24h.toFixed(2)}%
+                  </span>
+                ) : null}
+              </div>
+              <SodexPriceChart
+                klines={bundle?.klines ?? []}
+                height={220}
+                interval={interval}
+                onInterval={setIntervalTf}
+              />
+              <SodexDepth book={bundle?.orderbook ?? null} height={280} />
             </div>
           </div>
         </motion.div>
       ) : null}
 
-      <button type="button" className="btn btn-ghost" onClick={() => void load()} style={{ marginTop: 12 }}>
-        Refresh briefing
-      </button>
+      <div className="jarvis-footer">
+        <button type="button" className="btn btn-ghost" onClick={() => void load()}>
+          Refresh briefing
+        </button>
+      </div>
     </section>
   );
 }

@@ -1,7 +1,7 @@
 /**
  * Public SoDEX market data (no API keys).
- * Prefer testnet-gw; fall back to mainnet-gw for public reads only.
- * Order signing remains testnet-only in lib/sodex.ts.
+ * Prefer MAINNET for live prices / books / klines (read-only).
+ * Order signing remains testnet/practice-only elsewhere.
  */
 import type {
   MarketTicker,
@@ -32,7 +32,7 @@ async function getJson(
   try {
     const res = await fetch(`${base}${path}`, {
       headers: { Accept: 'application/json' },
-      next: { revalidate: 15 },
+      cache: 'no-store',
     });
     if (!res.ok) return { ok: false, error: `HTTP ${res.status}`, base };
     const body = (await res.json()) as { code?: number; data?: unknown; msg?: string };
@@ -45,13 +45,13 @@ async function getJson(
   }
 }
 
-/** Try testnet then mainnet for unsigned public GETs. */
+/** Prefer mainnet for live public market reads; fall back to testnet. */
 async function publicFirst(path: string) {
-  const a = await getJson(TESTNET, path);
-  if (a.ok) return { ...a, gateway: 'testnet' as const };
-  const b = await getJson(MAINNET, path);
-  if (b.ok) return { ...b, gateway: 'mainnet' as const };
-  return { ok: false as const, error: `${a.error}; mainnet: ${b.error}`, gateway: 'fallback' as const };
+  const a = await getJson(MAINNET, path);
+  if (a.ok) return { ...a, gateway: 'mainnet' as const };
+  const b = await getJson(TESTNET, path);
+  if (b.ok) return { ...b, gateway: 'testnet' as const };
+  return { ok: false as const, error: `mainnet: ${a.error}; testnet: ${b.error}`, gateway: 'fallback' as const };
 }
 
 function mapLevels(rows: unknown): SodexBookLevel[] {
@@ -65,7 +65,25 @@ function mapLevels(rows: unknown): SodexBookLevel[] {
     .filter((l) => l.price > 0 && l.qty > 0);
 }
 
-export async function fetchOrderBook(symbol: string, limit = 20): Promise<SodexOrderBook | null> {
+/** Drop junk / far-away levels that break the ladder (common on thin testnet books). */
+export function filterBookLevels(
+  levels: SodexBookLevel[],
+  mid: number,
+  side: 'bid' | 'ask',
+  maxPct = 0.04,
+): SodexBookLevel[] {
+  if (!Number.isFinite(mid) || mid <= 0) return levels.slice(0, 16);
+  const lo = mid * (1 - maxPct);
+  const hi = mid * (1 + maxPct);
+  const filtered = levels.filter((l) => l.price >= lo && l.price <= hi);
+  const sorted =
+    side === 'bid'
+      ? [...filtered].sort((a, b) => b.price - a.price)
+      : [...filtered].sort((a, b) => a.price - b.price);
+  return sorted.slice(0, 14);
+}
+
+export async function fetchOrderBook(symbol: string, limit = 40): Promise<SodexOrderBook | null> {
   const path = `/api/v1/spot/markets/${encodeURIComponent(symbol)}/orderbook?limit=${limit}`;
   const res = await publicFirst(path);
   if (!res.ok) return null;
@@ -75,10 +93,18 @@ export async function fetchOrderBook(symbol: string, limit = 20): Promise<SodexO
     blockTime?: number;
     updateID?: number;
   };
+  let bids = mapLevels(d.bids);
+  let asks = mapLevels(d.asks);
+  const bestBid = bids[0]?.price;
+  const bestAsk = asks[0]?.price;
+  const mid =
+    bestBid && bestAsk ? (bestBid + bestAsk) / 2 : bestBid || bestAsk || 0;
+  bids = filterBookLevels(bids, mid, 'bid');
+  asks = filterBookLevels(asks, mid, 'ask');
   return {
     symbol,
-    bids: mapLevels(d.bids),
-    asks: mapLevels(d.asks),
+    bids,
+    asks,
     blockTime: n(d.blockTime),
     updateId: n(d.updateID),
     gateway: res.gateway,
@@ -89,7 +115,7 @@ export async function fetchOrderBook(symbol: string, limit = 20): Promise<SodexO
 export async function fetchKlines(
   symbol: string,
   interval = '1h',
-  limit = 48,
+  limit = 120,
 ): Promise<{ klines: SodexKline[]; gateway: 'testnet' | 'mainnet' | 'fallback' }> {
   const path = `/api/v1/spot/markets/${encodeURIComponent(symbol)}/klines?interval=${interval}&limit=${limit}`;
   const res = await publicFirst(path);
@@ -115,43 +141,74 @@ export async function fetchRecentTrades(symbol: string, limit = 24): Promise<Sod
 }
 
 export async function fetchFundingHint(perpsSymbol = 'BTC-USD'): Promise<number | null> {
-  const path = `/api/v1/perps/markets/tickers?symbol=${encodeURIComponent(perpsSymbol)}`;
-  const res = await publicFirst(path);
-  if (!res.ok) return null;
-  const rows = Array.isArray(res.data) ? res.data : [];
-  const row = (rows[0] ?? null) as Record<string, unknown> | null;
-  if (!row) return null;
-  const fr = n(row.fundingRate);
-  return Number.isFinite(fr) ? fr : null;
+  // Best-effort; perps routes vary by deploy
+  for (const path of [
+    `/api/v1/perps/markets/tickers?symbol=${encodeURIComponent(perpsSymbol)}`,
+    `/api/v1/perp/markets/tickers?symbol=${encodeURIComponent(perpsSymbol)}`,
+  ]) {
+    const res = await publicFirst(path);
+    if (!res.ok) continue;
+    const rows = Array.isArray(res.data) ? res.data : [];
+    const row = (rows[0] ?? null) as Record<string, unknown> | null;
+    if (!row) continue;
+    const fr = n(row.fundingRate);
+    if (Number.isFinite(fr)) return fr;
+  }
+  return null;
 }
 
-export async function fetchTicker(symbol: string): Promise<{ ticker: MarketTicker | null; gateway: 'testnet' | 'mainnet' | 'fallback' }> {
+function mapTicker(r: Record<string, unknown>, fallbackSymbol?: string): MarketTicker {
+  return {
+    symbol: String(r.symbol ?? fallbackSymbol ?? ''),
+    lastPrice: n(r.lastPx ?? r.lastPrice),
+    changePct24h: n(r.changePct ?? r.changePct24h),
+    high: n(r.highPx ?? r.high),
+    low: n(r.lowPx ?? r.low),
+    volume: n(r.volume ?? r.quoteVolume),
+  };
+}
+
+export async function fetchTicker(
+  symbol: string,
+): Promise<{ ticker: MarketTicker | null; gateway: 'testnet' | 'mainnet' | 'fallback' }> {
   const path = `/api/v1/spot/markets/tickers?symbol=${encodeURIComponent(symbol)}`;
   const res = await publicFirst(path);
   if (!res.ok) return { ticker: null, gateway: 'fallback' };
   const rows = Array.isArray(res.data) ? res.data : [];
   const r = (rows[0] ?? null) as Record<string, unknown> | null;
   if (!r) return { ticker: null, gateway: res.gateway };
-  return {
-    gateway: res.gateway,
-    ticker: {
-      symbol: String(r.symbol ?? symbol),
-      lastPrice: n(r.lastPx),
-      changePct24h: n(r.changePct),
-      high: n(r.highPx),
-      low: n(r.lowPx),
-      volume: n(r.volume),
-    },
-  };
+  return { gateway: res.gateway, ticker: mapTicker(r, symbol) };
 }
 
-export async function fetchMarketBundle(symbol: string): Promise<SodexMarketBundle> {
+export async function fetchAllTickers(): Promise<{
+  tickers: MarketTicker[];
+  gateway: 'testnet' | 'mainnet' | 'fallback';
+}> {
+  const path = `/api/v1/spot/markets/tickers`;
+  const res = await publicFirst(path);
+  if (!res.ok) return { tickers: [], gateway: 'fallback' };
+  const rows = Array.isArray(res.data) ? res.data : [];
+  const tickers = rows
+    .map((row) => mapTicker(row as Record<string, unknown>))
+    .filter((t) => t.symbol && t.lastPrice > 0)
+    .sort((a, b) => {
+      const rank = (s: string) => (/BTC/i.test(s) ? 0 : /ETH/i.test(s) ? 1 : /SOL/i.test(s) ? 2 : 9);
+      const d = rank(a.symbol) - rank(b.symbol);
+      return d !== 0 ? d : b.volume - a.volume;
+    });
+  return { tickers, gateway: res.gateway };
+}
+
+export async function fetchMarketBundle(
+  symbol: string,
+  interval = '1h',
+): Promise<SodexMarketBundle> {
   const [tick, book, kl, trades, funding] = await Promise.all([
     fetchTicker(symbol),
-    fetchOrderBook(symbol, 24),
-    fetchKlines(symbol, '1h', 48),
+    fetchOrderBook(symbol, 40),
+    fetchKlines(symbol, interval, 120),
     fetchRecentTrades(symbol, 20),
-    /BTC/i.test(symbol) ? fetchFundingHint('BTC-USD') : fetchFundingHint('ETH-USD'),
+    /BTC/i.test(symbol) ? fetchFundingHint('BTC-USD') : /ETH/i.test(symbol) ? fetchFundingHint('ETH-USD') : Promise.resolve(null),
   ]);
   const gateway = tick.gateway !== 'fallback' ? tick.gateway : book?.gateway ?? kl.gateway;
   const live = Boolean(tick.ticker || book || kl.klines.length);
@@ -166,7 +223,11 @@ export async function fetchMarketBundle(symbol: string): Promise<SodexMarketBund
     meta: meta(
       live ? 'live' : 'fallback',
       `/api/v1/spot/markets/${symbol}`,
-      live ? undefined : 'SoDEX public market data unavailable; charts will soft-empty',
+      live
+        ? gateway === 'mainnet'
+          ? 'Live prices (SoDEX mainnet public data)'
+          : 'Live prices (SoDEX public data)'
+        : 'SoDEX public market data unavailable',
     ),
   };
 }
