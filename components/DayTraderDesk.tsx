@@ -1,5 +1,7 @@
 'use client';
 
+import { formatPair } from '@/lib/display';
+
 import { useCallback, useEffect, useState } from 'react';
 import {
   evaluateAlerts,
@@ -135,7 +137,7 @@ export function DayTraderDesk({ onPrefillTicket }: Props) {
       if (fired.length) {
         setAlerts(rules);
         saveAlerts(rules);
-        setAlertMsg(fired.map((f) => `${f.label}: ${f.symbol}`).join(' · '));
+        setAlertMsg(fired.map((f) => `${f.label}: ${formatPair(f.symbol)}`).join(' · '));
         if (typeof window !== 'undefined' && 'Notification' in window) {
           if (Notification.permission === 'granted') {
             fired.forEach((f) => new Notification('FlowSentinel alert', { body: f.label }));
@@ -242,7 +244,7 @@ export function DayTraderDesk({ onPrefillTicket }: Props) {
                 style={{ padding: 14, border: '1px solid var(--line)', borderRadius: 12 }}
               >
                 <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-                  {s.symbol} · {s.gateway}
+                  {formatPair(s.symbol)}
                 </div>
                 <div className="tabular" style={{ fontSize: 20, fontWeight: 650 }}>
                   {s.price ? `$${s.price.toLocaleString()}` : '-'}
@@ -268,7 +270,7 @@ export function DayTraderDesk({ onPrefillTicket }: Props) {
                   {n.assets.length || n.tags.length ? (
                     <span>
                       {' '}
-                      · {[...n.assets, ...n.tags].slice(0, 4).join(', ')}
+                      · {[...n.assets, ...n.tags].slice(0, 4).map((x) => formatPair(x) || x).join(', ')}
                     </span>
                   ) : null}
                   {n.isShock ? <span style={{ color: 'var(--accent)' }}> · shock</span> : null}
@@ -286,7 +288,7 @@ export function DayTraderDesk({ onPrefillTicket }: Props) {
             }}
           >
             <div style={{ border: '1px solid var(--line)', borderRadius: 12, padding: 14 }}>
-              <div className="hero-kicker">Entry · {data.focus.symbol}</div>
+              <div className="hero-kicker">Entry · {formatPair(data.focus.symbol)}</div>
               <div style={{ fontWeight: 600, marginTop: 4 }}>{data.focus.entry.status}</div>
               <p style={{ margin: '6px 0 0', fontSize: 13, color: 'var(--text-muted)' }}>
                 {data.focus.entry.detail}

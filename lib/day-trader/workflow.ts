@@ -1,3 +1,4 @@
+import { formatPair } from '@/lib/display';
 /**
  * Day-trader workflow: scan → news → entry → exit → Time Machine → budget → risk → ticket.
  * Order step only prefills the Builder Codes confirm screen; paper default; never auto-submits.
@@ -303,7 +304,7 @@ export async function runDayTraderWorkflow(opts?: {
     scannedAt: new Date().toISOString(),
     scan,
     news: {
-      gatewayNote: `SoSoValue news (${newsPanel.meta.source})${focusNews.length ? `; ${focusNews.length} items tagged for ${focusSymbol}` : ""}`,
+      gatewayNote: `SoSoValue news (${newsPanel.meta.source})${focusNews.length ? `; ${focusNews.length} items related to ${formatPair(focusSymbol)}` : ""}`,
       tagged: newsView,
     },
     focus: {

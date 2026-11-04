@@ -49,6 +49,8 @@ describe('sanitizePublicText', () => {
     expect(out).toContain('Neutral');
     expect(out).not.toMatch(/\bFLAT\b/);
     expect(out).not.toMatch(/vBTC/);
+    expect(sanitizePublicText('We remain flat on the desk')).toMatch(/Neutral/i);
+    expect(sanitizePublicText('maintaining a flat posture')).toMatch(/Neutral posture/i);
   });
 });
 

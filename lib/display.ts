@@ -106,6 +106,9 @@ export function sanitizePublicText(raw: string): string {
   text = text.replace(/\bLONG on\b/gi, 'Bullish on');
   text = text.replace(/\bFLAT on\b/gi, 'Neutral on');
   text = text.replace(/\bis FLAT\b/gi, 'is Neutral');
+  text = text.replace(/\bremain(?:s|ed)? flat\b/gi, 'stay Neutral');
+  text = text.replace(/\bflat posture\b/gi, 'Neutral posture');
+  text = text.replace(/\bstanding flat\b/gi, 'standing Neutral');
   text = text.replace(/\bFLAT\b/g, 'Neutral');
   text = text.replace(/\u2014/g, ',').replace(/\u2013/g, '-');
   return text.replace(/\s{2,}/g, ' ').trim();
