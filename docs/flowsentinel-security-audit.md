@@ -87,7 +87,8 @@ Present in `next.config.ts`: CSP, HSTS, X-Frame-Options, X-Content-Type-Options,
 
 ## Commits (security audit follow-up)
 
-See git log on `builder-race-v2` after this audit push (message will reference security audit fixes).
+- `d5ceba0` security: audit fixes for builder-race-v2
+- Prior race work: `9a3ac0e`, `fdff14e`
 
 ## Explicit non-actions
 
