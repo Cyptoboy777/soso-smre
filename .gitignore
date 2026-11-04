@@ -20,3 +20,4 @@ sodex_*.secret.txt
 # never commit local testnet keys (path)
 secrets/
 **/secrets/
+.data/

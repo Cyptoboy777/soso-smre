@@ -25,6 +25,16 @@ const ApiDiagnostics = dynamic(() => import('./ApiDiagnostics').then((m) => m.Ap
   loading: () => <div className="panel" style={{ padding: 24, minHeight: 160 }} aria-busy>Probing APIs…</div>,
 });
 
+const BuilderTradePanel = dynamic(() => import('./BuilderTradePanel').then((m) => m.BuilderTradePanel), {
+  ssr: false,
+  loading: () => <div className="panel" style={{ padding: 24, minHeight: 160 }} aria-busy>Loading builder desk…</div>,
+});
+
+const DayTraderDesk = dynamic(() => import('./DayTraderDesk').then((m) => m.DayTraderDesk), {
+  ssr: false,
+  loading: () => <div className="panel" style={{ padding: 24, minHeight: 160 }} aria-busy>Loading day-trader desk…</div>,
+});
+
 type DeskPayload = DeskSnapshot & {
   keys: { sosovalue: boolean; gemini: boolean; sodex: boolean };
   trackId?: string;
@@ -425,7 +435,7 @@ export function DeskClient() {
               onChange={(e) => setConfirming(e.target.checked)}
               style={{ marginTop: 3, width: 18, height: 18, accentColor: 'var(--accent)' }}
             />
-            <span>I reviewed the thesis and risk checks. Place the SoDEX testnet limit order.</span>
+            <span>I reviewed the thesis and risk checks. Place the legacy shared-key SoDEX testnet limit order (or use Builder Codes wallet panel above for non-custodial).</span>
           </label>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             <button
@@ -469,6 +479,31 @@ export function DeskClient() {
           </p>
         </div>
       </motion.section>
+
+      <DayTraderDesk
+        onPrefillTicket={(patch) => {
+          setData({
+            ...data,
+            thesis: {
+              ...data.thesis,
+              side: patch.side ?? data.thesis.side,
+              symbol: patch.symbol ?? data.thesis.symbol,
+              entry: patch.entry ?? data.thesis.entry,
+              stopLoss: patch.stopLoss ?? data.thesis.stopLoss,
+              takeProfit: patch.takeProfit ?? data.thesis.takeProfit,
+              plainEnglish: patch.plainEnglish ?? data.thesis.plainEnglish,
+            },
+            risk: {
+              ...data.risk,
+              positionSize: patch.quantity ?? data.risk.positionSize,
+            },
+          });
+          setConfirming(false);
+          setOrder(null);
+        }}
+      />
+
+      <BuilderTradePanel thesis={thesis} quantity={risk.positionSize || 0} />
 
       <ApiDiagnostics />
 

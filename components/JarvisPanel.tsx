@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
 import dynamic from 'next/dynamic';
 import type { JarvisBriefing, JarvisIdea, SodexMarketBundle } from '@/types/flow';
+import { validateAdvisorSuggestion } from '@/lib/advisor-suggestions';
 
 const SodexPriceChart = dynamic(() => import('./SodexPriceChart').then((m) => m.SodexPriceChart), {
   ssr: false,
@@ -175,7 +176,29 @@ export function JarvisPanel({
                 <span>Target {idea.takeProfit.toLocaleString()}</span>
                 {mid != null ? <span>Book mid {mid.toLocaleString()}</span> : null}
               </div>
-              <button type="button" className="btn btn-accent" onClick={() => onPrefill?.(idea)}>
+              <button
+                type="button"
+                className="btn btn-accent"
+                onClick={() => {
+                  if (!idea || !onPrefill) return;
+                  const v = validateAdvisorSuggestion(idea);
+                  if (!v.ok) {
+                    setError(`Prefill blocked: ${v.error}`);
+                    return;
+                  }
+                  // Advisor may only prefill — never submit an order.
+                  onPrefill({
+                    ...idea,
+                    side: v.suggestion.side,
+                    symbol: v.suggestion.symbol,
+                    entry: v.suggestion.entry,
+                    stopLoss: v.suggestion.stopLoss,
+                    takeProfit: v.suggestion.takeProfit,
+                    confidence: v.suggestion.confidence,
+                    reasoning: v.suggestion.reasoning || idea.reasoning,
+                  });
+                }}
+              >
                 Prefill SoDEX ticket
               </button>
             </div>

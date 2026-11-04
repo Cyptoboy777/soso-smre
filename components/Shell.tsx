@@ -78,7 +78,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
         }}
       >
         <div>
-          FlowSentinel · SoSoValue + SoDEX · Public track record · Never presents fallback as live
+          FlowSentinel · SoSoValue + SoDEX · Day Trader skills adapted from day-trader-skill (MIT) · Public track record · Never presents fallback as live
         </div>
         <div style={{ maxWidth: 720, margin: '0 auto', lineHeight: 1.45 }}>
           Not financial advice. SoDEX path is testnet-only. Voice never places orders.
