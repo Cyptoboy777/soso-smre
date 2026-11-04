@@ -72,7 +72,7 @@ export const MESSAGES: Record<Locale, Dict> = {
       "Mainnet means real funds. Live trading stays off until it is turned on.",
     statsTitle: "Builder revenue",
     statsLead:
-      "Live numbers from SoDEX public builder fee endpoints for FlowSentinel. Empty means no activity yet, not a placeholder.",
+      "Live builder fee numbers from SoDEX. Empty means no activity yet.",
     statsEmpty: "No protocol fee activity yet.",
     statsUsers: "Users",
     statsFees: "Builder fees",
