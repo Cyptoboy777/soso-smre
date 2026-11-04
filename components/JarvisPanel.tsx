@@ -93,7 +93,6 @@ function TradePlanCard({
   mid: number | null;
 }) {
   const rr = riskReward(idea.entry, idea.stopLoss, idea.takeProfit, idea.side);
-  const side = idea.side;
   return (
     <div className="trade-plan" aria-label="Trade plan">
       <div className="trade-plan-head">
@@ -105,11 +104,11 @@ function TradePlanCard({
           <span className="tp-label">Entry</span>
           <strong className="tabular">{formatPrice(idea.entry)}</strong>
         </div>
-        <div className={`trade-plan-cell is-stop ${side === 'LONG' ? 'loss' : 'gain'}`}>
+        <div className="trade-plan-cell is-stop loss">
           <span className="tp-label">Stop</span>
           <strong className="tabular">{formatPrice(idea.stopLoss)}</strong>
         </div>
-        <div className={`trade-plan-cell is-target ${side === 'LONG' ? 'gain' : 'loss'}`}>
+        <div className="trade-plan-cell is-target gain">
           <span className="tp-label">Target</span>
           <strong className="tabular">{formatPrice(idea.takeProfit)}</strong>
         </div>

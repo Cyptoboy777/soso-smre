@@ -833,7 +833,7 @@ button { font-family: inherit; }
 .side-short { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 40%, var(--line)); }
 .side-flat { color: var(--text-muted); }
 .conf { margin-left: auto; font-family: var(--font-mono); font-size: 12px; color: var(--accent-soft); }
-.jarvis-detail { border-top: 1px solid var(--line); padding-top: 16px; }
+.jarvis-detail { border-top: 1px solid var(--line); padding-top: 16px; overflow: visible; }
 .jarvis-detail-grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr);
@@ -1812,7 +1812,7 @@ a.news-chip:hover {
   align-items: start;
 }
 .jarvis-detail-main { grid-column: span 5; display: grid; gap: 14px; }
-.jarvis-market { grid-column: span 7; display: grid; gap: 12px; min-width: 0; }
+.jarvis-market { grid-column: span 7; display: grid; gap: 12px; min-width: 0; overflow: visible; }
 @media (max-width: 1100px) {
   .jarvis-detail-main, .jarvis-market { grid-column: span 12; }
 }
@@ -1971,7 +1971,7 @@ a.news-chip:hover {
   position: absolute;
   top: calc(100% + 8px);
   left: 0;
-  width: min(420px, 92vw);
+  width: min(460px, 94vw);
   z-index: 40;
   border-radius: 14px;
   border: 1px solid var(--line);
