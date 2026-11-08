@@ -4,7 +4,7 @@
  */
 import { getBuilderConfig, type BuilderParams } from "@/lib/sodex-builder";
 
-const MAX_BODY_ORDERS = 1;
+const MAX_BODY_ORDERS = 6;
 const MAX_QTY = 1e9;
 
 export type RelayOrderParamsCheck = { ok: true } | { ok: false; error: string };
@@ -31,58 +31,50 @@ export function assertRelayOrderParams(
     return { ok: false, error: "Order batch is empty." };
   }
   if (orders.length > MAX_BODY_ORDERS) {
-    return { ok: false, error: "Only one order per batch is allowed." };
+    return { ok: false, error: "This review allows at most six orders." };
   }
 
-  const order = orders[0] as Record<string, unknown>;
-  if (!order || typeof order !== "object") {
-    return { ok: false, error: "Invalid order." };
+  let notional = 0;
+  let maxBuy = 0;
+  let minSell = Number.POSITIVE_INFINITY;
+  for (const raw of orders) {
+    const order = raw as Record<string, unknown>;
+    if (!order || typeof order !== "object") return { ok: false, error: "Invalid order." };
+    const side = asFiniteNumber(order.side);
+    const type = asFiniteNumber(order.type);
+    if (side !== 1 && side !== 2) return { ok: false, error: "Invalid order side." };
+    if (type !== 1 && type !== 2) return { ok: false, error: "Invalid order type." };
+    if (orders.length > 1 && type !== 1) {
+      return { ok: false, error: "A multi-order review can only contain limit orders." };
+    }
+    const qty = asFiniteNumber(order.quantity);
+    const funds = asFiniteNumber(order.funds);
+    const price = asFiniteNumber(order.price);
+    if (qty != null && (qty <= 0 || qty > MAX_QTY)) return { ok: false, error: "Order size is out of range." };
+    if (type === 1) {
+      if (price == null || price <= 0 || qty == null || qty <= 0) {
+        return { ok: false, error: "Limit orders need a valid price and size." };
+      }
+      notional += qty * price;
+      if (side === 1) maxBuy = Math.max(maxBuy, price);
+      else minSell = Math.min(minSell, price);
+    }
+    if (type === 2 && side === 1) {
+      if (funds == null || funds <= 0) return { ok: false, error: "Market buys need a valid quote size." };
+      notional += funds;
+    }
   }
-
-  const side = asFiniteNumber(order.side);
-  const type = asFiniteNumber(order.type);
-  if (side !== 1 && side !== 2) {
-    return { ok: false, error: "Invalid order side." };
-  }
-  if (type !== 1 && type !== 2) {
-    return { ok: false, error: "Invalid order type." };
-  }
-
-  const qty = asFiniteNumber(order.quantity);
-  const funds = asFiniteNumber(order.funds);
-  const price = asFiniteNumber(order.price);
-
-  if (qty != null && (qty <= 0 || qty > MAX_QTY)) {
-    return { ok: false, error: "Order size is out of range." };
-  }
-  if (funds != null && (funds <= 0 || funds > cfg.maxNotionalUsdc)) {
+  if (notional > cfg.maxNotionalUsdc + 1e-9) {
     return { ok: false, error: "Order size exceeds the app limit." };
   }
-
-  // Limit: require price + quantity; notional = qty * price
-  if (type === 1) {
-    if (price == null || price <= 0 || qty == null || qty <= 0) {
-      return { ok: false, error: "Limit orders need a valid price and size." };
-    }
-    const notional = qty * price;
-    if (!Number.isFinite(notional) || notional > cfg.maxNotionalUsdc + 1e-9) {
-      return { ok: false, error: "Order size exceeds the app limit." };
-    }
-  }
-
-  // Market buy uses funds; market sell uses quantity (base) — still cap funds path.
-  if (type === 2 && side === 1) {
-    if (funds == null || funds <= 0) {
-      return { ok: false, error: "Market buys need a valid quote size." };
-    }
-    if (funds > cfg.maxNotionalUsdc + 1e-9) {
-      return { ok: false, error: "Order size exceeds the app limit." };
-    }
+  if (orders.length > 1 && maxBuy > 0 && minSell < Number.POSITIVE_INFINITY && maxBuy >= minSell) {
+    return { ok: false, error: "These orders cross each other. Widen the prices before signing." };
   }
 
   const builder = params.builder as BuilderParams | undefined;
-  if (cfg.builderId != null) {
-    if (!builder || builder.id !== cfg.builderId) {
+  // A missing tag is allowed. A present tag must match the configured fee exactly.
+  if (builder) {
+    if (cfg.builderId == null || builder.id !== cfg.builderId) {
       return { ok: false, error: "This order could not be verified." };
     }
     if (typeof builder.fee !== "number" || builder.fee !== cfg.builderFee) {
@@ -91,8 +83,6 @@ export function assertRelayOrderParams(
     if (builder.fee < 0 || builder.fee > cfg.maxApproval) {
       return { ok: false, error: "This order could not be verified." };
     }
-  } else if (builder) {
-    return { ok: false, error: "This order could not be verified." };
   }
 
   const accountID = asFiniteNumber(params.accountID);

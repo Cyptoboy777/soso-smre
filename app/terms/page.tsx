@@ -11,7 +11,7 @@ export default function TermsPage() {
     <article className="panel" style={{ padding: 28, maxWidth: 720, margin: '0 auto' }}>
       <h1 style={{ marginTop: 0 }}>Terms of use</h1>
       <p style={{ color: 'var(--text-muted)', lineHeight: 1.55 }}>
-        FlowSentinel is a practice trading desk powered by SoSoValue data and SoDEX. It is provided as-is for education. It is
+        FlowSentinel reviews SoSoValue data and SoDEX mainnet orders. Order submission stays off until release. It is provided as-is. It is
         not financial, investment, legal, or tax advice. Nothing on this site is an offer to buy or sell
         any asset.
       </p>

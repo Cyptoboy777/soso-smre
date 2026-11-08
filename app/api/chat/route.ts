@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 const SYSTEM = `You are FlowSentinel Assistant, a friendly guide inside a SoSoValue + SoDEX trading desk app.
-Help with: how the desk works, reading ETF flow ideas, practice trading, builder app fees, and live market context the app provides.
+Help with: how the desk works, reading ETF flow ideas, reviewing a mainnet order, and live market context the app provides.
 Rules:
 - Never place, sign, or confirm orders. Users must confirm every trade themselves.
 - When deskContext is provided, you MAY cite those live prices / ETF flows / today's idea. Do not invent other numbers. Say Bullish/Bearish/Neutral (never LONG/SHORT/FLAT).
@@ -92,7 +92,7 @@ export async function POST(req: Request) {
     let reply: string;
     if (!hasGeminiKey()) {
       reply =
-        "I can still help at a high level: open Start to connect your wallet, review an idea on the Desk, then confirm any practice trade yourself. Live AI answers need the assistant key on this deploy.";
+        "I can still help at a high level: open the trade ticket to review a mainnet order. I never send an order. Live AI answers need the assistant key on this deploy.";
     } else {
       const prompt = `${deskBlock}${historyText ? `Recent chat:\n${historyText}\n\n` : ""}User: ${message}\n\nReply as FlowSentinel Assistant in plain text (not JSON).`;
       const text = await geminiGenerate({
@@ -105,13 +105,13 @@ export async function POST(req: Request) {
       reply = sanitizeAssistantReply(text);
     }
     if (!reply) {
-      reply = "I could not form a reply. Try asking how to start a practice trade.";
+      reply = "I could not form a reply. Try asking how to review an order.";
     }
 
     const suggestions = [
       "What is today's BTC price?",
       "Explain today's idea simply",
-      "How do I take a practice trade?",
+      "How do I review an order?",
     ];
 
     if (!wantStream) {

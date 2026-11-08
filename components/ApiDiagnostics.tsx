@@ -66,7 +66,7 @@ export function ApiDiagnostics() {
         <span className={`mode-pill ${keys.sosovalue ? 'live' : 'sim'}`}>SoSoValue {keys.sosovalue ? 'key' : 'fallback'}</span>
         <span className={`mode-pill ${keys.gemini ? 'live' : 'sim'}`}>Gemini {keys.gemini ? model || 'on' : 'off'}</span>
         <span className={`mode-pill ${keys.sodexTrade ? 'live' : 'sim'}`}>
-          Orders {labels.orders || (keys.sodexTrade ? 'Practice' : 'Practice')}
+          Orders {labels.orders || 'Not submitted'}
         </span>
       </div>
       <div className="diag-table-wrap">

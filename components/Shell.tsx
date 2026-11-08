@@ -12,6 +12,7 @@ function ShellInner({ children }: { children: React.ReactNode }) {
   const { t } = useLocale();
   const NAV = [
     { href: '/', label: t.navDesk },
+    { href: '/trade', label: t.navTrade },
     { href: '/start', label: t.navStart },
     { href: '/stats', label: t.navStats },
     { href: '/track-record', label: t.navTrack },
@@ -51,6 +52,7 @@ function ShellInner({ children }: { children: React.ReactNode }) {
       <footer className="shell-footer">
         <p className="shell-disclaimer">{t.footerRisk}</p>
         <div className="shell-footer-links">
+          <Link href="/trade">{t.navTrade}</Link>
           <Link href="/start">{t.navStart}</Link>
           <Link href="/stats">{t.navStats}</Link>
           <Link href="/terms">Terms</Link>

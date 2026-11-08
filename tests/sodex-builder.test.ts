@@ -46,40 +46,42 @@ function setEnv(k: (typeof ENV_KEYS)[number], v: string | undefined) {
 }
 
 describe('sodex-builder config gates', () => {
-  it('defaults to testnet when Builder ID missing', () => {
+  it('reviews mainnet even when the builder id is missing and submission is off', () => {
     setEnv('SODEX_BUILDER_ID', undefined);
-    setEnv('SODEX_MAINNET_TRADING', '1');
+    setEnv('SODEX_MAINNET_TRADING', '0');
     const cfg = getBuilderConfig();
     expect(cfg.builderId).toBeNull();
     expect(cfg.builderReady).toBe(false);
-    expect(cfg.network).toBe('testnet');
+    expect(cfg.targetNetwork).toBe('mainnet');
+    expect(cfg.network).toBe('mainnet');
+    expect(cfg.executionEnabled).toBe(false);
+    expect(cfg.mainnet.chainId).toBe(286623);
   });
 
-  it('keeps testnet when Builder ID set but kill switch off', () => {
+  it('keeps submission off when the release flag is off', () => {
     setEnv('SODEX_BUILDER_ID', '12345');
     setEnv('SODEX_MAINNET_TRADING', '0');
     const cfg = getBuilderConfig();
-    expect(cfg.builderId).toBe(12345);
-    expect(cfg.mainnetTradingEnabled).toBe(false);
-    expect(cfg.network).toBe('testnet');
+    expect(cfg.executionEnabled).toBe(false);
+    expect(cfg.network).toBe('mainnet');
   });
 
-  it('enables mainnet only with Builder ID + kill switch', () => {
+  it('enables submission only when the release flag is on', () => {
     setEnv('SODEX_BUILDER_ID', '99');
     setEnv('SODEX_MAINNET_TRADING', '1');
     const cfg = getBuilderConfig();
+    expect(cfg.executionEnabled).toBe(true);
     expect(cfg.network).toBe('mainnet');
     expect(cfg.builderReady).toBe(true);
   });
 
-  it('blocks mainnet without builder / kill switch', () => {
+  it('allows a mainnet payload review and blocks every submit while release is off', () => {
     setEnv('SODEX_BUILDER_ID', undefined);
     setEnv('SODEX_MAINNET_TRADING', '0');
-    expect(assertTradingAllowed({ network: 'mainnet', confirmed: true })).toMatch(/not available/i);
-    setEnv('SODEX_BUILDER_ID', '1');
-    expect(assertTradingAllowed({ network: 'mainnet', confirmed: true })).toMatch(/not available/i);
-    expect(assertTradingAllowed({ network: 'testnet', confirmed: false })).toMatch(/confirmation/);
-    expect(assertTradingAllowed({ network: 'testnet', confirmed: true })).toBeNull();
+    expect(assertTradingAllowed({ network: 'mainnet', confirmed: true })).toBeNull();
+    expect(assertRelayAllowed({ network: 'mainnet', confirmed: true })).toMatch(/not enabled/i);
+    expect(assertRelayAllowed({ network: 'testnet', confirmed: true })).toMatch(/not enabled/i);
+    expect(assertTradingAllowed({ network: 'mainnet', confirmed: false })).toMatch(/confirmation/);
   });
 
   it('formats fee units', () => {
@@ -98,7 +100,8 @@ describe('sodex-builder config gates', () => {
     const cfg = getBuilderConfig();
     expect(cfg.appFeePercent).toBe('0.01%');
     expect(cfg.feeDisclosure.caps).toMatch(/Includes a 0\.01% app fee/);
-    expect(cfg.network).toBe('testnet');
+    expect(cfg.network).toBe('mainnet');
+    expect(cfg.executionEnabled).toBe(false);
     expect(cfg.mainnet.chainId).toBe(286623);
   });
 
@@ -108,9 +111,7 @@ describe('sodex-builder config gates', () => {
     expect(
       assertTradingAllowed({ network: 'mainnet', confirmed: true, dryRun: true }),
     ).toBeNull();
-    expect(
-      assertRelayAllowed({ network: 'mainnet', confirmed: true }),
-    ).toMatch(/not available/i);
+    expect(assertRelayAllowed({ network: 'mainnet', confirmed: true })).toMatch(/not enabled/i);
   });
 });
 

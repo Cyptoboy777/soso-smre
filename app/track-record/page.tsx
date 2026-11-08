@@ -244,8 +244,8 @@ function sideLabel(side: string) {
 }
 
 function modeLabel(mode: string) {
-  if (mode === 'live') return 'Practice fill';
-  if (mode === 'dry-run') return 'Practice demo';
+  if (mode === 'live') return 'Submitted';
+  if (mode === 'dry-run') return 'Not submitted';
   return 'Idea only';
 }
 

@@ -25,6 +25,14 @@ export function hasInjectedWallet(): boolean {
   return typeof window !== "undefined" && Boolean(window.ethereum);
 }
 
+export async function readWalletChainId(): Promise<number | null> {
+  if (!window.ethereum) return null;
+  const hex = await window.ethereum.request({ method: "eth_chainId" });
+  if (typeof hex !== "string") return null;
+  const id = Number.parseInt(hex, 16);
+  return Number.isSafeInteger(id) ? id : null;
+}
+
 export async function connectInjectedWallet(): Promise<string> {
   if (!window.ethereum) {
     throw new Error("No browser wallet detected. Install a free self-custody wallet extension.");

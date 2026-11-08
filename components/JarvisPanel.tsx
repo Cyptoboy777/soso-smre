@@ -297,7 +297,7 @@ export function JarvisPanel({ onPrefill }: { onPrefill?: (idea: JarvisIdea) => v
             <span className="live-dot" aria-hidden />
             Live prices
           </span>
-          <span className="status-pill">Practice mode</span>
+          <span className="status-pill">Submission off</span>
           {briefing?.newsShock ? <span className="status-pill is-warn">News alert</span> : null}
         </div>
       </header>
@@ -338,7 +338,6 @@ export function JarvisPanel({ onPrefill }: { onPrefill?: (idea: JarvisIdea) => v
                 <div className="jarvis-idea-top">
                   <span className="step-n">0{it.rank}</span>
                   <span className={`side-tag side-${it.side.toLowerCase()}`}>{formatSideLabel(it.side)}</span>
-                  <span className="conf">{it.confidence}%</span>
                 </div>
                 <strong>{sanitizePublicText(it.title)}</strong>
                 <p>{sanitizePublicText(it.reasoning)}</p>
@@ -417,7 +416,7 @@ export function JarvisPanel({ onPrefill }: { onPrefill?: (idea: JarvisIdea) => v
                   });
                 }}
               >
-                {livePlan?.status === 'expired' ? 'Plan expired' : 'Prefill practice ticket'}
+                {livePlan?.status === 'expired' ? 'Plan expired' : 'Review on the trade ticket'}
               </button>
             </div>
             <div className="jarvis-market">
@@ -428,7 +427,7 @@ export function JarvisPanel({ onPrefill }: { onPrefill?: (idea: JarvisIdea) => v
                     <span className="live-dot" aria-hidden />
                     Live prices
                   </span>
-                  <span className="status-pill">Practice mode</span>
+                  <span className="status-pill">Submission off</span>
                 </div>
               </div>
               <div className="jarvis-last">

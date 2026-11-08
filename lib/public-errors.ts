@@ -7,8 +7,7 @@ const FRIENDLY =
   "Something went wrong. Please try again in a moment.";
 const FRIENDLY_CONFIRM =
   "Please confirm the details before continuing.";
-const FRIENDLY_MAINNET =
-  "Live trading is not available right now. You can keep practicing on the practice network.";
+const FRIENDLY_MAINNET = "Order submission is not enabled.";
 const FRIENDLY_WALLET =
   "We could not verify your wallet or account. Check your connection and try again.";
 const FRIENDLY_RATE =

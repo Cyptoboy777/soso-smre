@@ -25,11 +25,6 @@ const BuilderTradePanel = dynamic(() => import('./BuilderTradePanel').then((m) =
   loading: () => <div className="panel" style={{ padding: 24, minHeight: 160 }} aria-busy>Loading builder desk…</div>,
 });
 
-const DayTraderDesk = dynamic(() => import('./DayTraderDesk').then((m) => m.DayTraderDesk), {
-  ssr: false,
-  loading: () => <div className="panel" style={{ padding: 24, minHeight: 160 }} aria-busy>Loading day-trader desk…</div>,
-});
-
 const ShareIdeaCard = dynamic(() => import('./ShareIdeaCard').then((m) => m.ShareIdeaCard), {
   ssr: false,
 });
@@ -157,7 +152,7 @@ export function DeskClient() {
   return (
     <div style={{ display: 'grid', gap: 20 }}>
       <div className="desk-mode-row" role="status">
-        <span className="mode-pill live">Practice mode</span>
+        <span className="mode-pill live">Submission off</span>
         <span className="mode-pill">Powered by SoSoValue data</span>
         <span className="mode-pill">You confirm every order</span>
       </div>
@@ -221,13 +216,6 @@ export function DeskClient() {
           })()}
           {hasValidTradeSetup(thesis.side, thesis.entry, thesis.stopLoss, thesis.takeProfit) ? (
             <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'stretch' }}>
-              <div className="metric-chip">
-                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>Confidence</div>
-                <div style={{ color: 'var(--accent)', fontSize: 26, fontWeight: 650, letterSpacing: '-0.03em' }}>
-                  <CountUp value={thesis.confidence} />
-                  <span style={{ fontSize: 13, color: 'var(--text-muted)', fontWeight: 500 }}> /100</span>
-                </div>
-              </div>
               <MetricChip label="Entry" value={thesis.entry} prefix="$" />
               <MetricChip label="Stop" value={thesis.stopLoss} prefix="$" />
               <MetricChip label="Target" value={thesis.takeProfit} prefix="$" />
@@ -435,70 +423,13 @@ export function DeskClient() {
           </div>
         </div>
         <div style={{ borderLeft: '1px solid var(--line)', padding: 24, background: 'rgba(255,79,32,0.035)' }}>
-          <h2 style={{ margin: '0 0 8px', fontSize: 18, letterSpacing: '-0.02em' }}>Confirm & execute</h2>
+          <h2 style={{ margin: '0 0 8px', fontSize: 18, letterSpacing: '-0.02em' }}>Review on the order ticket</h2>
           <p style={{ margin: '0 0 16px', color: 'var(--text-muted)', fontSize: 13 }}>
-            Limit {thesis.side === 'SHORT' ? 'SELL' : 'BUY'} {risk.positionSize || '-'} {formatPair(thesis.symbol)} @ $
-            {thesis.entry.toLocaleString()}
-            <br />
-            Risk ${risk.riskUsd} ({risk.riskPct}% of ${risk.equityUsd.toLocaleString()} equity)
+            The desk does not send an order. Open the trade ticket to review a mainnet order. Submission stays off until release.
           </p>
-          {!keys.sodex && (
-            <p className="badge fallback" style={{ marginBottom: 12, display: 'inline-flex' }}>
-              Practice mode when live trading keys are not connected
-            </p>
-          )}
-          <label
-            style={{
-              display: 'flex',
-              gap: 10,
-              alignItems: 'flex-start',
-              marginBottom: 14,
-              fontSize: 14,
-              cursor: risk.approved ? 'pointer' : 'not-allowed',
-              opacity: risk.approved ? 1 : 0.5,
-            }}
-          >
-            <input
-              type="checkbox"
-              checked={confirming}
-              disabled={!risk.approved || busy}
-              onChange={(e) => setConfirming(e.target.checked)}
-              style={{ marginTop: 3, width: 18, height: 18, accentColor: 'var(--accent)' }}
-            />
-            <span>I reviewed the thesis and risk checks. Place the legacy shared-key SoDEX testnet limit order (or use Builder Codes wallet panel above for non-custodial).</span>
-          </label>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            <button
-              className="btn btn-primary"
-              disabled={!risk.approved || !confirming || busy || thesis.side === 'FLAT'}
-              onClick={() => void execute()}
-            >
-              {busy ? 'Submitting…' : 'Place practice order'}
-            </button>
-            <button className="btn" onClick={() => void load()} disabled={busy}>
-              Refresh thesis
-            </button>
-          </div>
-          {order && (
-            <div
-              role="status"
-              aria-live="polite"
-              style={{
-                marginTop: 16,
-                padding: 12,
-                borderRadius: 12,
-                border: '1px solid var(--line)',
-                background: 'var(--surface-2)',
-                fontSize: 13,
-              }}
-            >
-              <div style={{ fontWeight: 560, marginBottom: 4 }}>
-                {order.mode === 'dry-run' ? 'Practice result' : 'Practice order result'} · {order.status}
-              </div>
-              <div className="tabular">ID {order.orderId}</div>
-              <div style={{ color: 'var(--text-muted)', marginTop: 6 }}>{order.note}</div>
-            </div>
-          )}
+          <a className="btn btn-primary" href="/trade">
+            Review the order
+          </a>
           {error && (
             <p style={{ color: 'var(--danger)', fontSize: 13, marginTop: 12 }} role="alert">
               {error}
@@ -510,34 +441,10 @@ export function DeskClient() {
         </div>
       </motion.section>
 
-      <DayTraderDesk
-        onPrefillTicket={(patch) => {
-          setData({
-            ...data,
-            thesis: {
-              ...data.thesis,
-              side: patch.side ?? data.thesis.side,
-              symbol: patch.symbol ?? data.thesis.symbol,
-              entry: patch.entry ?? data.thesis.entry,
-              stopLoss: patch.stopLoss ?? data.thesis.stopLoss,
-              takeProfit: patch.takeProfit ?? data.thesis.takeProfit,
-              plainEnglish: patch.plainEnglish ?? data.thesis.plainEnglish,
-            },
-            risk: {
-              ...data.risk,
-              positionSize: patch.quantity ?? data.risk.positionSize,
-            },
-          });
-          setConfirming(false);
-          setOrder(null);
-        }}
-      />
-
       <BuilderTradePanel thesis={thesis} quantity={risk.positionSize || 0} />
 
-
       <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: 0 }}>
-        Practice desk · You confirm every order · Not financial advice
+        Mainnet review · Order submission is not enabled · Not financial advice
       </p>
     </div>
   );

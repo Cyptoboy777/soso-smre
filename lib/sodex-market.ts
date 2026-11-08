@@ -83,6 +83,52 @@ export function filterBookLevels(
   return sorted.slice(0, 14);
 }
 
+/** Public book on one network. Does not fall back to the other network. */
+export async function fetchOrderBookForNetwork(
+  symbol: string,
+  network: 'mainnet' | 'testnet',
+  limit = 40,
+  engine: 'spot' | 'perps' = 'spot',
+): Promise<SodexOrderBook | null> {
+  const base = network === 'mainnet' ? MAINNET : TESTNET;
+  const path = `/api/v1/${engine}/markets/${encodeURIComponent(symbol)}/orderbook?limit=${limit}`;
+  const res = await getJson(base, path);
+  if (!res.ok) return null;
+  const d = res.data as { bids?: unknown; asks?: unknown; blockTime?: number; updateID?: number };
+  let bids = mapLevels(d.bids);
+  let asks = mapLevels(d.asks);
+  const bestBid = bids[0]?.price;
+  const bestAsk = asks[0]?.price;
+  const mid = bestBid && bestAsk ? (bestBid + bestAsk) / 2 : bestBid || bestAsk || 0;
+  bids = filterBookLevels(bids, mid, 'bid');
+  asks = filterBookLevels(asks, mid, 'ask');
+  return {
+    symbol,
+    bids,
+    asks,
+    blockTime: n(d.blockTime),
+    updateId: n(d.updateID),
+    gateway: network,
+    meta: meta('live'),
+  };
+}
+
+export async function fetchKlinesForNetwork(
+  symbol: string,
+  network: 'mainnet' | 'testnet',
+  interval = '1h',
+  limit = 48,
+): Promise<SodexKline[]> {
+  const base = network === 'mainnet' ? MAINNET : TESTNET;
+  const path = `/api/v1/spot/markets/${encodeURIComponent(symbol)}/klines?interval=${interval}&limit=${limit}`;
+  const res = await getJson(base, path);
+  if (!res.ok || !Array.isArray(res.data)) return [];
+  return res.data.map((r) => {
+    const x = r as Record<string, unknown>;
+    return { t: n(x.t), o: n(x.o), h: n(x.h), l: n(x.l), c: n(x.c), v: n(x.v) };
+  });
+}
+
 export async function fetchOrderBook(symbol: string, limit = 40): Promise<SodexOrderBook | null> {
   const path = `/api/v1/spot/markets/${encodeURIComponent(symbol)}/orderbook?limit=${limit}`;
   const res = await publicFirst(path);

@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next';
 import { Inter_Tight, JetBrains_Mono } from 'next/font/google';
 import './globals.css';
 import { Shell } from '@/components/Shell';
+import { MotionActivity } from '@/components/MotionActivity';
 import { AiChatDock } from '@/components/AiChatDock';
 import { ThemeProvider } from '@/components/ThemeProvider';
 
@@ -27,7 +28,7 @@ export const metadata: Metadata = {
     template: '%s · FlowSentinel',
   },
   description:
-    'AI trading desk for SoSoValue flows and SoDEX practice trades. Clear ideas, risk gates, and you confirm every order.',
+    'AI trading desk for SoSoValue flows and SoDEX mainnet order review. Submission stays off until release.',
   applicationName: 'FlowSentinel',
   keywords: ['FlowSentinel', 'SoSoValue', 'SoDEX', 'ETF flows'],
   authors: [{ name: 'Crypto boy' }],
@@ -75,6 +76,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         }
       >
         <ThemeProvider>
+          <MotionActivity />
           <a className="skip-link" href="#main">
             Skip to content
           </a>

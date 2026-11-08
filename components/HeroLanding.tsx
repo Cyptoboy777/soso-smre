@@ -13,9 +13,9 @@ const HeroScene = dynamic(() => import('./HeroScene').then((m) => m.HeroScene), 
 
 const STEPS = [
   { n: '01', title: 'Watch markets', body: 'ETF flows and news from SoSoValue' },
-  { n: '02', title: 'Get an idea', body: 'Clear direction with confidence' },
+  { n: '02', title: 'Get an idea', body: 'Clear direction from the flows' },
   { n: '03', title: 'Check risk', body: 'Size and safety checks you can read' },
-  { n: '04', title: 'You confirm', body: 'Practice orders only when you say yes' },
+  { n: '04', title: 'You confirm', body: 'Submission stays off until release' },
 ];
 
 export function HeroLanding() {
@@ -89,8 +89,8 @@ export function HeroLanding() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.18, duration: 0.5 }}
           >
-            FlowSentinel turns SoSoValue flows into a clear idea, a simple risk check, and a practice trade
-            you confirm yourself.
+            FlowSentinel turns SoSoValue flows into a clear idea and a mainnet order you can review.
+            Submission stays off until release.
           </motion.p>
           <motion.div
             className="hero-cta-row"
@@ -116,7 +116,7 @@ export function HeroLanding() {
           >
             <li>
               <span className="proof-k">Mode</span>
-              <span className="proof-v">Practice by default</span>
+              <span className="proof-v">Submission off</span>
             </li>
             <li>
               <span className="proof-k">Data</span>
