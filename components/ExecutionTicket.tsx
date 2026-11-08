@@ -9,6 +9,8 @@ import {
   signTypedData,
 } from '@/lib/wallet-browser';
 import type { ExecutionReceipt } from '@/lib/order-receipt';
+import { reserveSigningNonce } from '@/lib/nonce-browser';
+import { planGrid, type GridOrder } from '@/lib/grid-plan';
 import type { Thesis } from '@/types/flow';
 
 type BookLevel = { price: number; qty: number };
@@ -16,6 +18,7 @@ type Preview = {
   networkLabel: string;
   tradingLive: boolean;
   book: { bids: BookLevel[]; asks: BookLevel[]; fetchedAt: string; source: string } | null;
+  mainnetBook?: { bids: BookLevel[]; asks: BookLevel[]; fetchedAt: string; source: string } | null;
   cost: {
     state: string;
     mid: number | null;
@@ -66,8 +69,8 @@ type Prepared = {
   nonce: string;
   network: 'mainnet' | 'testnet';
   payloadHash: string;
-  feeDisclosure: { feeLabel: string; spotBuyNote: string };
-  confirmSummary: { quantity: string; price?: string; side: string; type: string };
+  feeDisclosure?: { feeLabel: string; spotBuyNote: string };
+  confirmSummary?: { quantity: string; price?: string; side: string; type: string };
 };
 
 type Stage =
@@ -92,7 +95,15 @@ export function ExecutionTicket({ thesis, quantity }: { thesis: Thesis; quantity
   const [address, setAddress] = useState<string | null>(null);
   const [accountId, setAccountId] = useState<number | null>(null);
   const [chainId, setChainId] = useState<number | null>(null);
+  const [intent, setIntent] = useState<'spot' | 'grid' | 'perps' | 'stop' | 'bracket' | 'twap' | 'dca'>('spot');
   const [side, setSide] = useState<'buy' | 'sell'>(thesis.side === 'SHORT' ? 'sell' : 'buy');
+  const [levels, setLevels] = useState('1');
+  const [spacing, setSpacing] = useState('10');
+  const [stopPrice, setStopPrice] = useState('');
+  const [takeProfit, setTakeProfit] = useState('');
+  const [minutes, setMinutes] = useState('30');
+  const [hour, setHour] = useState('0');
+  const [gridOrders, setGridOrders] = useState<GridOrder[]>([]);
   const [orderType, setOrderType] = useState<'limit' | 'market'>('limit');
   const [price, setPrice] = useState(thesis.entry > 0 ? String(thesis.entry) : '');
   const [size, setSize] = useState(quantity > 0 ? String(quantity) : '');
@@ -113,7 +124,14 @@ export function ExecutionTicket({ thesis, quantity }: { thesis: Thesis; quantity
   const [busy, setBusy] = useState(false);
   const [approved, setApproved] = useState(false);
 
-  const symbol = thesis.symbol || 'vBTC_vUSDC';
+  const symbol = intent === 'spot' || intent === 'grid' ? thesis.symbol || 'vBTC_vUSDC' : 'BTC-USD';
+
+  useEffect(() => {
+    document.documentElement.dataset.assistant = busy ? 'signing' : 'ready';
+    return () => {
+      delete document.documentElement.dataset.assistant;
+    };
+  }, [busy]);
 
   useEffect(() => {
     void fetch('/api/builder/config', { cache: 'no-store' })
@@ -233,9 +251,10 @@ export function ExecutionTicket({ thesis, quantity }: { thesis: Thesis; quantity
   }
 
   async function reviewAndSign() {
-    if (!address || !accountId || !confirmOrder || !preview?.book) return;
+    if (!address || !accountId || !confirmOrder) return;
+    if (intent !== 'grid' && !preview?.book && intent === 'spot') return;
     if (includeBuilder && !feeAck) return;
-    if (preview.selfTrade.state === 'blocked') {
+    if (preview?.selfTrade.state === 'blocked') {
       setError(preview.selfTrade.detail);
       return;
     }
@@ -243,23 +262,52 @@ export function ExecutionTicket({ thesis, quantity }: { thesis: Thesis; quantity
     setError(null);
     setStage('prepared');
     try {
-      const prep = await fetch('/api/builder/prepare-order', {
+      const net = cfg?.tradingLive ? 'mainnet' : 'testnet';
+      const nonce = await reserveSigningNonce(net, address);
+      const perpsIntent = intent === 'perps' || intent === 'stop' || intent === 'bracket' || intent === 'twap' || intent === 'dca';
+      const prep = await fetch(perpsIntent ? '/api/builder/prepare-perps' : '/api/builder/prepare-order', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          userAddress: address,
-          accountId,
-          network: cfg?.tradingLive ? 'mainnet' : 'testnet',
-          symbol,
-          side,
-          type: orderType,
-          quantity: size,
-          price: orderType === 'limit' ? price : undefined,
-          confirmed: true,
-          includeBuilder,
-          requireFreshQuote: true,
-          quoteFetchedAt: preview.book.fetchedAt,
-        }),
+        body: JSON.stringify(
+          perpsIntent
+            ? {
+                userAddress: address,
+                accountId,
+                network: net,
+                market: intent === 'twap' || intent === 'dca' ? 'perps' : 'perps',
+                action: intent === 'perps' ? 'order' : intent,
+                symbol,
+                side,
+                type: orderType,
+                quantity: size,
+                price: orderType === 'limit' ? price : undefined,
+                stopPrice,
+                takeProfit,
+                stopLoss: stopPrice,
+                minutes: Number(minutes),
+                hour: Number(hour),
+                amount: size,
+                confirmed: true,
+                includeBuilder,
+                nonce,
+              }
+            : {
+                userAddress: address,
+                accountId,
+                network: net,
+                symbol,
+                side,
+                type: orderType,
+                quantity: size,
+                price: orderType === 'limit' ? price : undefined,
+                confirmed: true,
+                includeBuilder,
+                requireFreshQuote: intent !== 'grid',
+                quoteFetchedAt: preview?.book?.fetchedAt,
+                nonce,
+                grid: intent === 'grid' ? gridOrders : undefined,
+              },
+        ),
       });
       const prepJson = (await prep.json()) as { error?: string; prepared?: Prepared };
       if (!prep.ok || !prepJson.prepared) throw new Error(prepJson.error ?? 'The order could not be prepared.');
@@ -267,12 +315,14 @@ export function ExecutionTicket({ thesis, quantity }: { thesis: Thesis; quantity
       setStage('awaiting-signature');
       const sig = await signTypedData(address, prepJson.prepared.typedData);
       setStage('submitting');
-      const relay = await fetch('/api/builder/relay-order', {
+      const relay = await fetch(perpsIntent ? '/api/builder/relay-perps' : '/api/builder/relay-order', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           userAddress: address,
           network: prepJson.prepared.network,
+          market: perpsIntent ? 'perps' : undefined,
+          signType: (prepJson.prepared as { signType?: string }).signType,
           params: prepJson.prepared.params,
           nonce: prepJson.prepared.nonce,
           signature: sig,
@@ -347,17 +397,20 @@ export function ExecutionTicket({ thesis, quantity }: { thesis: Thesis; quantity
     setError(null);
     try {
       const clientId = receipt.clientOrderId ?? undefined;
+      const net = cfg?.tradingLive ? 'mainnet' : 'testnet';
+      const nonce = await reserveSigningNonce(net, address);
       const prep = await fetch('/api/builder/prepare-cancel', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           userAddress: address,
           accountId,
-          network: cfg?.tradingLive ? 'mainnet' : 'testnet',
+          network: net,
           symbol,
           orderId: receipt.orderId,
           origClOrdID: clientId,
           confirmed: true,
+          nonce,
         }),
       });
       const prepJson = (await prep.json()) as { error?: string; prepared?: Prepared };
@@ -388,7 +441,8 @@ export function ExecutionTicket({ thesis, quantity }: { thesis: Thesis; quantity
     }
   }
 
-  const asks = useMemo(() => [...(preview?.book?.asks ?? [])].reverse(), [preview]);
+  const shownBook = preview?.mainnetBook ?? preview?.book ?? null;
+  const asks = useMemo(() => [...(shownBook?.asks ?? [])].reverse(), [shownBook]);
   const wrongChain = chainId != null && !VALUE_CHAINS.has(chainId);
   const stageLabel: Record<Stage, string> = {
     review: 'Review',
@@ -442,16 +496,21 @@ export function ExecutionTicket({ thesis, quantity }: { thesis: Thesis; quantity
         <div className="panel">
           <div className="panel-head">
             <strong>Book</strong>
-            <span className="badge">{preview?.book ? preview.book.source : 'Unavailable'}</span>
+            <span className="badge">{preview?.mainnetBook?.source ?? preview?.book?.source ?? 'Unavailable'}</span>
           </div>
           <div className="panel-body">
-            {preview?.book ? (
+            {shownBook ? (
               <>
                 <p className="execution-meta tabular">
-                  Mid {num(preview.cost.mid)} · Spread {preview.cost.spreadBps == null ? '—' : `${preview.cost.spreadBps.toFixed(2)} bps`} · Bid share{' '}
-                  {preview.cost.imbalance == null ? '—' : `${(preview.cost.imbalance * 100).toFixed(1)}%`}
+                  Mid {num(preview?.cost.mid)} · Spread {preview?.cost.spreadBps == null ? '—' : `${preview.cost.spreadBps.toFixed(2)} bps`} · Bid share{' '}
+                  {preview?.cost.imbalance == null ? '—' : `${(preview.cost.imbalance * 100).toFixed(1)}%`}
                 </p>
-                <p className="execution-meta">As of {new Date(preview.book.fetchedAt).toISOString()} UTC. {preview.cost.state === 'stale' ? 'This quote is stale.' : ''}</p>
+                <p className="execution-meta">
+                  {shownBook.source}. As of {new Date(shownBook.fetchedAt).toISOString()} UTC.
+                  {preview?.book && preview.mainnetBook && preview.book.source !== preview.mainnetBook.source
+                    ? ` The order estimate uses the ${preview.book.source.toLowerCase()}, which is not this mainnet book.`
+                    : ''}
+                </p>
                 <div className="book-table" role="table" aria-label="Order book">
                   {asks.map((level) => (
                     <div key={`a-${level.price}`} className="book-row ask" role="row">
@@ -460,7 +519,7 @@ export function ExecutionTicket({ thesis, quantity }: { thesis: Thesis; quantity
                     </div>
                   ))}
                   <div className="book-spread">Spread</div>
-                  {(preview.book.bids ?? []).map((level) => (
+                  {(shownBook.bids ?? []).map((level) => (
                     <div key={`b-${level.price}`} className="book-row bid" role="row">
                       <span className="tabular">{num(level.price, 4)}</span>
                       <span className="tabular">{num(level.qty, 6)}</span>
@@ -485,6 +544,18 @@ export function ExecutionTicket({ thesis, quantity }: { thesis: Thesis; quantity
             <strong>{stageLabel[stage]}</strong>
           </div>
           <div className="panel-body execution-form">
+            <label>
+              Intent
+              <select className="field" value={intent} onChange={(e) => edit(() => setIntent(e.target.value as typeof intent))}>
+                <option value="spot">Spot limit or market</option>
+                <option value="grid">Spot grid, reviewed once</option>
+                <option value="perps">Perps limit or market</option>
+                <option value="stop">Perps reduce-only stop</option>
+                <option value="bracket">Perps entry with stop and target</option>
+                <option value="twap">Perps TWAP</option>
+                <option value="dca">Perps daily DCA</option>
+              </select>
+            </label>
             <div className="segmented" role="group" aria-label="Side">
               {(['buy', 'sell'] as const).map((value) => (
                 <button key={value} type="button" aria-pressed={side === value} onClick={() => edit(() => setSide(value))}>
@@ -513,7 +584,69 @@ export function ExecutionTicket({ thesis, quantity }: { thesis: Thesis; quantity
               Risk budget (USDC)
               <input className="field" inputMode="decimal" value={budget} onChange={(e) => edit(() => setBudget(e.target.value))} />
             </label>
-            <p className="execution-meta">Cap per order {cfg?.maxNotionalUsdc ?? '—'} quote. Stop, take-profit, and perps are not part of this signature.</p>
+            {intent === 'grid' ? (
+              <div className="execution-note">
+                <p>Two sides are fine when the buy prices stay below the sell prices. This list is signed once. It does not keep quoting.</p>
+                <button
+                  className="btn"
+                  type="button"
+                  onClick={() => {
+                    try {
+                      const mid = preview?.mainnetBook ? Number(preview.cost.mid) : preview?.cost.mid;
+                      const next = planGrid({
+                        mid: preview?.cost.mid ?? 0,
+                        levelsEachSide: Number(levels),
+                        spacingBps: Number(spacing),
+                        quantity: size || '0.0001',
+                      });
+                      edit(() => setGridOrders(next));
+                      setError(null);
+                    } catch (e) {
+                      setError(e instanceof Error ? e.message : 'The grid could not be planned.');
+                    }
+                  }}
+                >
+                  Build the order list
+                </button>
+                <label>
+                  Levels each side
+                  <input className="field" inputMode="numeric" value={levels} onChange={(e) => edit(() => setLevels(e.target.value))} />
+                </label>
+                <label>
+                  Spacing (bps)
+                  <input className="field" inputMode="decimal" value={spacing} onChange={(e) => edit(() => setSpacing(e.target.value))} />
+                </label>
+                <ul className="plain-list">
+                  {gridOrders.map((order) => (
+                    <li key={`${order.side}-${order.price}`}>{order.side} {order.quantity} @ {order.price}</li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+            {intent === 'stop' || intent === 'bracket' ? (
+              <label>
+                Stop price
+                <input className="field" inputMode="decimal" value={stopPrice} onChange={(e) => edit(() => setStopPrice(e.target.value))} />
+              </label>
+            ) : null}
+            {intent === 'bracket' ? (
+              <label>
+                Take-profit price
+                <input className="field" inputMode="decimal" value={takeProfit} onChange={(e) => edit(() => setTakeProfit(e.target.value))} />
+              </label>
+            ) : null}
+            {intent === 'twap' ? (
+              <label>
+                Minutes
+                <input className="field" inputMode="numeric" value={minutes} onChange={(e) => edit(() => setMinutes(e.target.value))} />
+              </label>
+            ) : null}
+            {intent === 'dca' ? (
+              <label>
+                Hour UTC
+                <input className="field" inputMode="numeric" value={hour} onChange={(e) => edit(() => setHour(e.target.value))} />
+              </label>
+            ) : null}
             <label className="check">
               <input
                 type="checkbox"
@@ -555,9 +688,9 @@ export function ExecutionTicket({ thesis, quantity }: { thesis: Thesis; quantity
                   !accountId ||
                   !confirmOrder ||
                   (includeBuilder && !feeAck) ||
-                  !preview?.book ||
-                  preview.cost.state === 'stale' ||
-                  preview.selfTrade.state === 'blocked' ||
+                  intent === 'grid' && gridOrders.length === 0 ||
+                  preview?.cost.state === 'stale' ||
+                  preview?.selfTrade.state === 'blocked' ||
                   stage === 'ambiguous' ||
                   stage === 'accepted'
                 }
@@ -572,11 +705,13 @@ export function ExecutionTicket({ thesis, quantity }: { thesis: Thesis; quantity
               </p>
             ) : null}
             {error ? <p role="alert" className="execution-alert">{error}</p> : null}
-            {prepared ? (
+            {prepared?.confirmSummary ? (
               <p className="execution-meta">
                 Prepared {prepared.confirmSummary.side} {prepared.confirmSummary.type} {prepared.confirmSummary.quantity}
-                {prepared.confirmSummary.price ? ` @ ${prepared.confirmSummary.price}` : ''}. {prepared.feeDisclosure.feeLabel}
+                {prepared.confirmSummary.price ? ` @ ${prepared.confirmSummary.price}` : ''}. {prepared.feeDisclosure?.feeLabel}
               </p>
+            ) : prepared ? (
+              <p className="execution-meta">Payload prepared. Sign it in your wallet. Acceptance is not a fill.</p>
             ) : null}
           </div>
         </form>

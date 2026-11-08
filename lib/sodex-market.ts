@@ -88,9 +88,10 @@ export async function fetchOrderBookForNetwork(
   symbol: string,
   network: 'mainnet' | 'testnet',
   limit = 40,
+  engine: 'spot' | 'perps' = 'spot',
 ): Promise<SodexOrderBook | null> {
   const base = network === 'mainnet' ? MAINNET : TESTNET;
-  const path = `/api/v1/spot/markets/${encodeURIComponent(symbol)}/orderbook?limit=${limit}`;
+  const path = `/api/v1/${engine}/markets/${encodeURIComponent(symbol)}/orderbook?limit=${limit}`;
   const res = await getJson(base, path);
   if (!res.ok) return null;
   const d = res.data as { bids?: unknown; asks?: unknown; blockTime?: number; updateID?: number };

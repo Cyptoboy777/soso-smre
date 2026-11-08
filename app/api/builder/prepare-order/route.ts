@@ -1,10 +1,12 @@
 import { NextResponse } from "next/server";
-import { getBuilderConfig, spotApiBase, type SodexNetworkLabel } from "@/lib/sodex-builder";
-import { prepareUserSpotOrder, resolveSymbolIdOnNetwork } from "@/lib/sodex-wallet-trade";
+import { getBuilderConfig, spotApiBase, buildSpotExchangeTypedData, builderParamsFromConfig, withBatchBuilder, type SodexNetworkLabel } from "@/lib/sodex-builder";
+import { prepareUserSpotOrder, resolveSymbolIdOnNetwork, buildSpotBatchParams, hashExchangePayload } from "@/lib/sodex-wallet-trade";
+import { gridCrosses } from "@/lib/grid-plan";
 import { isAllowedTradeSymbol } from "@/lib/trade-guard";
 import { clientIp, rejectIfRateLimited } from "@/lib/request-guard";
 import { jsonPublicError, logServerError } from "@/lib/public-errors";
 import { readJsonBodyLimited } from "@/lib/builder-order-guard";
+import { claimPreparedNonce } from "@/lib/nonce-policy";
 import { quoteIsStale } from "@/lib/cost-lens";
 import { readSpotOrders, restingFrom } from "@/lib/sodex-account-read";
 import { selfTradeCheck } from "@/lib/self-trade";
@@ -37,6 +39,8 @@ export async function POST(req: Request) {
     includeBuilder?: boolean;
     requireFreshQuote?: boolean;
     quoteFetchedAt?: string;
+    nonce?: string;
+    grid?: Array<{ side?: "buy" | "sell"; price?: string; quantity?: string }>;
   };
   try {
     const _p = await readJsonBodyLimited(req);
@@ -107,6 +111,12 @@ export async function POST(req: Request) {
       { status: 409 },
     );
   }
+  if (!body.nonce || !/^[0-9]+$/.test(body.nonce)) {
+    return NextResponse.json(
+      { error: "Reserve a signing nonce in this browser before preparing the order." },
+      { status: 400 },
+    );
+  }
 
   const network: SodexNetworkLabel =
     body.network === "mainnet"
@@ -171,6 +181,77 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: cross.detail }, { status: 409 });
     }
 
+    const claimed = claimPreparedNonce({
+      network,
+      signingAddress: userAddress,
+      nonce: String(body.nonce),
+    });
+    if (!claimed.ok) {
+      return NextResponse.json({ error: claimed.error }, { status: 409 });
+    }
+
+    if (Array.isArray(body.grid) && body.grid.length > 0) {
+      if (body.grid.length > 6) {
+        return NextResponse.json({ error: "This review allows at most six orders." }, { status: 400 });
+      }
+      const lines = body.grid.map((line) => ({
+        side: line.side === "sell" ? ("sell" as const) : ("buy" as const),
+        price: String(line.price ?? "").trim(),
+        quantity: String(line.quantity ?? "").trim(),
+      }));
+      if (lines.some((line) => !/^\d+(\.\d+)?$/.test(line.price) || !/^\d+(\.\d+)?$/.test(line.quantity))) {
+        return NextResponse.json({ error: "Each grid order needs a price and a size." }, { status: 400 });
+      }
+      if (gridCrosses(lines)) {
+        return NextResponse.json(
+          { error: "These orders cross each other. Widen the prices before signing." },
+          { status: 409 },
+        );
+      }
+      const builder = body.includeBuilder ? builderParamsFromConfig(cfg) : null;
+      const orders = lines.map((line, index) => {
+        const batch = buildSpotBatchParams({
+          accountId,
+          symbolId,
+          clOrdID: `g${body.nonce}-${index}`.slice(0, 36),
+          side: line.side,
+          type: "limit",
+          price: line.price,
+          quantity: line.quantity,
+          builder: null,
+        });
+        return (batch.orders as unknown[])[0];
+      });
+      const params = withBatchBuilder({ accountID: accountId, orders }, builder);
+      const nonce = BigInt(String(body.nonce));
+      const payloadHash = hashExchangePayload("batchNewOrder", params);
+      return NextResponse.json({
+        prepared: {
+          network,
+          signType: "batchNewOrder",
+          params,
+          payloadHash,
+          nonce: nonce.toString(),
+          typedData: buildSpotExchangeTypedData({ network, payloadHash, nonce }),
+          feeDisclosure: {
+            feeLabel: builder ? `Includes a ${cfg.appFeePercent} app fee` : "No app fee on this order",
+            spotBuyNote: cfg.feeDisclosure.spotBuyExempt,
+          },
+          confirmSummary: {
+            symbol,
+            side: "batch",
+            type: "limit",
+            quantity: String(lines.length),
+            price: lines.map((line) => `${line.side} ${line.quantity} @ ${line.price}`).join("; "),
+            maxNotionalUsdc: cfg.maxNotionalUsdc,
+            mode: network === "mainnet" && cfg.mainnetTradingEnabled ? "live" : "practice",
+          },
+        },
+        practiceOnly: !(network === "mainnet" && cfg.mainnetTradingEnabled),
+        note: "Review every grid order. One signature sends the whole list. Nothing keeps quoting after that.",
+      });
+    }
+
     const prepared = prepareUserSpotOrder({
       network,
       accountId,
@@ -184,6 +265,7 @@ export async function POST(req: Request) {
       dryRun: dryRun || (network === "mainnet" && !cfg.mainnetTradingEnabled),
       signingAddress: userAddress,
       includeBuilder: Boolean(body.includeBuilder),
+      nonce: body.nonce,
     });
 
     // Strip internal fields from client payload

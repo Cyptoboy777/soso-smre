@@ -2128,9 +2128,8 @@ html.light .pair-palette {
 .sodex-ladder, .sodex-chart, .jarvis-last { position: relative; z-index: 0; }
 
 html[data-motion="paused"] .ai-orb-ring,
-html[data-motion="paused"] .ai-orb-glow {
-  animation-play-state: paused;
-}
+html[data-motion="paused"] .ai-orb-glow { animation-play-state: paused; }
+html[data-assistant='signing'] .ai-orb-ring { animation-duration: 2.6s; }
 
 .trade-intro { display: grid; gap: 8px; margin-bottom: 22px; max-width: 68ch; }
 .trade-intro h1 {

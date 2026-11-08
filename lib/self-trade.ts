@@ -19,7 +19,7 @@ export function selfTradeCheck(input: {
     return {
       state: "unavailable",
       detail:
-        "Open orders could not be read. This desk still sends only the single order you sign. It does not quote the other side.",
+        "Open orders could not be read. This review still blocks a batch whose own prices cross. It does not keep quoting after you sign.",
     };
   }
   const open = input.resting.filter((order) => OPEN.has(order.status.trim().toUpperCase()));

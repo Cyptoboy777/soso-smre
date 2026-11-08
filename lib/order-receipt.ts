@@ -4,14 +4,21 @@
  * Docs: spot batch response in sodex-rest-spot-api.md
  */
 
-export type ReceiptStage = "accepted" | "rejected" | "ambiguous";
+export type ReceiptStage = "accepted" | "rejected" | "partial" | "ambiguous";
+
+export type ReceiptItem = {
+  stage: "accepted" | "rejected" | "ambiguous";
+  orderId: string | null;
+  clientOrderId: string | null;
+};
 
 export type ExecutionReceipt = {
   stage: ReceiptStage;
   orderId: string | null;
   clientOrderId: string | null;
+  items: ReceiptItem[];
   message: string;
-  /** Never resubmit an ambiguous request with a fresh nonce. */
+  /** Never resubmit an ambiguous or partial request with a fresh nonce. */
   retryAllowed: false;
   filled: false;
 };
@@ -50,6 +57,7 @@ export function parseBatchReceipt(raw: unknown): ExecutionReceipt {
     stage: "ambiguous",
     orderId: null,
     clientOrderId: null,
+    items: [],
     message,
     retryAllowed: false,
     filled: false,
@@ -67,6 +75,7 @@ export function parseBatchReceipt(raw: unknown): ExecutionReceipt {
       stage: "rejected",
       orderId: null,
       clientOrderId: null,
+      items: [],
       message: "The exchange rejected the request. No fill was recorded.",
       retryAllowed: false,
       filled: false,
@@ -79,48 +88,62 @@ export function parseBatchReceipt(raw: unknown): ExecutionReceipt {
   }
 
   const rows = rowsFrom(raw);
-  const row = rows[0];
-  if (!row) {
+  if (!rows.length) {
     return ambiguous(
       "The exchange accepted the batch envelope but returned no order result. Reconcile before retrying.",
     );
   }
 
-  const itemCode = row.code;
-  const clientOrderId = asClientId(row.clOrdID ?? row.clOrdId);
-  if (typeof itemCode === "number" && itemCode !== 0) {
+  const items: ReceiptItem[] = rows.map((row) => {
+    const clientOrderId = asClientId(row.clOrdID ?? row.clOrdId);
+    if (typeof row.code !== "number") return { stage: "ambiguous" as const, orderId: null, clientOrderId };
+    if (row.code !== 0) return { stage: "rejected" as const, orderId: null, clientOrderId };
+    const orderId = asId(row.orderID ?? row.orderId);
+    if (!orderId) return { stage: "ambiguous" as const, orderId: null, clientOrderId };
+    return { stage: "accepted" as const, orderId, clientOrderId };
+  });
+  const accepted = items.filter((item) => item.stage === "accepted");
+  const rejected = items.filter((item) => item.stage === "rejected");
+  const unclear = items.filter((item) => item.stage === "ambiguous");
+  const first = items[0];
+  if (unclear.length) {
+    return {
+      stage: "ambiguous",
+      orderId: first.orderId,
+      clientOrderId: first.clientOrderId,
+      items,
+      message: "Part of the response had no order id. Reconcile every line before sending anything else.",
+      retryAllowed: false,
+      filled: false,
+    };
+  }
+  if (accepted.length && rejected.length) {
+    return {
+      stage: "partial",
+      orderId: accepted[0]?.orderId ?? null,
+      clientOrderId: accepted[0]?.clientOrderId ?? null,
+      items,
+      message: "Some orders were accepted and some were rejected. Acceptance is not a fill. Do not resend the batch.",
+      retryAllowed: false,
+      filled: false,
+    };
+  }
+  if (rejected.length) {
     return {
       stage: "rejected",
       orderId: null,
-      clientOrderId,
+      clientOrderId: first.clientOrderId,
+      items,
       message: "The exchange rejected this order. No fill was recorded.",
       retryAllowed: false,
       filled: false,
     };
   }
-  if (typeof itemCode !== "number") {
-    return ambiguous(
-      "An order result arrived without a status code. Do not send it again until you reconcile it.",
-    );
-  }
-
-  const orderId = asId(row.orderID ?? row.orderId);
-  if (!orderId) {
-    return {
-      stage: "ambiguous",
-      orderId: null,
-      clientOrderId,
-      message:
-        "The exchange returned success without an order id. Reconcile before sending another order.",
-      retryAllowed: false,
-      filled: false,
-    };
-  }
-
   return {
     stage: "accepted",
-    orderId,
-    clientOrderId,
+    orderId: first.orderId,
+    clientOrderId: first.clientOrderId,
+    items,
     message: "Accepted by the exchange. Acceptance is not a fill.",
     retryAllowed: false,
     filled: false,

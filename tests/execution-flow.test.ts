@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { buildSpotBatchParams, hashExchangePayload } from '@/lib/sodex-wallet-trade';
-import { reserveNonce, resetNonceLedgerForTests } from '@/lib/nonce-ledger';
+import { allocateNonce, claimPreparedNonce, resetSeenNoncesForTests } from '@/lib/nonce-policy';
 import { checkOrderFilters, isMultiple, multiplyDecimal } from '@/lib/decimal-rule';
 import { parseBatchReceipt } from '@/lib/order-receipt';
 import { buildCostLens, quoteIsStale, requestedAppFee } from '@/lib/cost-lens';
@@ -9,9 +9,10 @@ import { selfTradeCheck } from '@/lib/self-trade';
 import { assertRelayOrderParams } from '@/lib/builder-order-guard';
 
 afterEach(() => {
-  resetNonceLedgerForTests();
+  resetSeenNoncesForTests();
   delete process.env.SODEX_BUILDER_ID;
   delete process.env.SODEX_BUILDER_FEE;
+  delete process.env.SODEX_MAX_NOTIONAL_USDC;
 });
 
 describe('spot payload', () => {
@@ -65,10 +66,15 @@ describe('spot payload', () => {
 });
 
 describe('nonce and filters', () => {
-  it('reserves a greater nonce for the same signer at the same millisecond', () => {
-    expect(reserveNonce('0xabcabcabcabcabcabcabcabcabcabcabcabcabca', 5_000)).toBe('5000');
-    expect(reserveNonce('0xabcabcabcabcabcabcabcabcabcabcabcabcabca', 5_000)).toBe('5001');
-    expect(reserveNonce('0xdefdefdefdefdefdefdefdefdefdefdefdefdefa', 5_000)).toBe('5000');
+  it('keeps a separate monotonic nonce per signer and network', () => {
+    const store = new Map<string, string>();
+    const memory = { get: (key: string) => store.get(key) ?? null, set: (key: string, value: string) => { store.set(key, value); } };
+    const address = '0xabcabcabcabcabcabcabcabcabcabcabcabcabca';
+    const first = allocateNonce({ store: memory, network: 'testnet', signingAddress: address, nowMs: 1_700_000_000_000, deviceOffset: 7 });
+    const second = allocateNonce({ store: memory, network: 'testnet', signingAddress: address, nowMs: 1_700_000_000_000, deviceOffset: 7 });
+    expect(BigInt(second) > BigInt(first)).toBe(true);
+    const other = allocateNonce({ store: memory, network: 'mainnet', signingAddress: address, nowMs: 1_700_000_000_000, deviceOffset: 7 });
+    expect(other).not.toBe(second);
   });
 
   it('rejects a price that misses the tick and a size under the minimum notional', () => {

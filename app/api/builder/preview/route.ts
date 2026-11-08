@@ -22,7 +22,8 @@ export async function GET(req: Request) {
 
   const url = new URL(req.url);
   const symbol = (url.searchParams.get("symbol") ?? "").trim();
-  if (!isAllowedTradeSymbol(symbol)) {
+  const engine = symbol === "BTC-USD" || symbol === "ETH-USD" ? "perps" : "spot";
+  if (engine === "spot" && !isAllowedTradeSymbol(symbol)) {
     return NextResponse.json({ error: "That market is not available here." }, { status: 400 });
   }
   const side = url.searchParams.get("side") === "sell" ? "sell" : "buy";
@@ -36,11 +37,13 @@ export async function GET(req: Request) {
   const network = cfg.network;
   const live = network === "mainnet" && cfg.mainnetTradingEnabled;
 
-  const [book, candles, news] = await Promise.all([
-    fetchOrderBookForNetwork(symbol, network),
-    fetchKlinesForNetwork(symbol, network, "1h", 48),
+  const [executionBook, mainnetBook, candles, news] = await Promise.all([
+    fetchOrderBookForNetwork(symbol, network, 40, engine),
+    network === "mainnet" ? Promise.resolve(null) : fetchOrderBookForNetwork(symbol, "mainnet", 40, engine),
+    engine === "spot" ? fetchKlinesForNetwork(symbol, "mainnet", "1h", 48) : Promise.resolve([]),
     fetchHotNews(),
   ]);
+  const book = executionBook;
 
   const lens = buildCostLens({
     side,
@@ -88,22 +91,28 @@ export async function GET(req: Request) {
     symbol,
     networkLabel: live ? "SoDEX mainnet" : "SoDEX practice network",
     tradingLive: live,
+    mainnetBook: (mainnetBook ?? (live ? book : null))
+      ? {
+          bids: (mainnetBook ?? book)!.bids.slice(0, 8),
+          asks: (mainnetBook ?? book)!.asks.slice(0, 8),
+          fetchedAt: (mainnetBook ?? book)!.meta.fetchedAt,
+          source: "SoDEX mainnet public order book",
+        }
+      : null,
     book: book
       ? {
           bids: book.bids.slice(0, 8),
           asks: book.asks.slice(0, 8),
           fetchedAt: book.meta.fetchedAt,
-          source: "SoDEX public order book",
+          source: live ? "SoDEX mainnet public order book" : "SoDEX practice-network order book",
         }
       : null,
     cost: lens,
     evidence,
     selfTrade,
     unavailable: [
-      { name: "Perps orders", reason: "Perps use a separate SoDEX route. This ticket prepares spot only." },
-      { name: "Stop, take-profit, TWAP, and DCA", reason: "Those contracts are documented, but this ticket does not prepare them." },
-      { name: "Copy and counter-trade", reason: "No permitted public source of other traders is connected, and this desk does not place orders for you." },
       { name: "Unattended bots", reason: "Every order needs your signature. Nothing runs after you leave." },
+      { name: "Copy and counter-trade", reason: "No permitted public source of other traders is connected." },
     ],
   });
 }

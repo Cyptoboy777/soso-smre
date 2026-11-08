@@ -21,7 +21,6 @@ import {
   type BuilderParams,
   type SodexNetworkLabel,
 } from "@/lib/sodex-builder";
-import { reserveNonce } from "@/lib/nonce-ledger";
 
 const SIG_RE = /^0x[0-9a-fA-F]+$/;
 
@@ -250,6 +249,8 @@ export function prepareUserSpotOrder(opts: {
   dryRun?: boolean;
   /** Master wallet that will sign. Used to reserve a unique nonce. */
   signingAddress?: string;
+  /** Reserved by the signing browser for the trading nonce lane. */
+  nonce?: string;
   /**
    * When false, the signed payload omits builder. Spot buys do not pay an app
    * fee either way. Never insert a fee after the user has signed.
@@ -274,9 +275,10 @@ export function prepareUserSpotOrder(opts: {
       ? builderParamsFromConfig(cfg)
       : null;
 
-  const nonce = opts.signingAddress
-    ? BigInt(reserveNonce(opts.signingAddress))
-    : BigInt(Date.now());
+  if (!dryRun && !(opts.nonce && /^[0-9]+$/.test(opts.nonce))) {
+    throw new Error("Reserve a signing nonce in this browser before preparing the order.");
+  }
+  const nonce = opts.nonce && /^[0-9]+$/.test(opts.nonce) ? BigInt(opts.nonce) : BigInt(Date.now());
   const clOrdID =
     opts.clientOrderId?.slice(0, 36) ??
     `fs-${nonce.toString(36)}`.slice(0, 36);
@@ -454,6 +456,7 @@ export function prepareUserSpotCancel(opts: {
   orderId: string;
   origClOrdID?: string;
   signingAddress: string;
+  nonce: string;
   confirmed: boolean;
 }): {
   network: SodexNetworkLabel;
@@ -468,7 +471,8 @@ export function prepareUserSpotCancel(opts: {
     confirmed: opts.confirmed,
   });
   if (blocked) throw new Error(blocked);
-  const nonce = BigInt(reserveNonce(opts.signingAddress));
+  if (!/^[0-9]+$/.test(opts.nonce)) throw new Error("The signing nonce is not valid.");
+  const nonce = BigInt(opts.nonce);
   const params = buildSpotCancelParams({
     accountId: opts.accountId,
     symbolId: opts.symbolId,
@@ -604,4 +608,63 @@ export async function resolveSymbolIdOnNetwork(
   });
   const id = hit?.id;
   return typeof id === "number" && Number.isSafeInteger(id) ? id : null;
+}
+
+const ACTION_PATHS = new Set([
+  "/trade/orders",
+  "/trade/orders/batch",
+  "/trade/orders/replace",
+  "/trade/orders/modify",
+  "/trade/twaps",
+  "/trade/dcas",
+]);
+
+/** Relay a user signature to an allowlisted SoDEX path. No user-supplied URL. */
+export async function relayUserAction(opts: {
+  network: SodexNetworkLabel;
+  market: "spot" | "perps";
+  method: "POST" | "DELETE";
+  path: string;
+  params: Record<string, unknown>;
+  nonce: string;
+  signature: string;
+}): Promise<RelayOutcome> {
+  if (!ACTION_PATHS.has(opts.path)) return { ok: false, error: "That action is not available." };
+  const blocked = assertRelayAllowed({ network: opts.network, confirmed: true });
+  if (blocked) return { ok: false, error: blocked };
+  let apiSign: Hex;
+  try {
+    apiSign = normalizeWalletSig(opts.signature, 1);
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
+  const root = opts.market === "perps" ? `${publicApiBase(opts.network)}/perps` : spotApiBase(opts.network);
+  try {
+    const res = await fetch(`${root}${opts.path}`, {
+      method: opts.method,
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+        "X-API-Sign": apiSign,
+        "X-API-Nonce": opts.nonce,
+      },
+      body: JSON.stringify(opts.params),
+      cache: "no-store",
+    });
+    const text = await res.text();
+    let raw: unknown = text;
+    try {
+      raw = JSON.parse(text);
+    } catch {
+      /* keep */
+    }
+    if (!res.ok) return { ok: false, error: "The trading network did not accept that request." };
+    const envelope = raw as { code?: number };
+    if (typeof envelope.code === "number" && envelope.code !== 0) {
+      return { ok: false, venueRejected: true, raw, error: "The exchange rejected the request." };
+    }
+    return { ok: true, raw };
+  } catch {
+    return { ok: false, error: "The trading network did not accept that request." };
+  }
 }

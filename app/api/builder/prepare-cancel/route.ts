@@ -5,6 +5,7 @@ import { isAllowedTradeSymbol } from "@/lib/trade-guard";
 import { readJsonBodyLimited } from "@/lib/builder-order-guard";
 import { clientIp, rejectIfRateLimited } from "@/lib/request-guard";
 import { jsonPublicError, logServerError } from "@/lib/public-errors";
+import { claimPreparedNonce } from "@/lib/nonce-policy";
 
 export const dynamic = "force-dynamic";
 
@@ -26,6 +27,7 @@ export async function POST(req: Request) {
     symbol?: string;
     orderId?: string;
     origClOrdID?: string;
+    nonce?: string;
     confirmed?: boolean;
   };
   if (!body.confirmed) {
@@ -57,6 +59,14 @@ export async function POST(req: Request) {
     if (symbolId == null) {
       return NextResponse.json({ error: "That market is not available right now." }, { status: 400 });
     }
+    if (!body.nonce || !/^[0-9]+$/.test(body.nonce)) {
+      return NextResponse.json(
+        { error: "Reserve a signing nonce in this browser before preparing the cancel." },
+        { status: 400 },
+      );
+    }
+    const claimed = claimPreparedNonce({ network, signingAddress: userAddress, nonce: body.nonce });
+    if (!claimed.ok) return NextResponse.json({ error: claimed.error }, { status: 409 });
     const prepared = prepareUserSpotCancel({
       network,
       accountId,
@@ -64,6 +74,7 @@ export async function POST(req: Request) {
       orderId: String(body.orderId ?? ""),
       origClOrdID: body.origClOrdID,
       signingAddress: userAddress,
+      nonce: body.nonce,
       confirmed: true,
     });
     return NextResponse.json({
