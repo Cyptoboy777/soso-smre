@@ -41,8 +41,12 @@ export type BuilderConfig = {
   builderFee: number;
   /** Suggested maxFeeRate for ApproveBuilderFeeAction. */
   maxApproval: number;
-  /** Kill switch: mainnet trading off unless explicitly enabled. */
+  /** Kill switch: order submission off unless explicitly released. */
   mainnetTradingEnabled: boolean;
+  /** Release gate for submitting signatures. Independent of the review network. */
+  executionEnabled: boolean;
+  /** Order payloads and public reads use this network. */
+  targetNetwork: "mainnet";
   network: SodexNetworkLabel;
   maxNotionalUsdc: number;
   /** True when Builder ID is set and we may tag orders. */
@@ -126,10 +130,8 @@ export function getBuilderConfig(): BuilderConfig {
     parseNonNegInt(process.env.SODEX_MAX_NOTIONAL_USDC, 10),
   );
 
-  let network: SodexNetworkLabel = "testnet";
-  if (builderId && mainnetTradingEnabled) {
-    network = "mainnet";
-  }
+  let network: SodexNetworkLabel = "mainnet";
+  const executionEnabled = mainnetTradingEnabled;
 
   const readyWhenEnabled =
     builderId != null && maxApproval > 0 && builderFee > 0 && maxNotionalUsdc > 0;
@@ -141,6 +143,10 @@ export function getBuilderConfig(): BuilderConfig {
     builderFee,
     maxApproval,
     mainnetTradingEnabled,
+    /** Customer reads and order payloads always target mainnet. */
+    targetNetwork: "mainnet" as const,
+    /** Release gate. False means payloads can be reviewed and must not be submitted. */
+    executionEnabled,
     network,
     maxNotionalUsdc,
     builderReady: builderId != null,
@@ -272,43 +278,29 @@ export function buildSpotExchangeTypedData(opts: {
 }
 
 /**
- * Mainnet submit gate. Returns error string if blocked.
- * Never allows mainnet when Builder ID missing or kill switch off.
+ * Payload preparation is allowed on mainnet while submission is released off.
+ * Relay is a separate gate.
  */
 export function assertTradingAllowed(opts: {
   network: SodexNetworkLabel;
   confirmed: boolean;
-  /** When true, allow preparing mainnet typed data while kill switch is off. Never allows relay. */
+  /** Kept for older callers. Preparation no longer depends on it. */
   dryRun?: boolean;
 }): string | null {
   if (!opts.confirmed && !opts.dryRun) return "Explicit user confirmation required";
-  const cfg = getBuilderConfig();
-  if (opts.network === "mainnet") {
-    if (!cfg.builderId) {
-      return "Live trading is not available right now";
-    }
-    if (!cfg.mainnetTradingEnabled && !opts.dryRun) {
-      return "Live trading is not available right now";
-    }
-  }
   return null;
 }
 
-/** Relay gate: dry-run never bypasses the kill switch. */
+/** Submission gate. Off until release, for every network. No testnet bypass. */
 export function assertRelayAllowed(opts: {
   network: SodexNetworkLabel;
   confirmed: boolean;
 }): string | null {
   if (!opts.confirmed) return "Explicit user confirmation required";
-  const cfg = getBuilderConfig();
-  if (opts.network === "mainnet") {
-    if (!cfg.builderId) {
-      return "Live trading is not available right now";
-    }
-    if (!cfg.mainnetTradingEnabled) {
-      return "Live trading is not available right now";
-    }
+  if (!getBuilderConfig().executionEnabled) {
+    return "Order submission is not enabled.";
   }
+  void opts.network;
   return null;
 }
 

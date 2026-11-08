@@ -118,27 +118,9 @@ export async function POST(req: Request) {
     );
   }
 
-  const network: SodexNetworkLabel =
-    body.network === "mainnet"
-      ? "mainnet"
-      : body.network === "testnet"
-        ? "testnet"
-        : cfg.network;
+  const network: SodexNetworkLabel = "mainnet";
 
   try {
-    if (network === "mainnet" && !cfg.mainnetTradingEnabled && !dryRun) {
-      logServerError(
-        "prepare-order",
-        "mainnet live prepare refused (trading not enabled)",
-      );
-      return NextResponse.json(
-        {
-          error:
-            "Live trading is not available right now. You can keep practicing on the practice network.",
-        },
-        { status: 403 },
-      );
-    }
 
     const symbolId = await resolveSymbolIdOnNetwork(network, symbol);
     if (symbolId == null) {
@@ -244,10 +226,11 @@ export async function POST(req: Request) {
             quantity: String(lines.length),
             price: lines.map((line) => `${line.side} ${line.quantity} @ ${line.price}`).join("; "),
             maxNotionalUsdc: cfg.maxNotionalUsdc,
-            mode: network === "mainnet" && cfg.mainnetTradingEnabled ? "live" : "practice",
+            mode: cfg.executionEnabled ? "live" : "review",
           },
         },
-        practiceOnly: !(network === "mainnet" && cfg.mainnetTradingEnabled),
+        submission: cfg.executionEnabled ? "enabled" : "disabled",
+        chainId: 286623,
         note: "Review every grid order. One signature sends the whole list. Nothing keeps quoting after that.",
       });
     }
@@ -294,7 +277,7 @@ export async function POST(req: Request) {
           quantity: confirmSummary.quantity,
           price: confirmSummary.price,
           maxNotionalUsdc: confirmSummary.maxNotionalUsdc,
-          mode: network === "mainnet" && cfg.mainnetTradingEnabled ? "live" : "practice",
+          mode: cfg.executionEnabled ? "live" : "review",
         },
         feeNotes: feeEngineNotes,
         realFundsWarning:
@@ -306,7 +289,8 @@ export async function POST(req: Request) {
       },
       userAddress,
       mustConfirmAgain: true,
-      practiceOnly: isDry || !(network === "mainnet" && cfg.mainnetTradingEnabled),
+      submission: cfg.executionEnabled ? "enabled" : "disabled",
+      chainId: 286623,
       note: "Review the fee, then sign in your wallet. FlowSentinel never holds your keys.",
     });
   } catch (e) {

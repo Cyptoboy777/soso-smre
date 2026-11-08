@@ -28,7 +28,7 @@ export const metadata: Metadata = {
     template: '%s · FlowSentinel',
   },
   description:
-    'AI trading desk for SoSoValue flows and SoDEX practice trades. Clear ideas, risk gates, and you confirm every order.',
+    'AI trading desk for SoSoValue flows and SoDEX mainnet order review. Submission stays off until release.',
   applicationName: 'FlowSentinel',
   keywords: ['FlowSentinel', 'SoSoValue', 'SoDEX', 'ETF flows'],
   authors: [{ name: 'Crypto boy' }],

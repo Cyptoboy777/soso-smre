@@ -37,15 +37,12 @@ export async function POST(req: Request) {
   if (!body.params || !body.nonce || !body.signature) {
     return NextResponse.json({ error: "Something is missing from the cancel request." }, { status: 400 });
   }
-  const network: SodexNetworkLabel = body.network === "mainnet" ? "mainnet" : "testnet";
   const cfg = getBuilderConfig();
-  if (network === "mainnet" && !cfg.mainnetTradingEnabled) {
-    logServerError("relay-cancel", "mainnet cancel refused");
-    return NextResponse.json(
-      { error: "Live trading is not available right now. You can keep using the practice network." },
-      { status: 403 },
-    );
+  if (!cfg.executionEnabled) {
+    logServerError("relay-cancel", "submission refused");
+    return NextResponse.json({ error: "Order submission is not enabled." }, { status: 403 });
   }
+  const network: SodexNetworkLabel = "mainnet";
   const result = await relayUserSpotCancel({
     network,
     params: body.params,

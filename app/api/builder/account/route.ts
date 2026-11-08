@@ -28,18 +28,7 @@ export async function GET(req: Request) {
     );
   }
   const cfg = getBuilderConfig();
-  const networkParam = url.searchParams.get("network");
-  const network: SodexNetworkLabel =
-    networkParam === "mainnet" || networkParam === "testnet"
-      ? networkParam
-      : cfg.network;
-
-  if (network === "mainnet" && (!cfg.builderId || !cfg.mainnetTradingEnabled)) {
-    return NextResponse.json(
-      { error: "Live trading is not available right now." },
-      { status: 403 },
-    );
-  }
+  const network: SodexNetworkLabel = "mainnet";
 
   try {
     const accountId = await fetchPrimaryAccountId(network, address);
@@ -47,7 +36,9 @@ export async function GET(req: Request) {
       ? await fetchUserBuilders(network, address)
       : null;
     return NextResponse.json({
-      mode: network === "mainnet" && cfg.mainnetTradingEnabled ? "live" : "practice",
+      targetNetwork: "mainnet",
+      chainId: 286623,
+      executionEnabled: cfg.executionEnabled,
       address,
       accountId,
       builders,

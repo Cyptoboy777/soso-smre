@@ -20,8 +20,8 @@ export default function PrivacyPage() {
         abuse prevention and rate limiting.
       </p>
       <p style={{ color: 'var(--text-muted)', lineHeight: 1.55 }}>
-        Third-party APIs: SoSoValue (market data) and SoDEX (public tickers / optional signed practice
-        orders). Review their policies as well.
+        Third-party APIs: SoSoValue (market data) and SoDEX (public market data and, after release, a signature you make in your wallet).
+        Review their policies as well.
       </p>
       <p>
         <Link href="/">Back to desk</Link>

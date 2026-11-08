@@ -21,7 +21,7 @@ type Props = {
   body?: string;
 };
 
-export function ShareIdeaCard({ ideaId, headline, side, symbol, confidence }: Props) {
+export function ShareIdeaCard({ ideaId, headline, side, symbol }: Props) {
   const { t } = useLocale();
   const [copied, setCopied] = useState(false);
 
@@ -58,9 +58,6 @@ export function ShareIdeaCard({ ideaId, headline, side, symbol, confidence }: Pr
       </div>
       <p style={{ margin: 0, color: 'var(--text)', fontSize: 15 }}>{headline}</p>
       <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: 13, lineHeight: 1.45 }}>{t.shareBlurb}</p>
-      {confidence != null ? (
-        <p style={{ margin: 0, fontSize: 12, color: 'var(--text-muted)' }}>Confidence {String(confidence)}</p>
-      ) : null}
       <button className="btn btn-ghost" type="button" onClick={() => void copy()} style={{ justifySelf: 'start' }}>
         {copied ? t.shareCopied : t.shareCopy}
       </button>

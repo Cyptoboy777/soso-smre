@@ -54,11 +54,7 @@ export async function POST(req: Request) {
   const accountId = Number(body.accountId);
   if (!Number.isSafeInteger(accountId) || accountId <= 0) return NextResponse.json({ error: "Your trading account is not ready yet." }, { status: 400 });
   const cfg = getBuilderConfig();
-  const network: SodexNetworkLabel = body.network === "mainnet" ? "mainnet" : "testnet";
-  if (network === "mainnet" && !cfg.mainnetTradingEnabled) {
-    logServerError("prepare-perps", "mainnet prepare refused");
-    return NextResponse.json({ error: "Live trading is not available right now. You can keep using the practice network." }, { status: 403 });
-  }
+  const network: SodexNetworkLabel = "mainnet";
   const claimed = claimPreparedNonce({ network, signingAddress: userAddress, nonce });
   if (!claimed.ok) return NextResponse.json({ error: claimed.error }, { status: 409 });
   const market = body.market === "spot" ? "spot" : "perps";
@@ -110,7 +106,8 @@ export async function POST(req: Request) {
       : buildSpotExchangeTypedData({ network, payloadHash, nonce: BigInt(nonce) });
     return NextResponse.json({
       prepared: { network, market, signType, params, payloadHash, nonce, typedData },
-      practiceOnly: !(network === "mainnet" && cfg.mainnetTradingEnabled),
+      submission: cfg.executionEnabled ? "enabled" : "disabled",
+      chainId: 286623,
       note: "Review this payload, then sign. A later change of account, network, or terms requires a new review.",
     });
   } catch (e) {

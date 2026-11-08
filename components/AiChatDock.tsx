@@ -25,11 +25,11 @@ type DeskContext = {
 const SUGGESTIONS = [
   'What is today\'s BTC price?',
   'Explain today\'s idea simply',
-  'How do I take a practice trade?',
+  'How do I review an order?',
 ];
 
 const GREETING =
-  "Hi, I'm your FlowSentinel guide. Ask about live prices, today's idea, or practice trades. I never place orders.";
+  "Hi, I'm your FlowSentinel guide. Ask about live prices or today's idea. I never place orders.";
 
 async function readDeskContext(): Promise<DeskContext> {
   try {
@@ -289,7 +289,7 @@ export function AiChatDock() {
                   Send
                 </button>
               </form>
-              <p className="ai-footer-note">Not financial advice. Practice mode for orders.</p>
+              <p className="ai-footer-note">Not financial advice. I never send an order.</p>
             </motion.aside>
           ) : null}
         </AnimatePresence>

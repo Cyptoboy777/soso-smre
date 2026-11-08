@@ -11,6 +11,7 @@ import {
 import type { ExecutionReceipt } from '@/lib/order-receipt';
 import { reserveSigningNonce } from '@/lib/nonce-browser';
 import { planGrid, type GridOrder } from '@/lib/grid-plan';
+import { intentView, type OrderIntent } from '@/lib/order-intent';
 import type { Thesis } from '@/types/flow';
 
 type BookLevel = { price: number; qty: number };
@@ -53,6 +54,7 @@ type Cfg = {
   maxApprovalPercent: string;
   maxNotionalUsdc: number;
   maxApproval: number;
+  executionEnabled?: boolean;
   tradingLive: boolean;
   realFundsWarning: string | null;
   feeDisclosure?: { caps: string; spotBuyExempt: string; perpsBothSides: string };
@@ -95,7 +97,7 @@ export function ExecutionTicket({ thesis, quantity }: { thesis: Thesis; quantity
   const [address, setAddress] = useState<string | null>(null);
   const [accountId, setAccountId] = useState<number | null>(null);
   const [chainId, setChainId] = useState<number | null>(null);
-  const [intent, setIntent] = useState<'spot' | 'grid' | 'perps' | 'stop' | 'bracket' | 'twap' | 'dca'>('spot');
+  const [intent, setIntent] = useState<OrderIntent>('spot');
   const [side, setSide] = useState<'buy' | 'sell'>(thesis.side === 'SHORT' ? 'sell' : 'buy');
   const [levels, setLevels] = useState('1');
   const [spacing, setSpacing] = useState('10');
@@ -139,7 +141,7 @@ export function ExecutionTicket({ thesis, quantity }: { thesis: Thesis; quantity
       .then((json) => {
         if (!json) return;
         setCfg(json as Cfg);
-        if ((json as Cfg).tradingLive && !sessionStorage.getItem('fs-funds-ack')) setFundsAck(false);
+        if (json.executionEnabled && !sessionStorage.getItem('fs-funds-ack')) setFundsAck(false);
       })
       .catch(() => setPreviewError('The trading setup could not be loaded.'));
   }, []);
@@ -188,7 +190,7 @@ export function ExecutionTicket({ thesis, quantity }: { thesis: Thesis; quantity
       const addr = await connectInjectedWallet();
       setAddress(addr);
       setChainId(await readWalletChainId());
-      const net = cfg?.tradingLive ? 'mainnet' : 'testnet';
+      const net = 'mainnet' as const;
       const acc = await fetch(`/api/builder/account?address=${addr}&network=${net}`);
       const json = (await acc.json()) as { accountId?: number | null; error?: string };
       if (!acc.ok) throw new Error(json.error ?? 'Could not load your account.');
@@ -211,7 +213,7 @@ export function ExecutionTicket({ thesis, quantity }: { thesis: Thesis; quantity
         body: JSON.stringify({
           userAddress: address,
           accountId,
-          network: cfg.tradingLive ? 'mainnet' : 'testnet',
+          network: 'mainnet',
           maxFeeRate: cfg.maxApproval,
         }),
       });
@@ -262,7 +264,7 @@ export function ExecutionTicket({ thesis, quantity }: { thesis: Thesis; quantity
     setError(null);
     setStage('prepared');
     try {
-      const net = cfg?.tradingLive ? 'mainnet' : 'testnet';
+      const net = 'mainnet' as const;
       const nonce = await reserveSigningNonce(net, address);
       const perpsIntent = intent === 'perps' || intent === 'stop' || intent === 'bracket' || intent === 'twap' || intent === 'dca';
       const prep = await fetch(perpsIntent ? '/api/builder/prepare-perps' : '/api/builder/prepare-order', {
@@ -312,6 +314,10 @@ export function ExecutionTicket({ thesis, quantity }: { thesis: Thesis; quantity
       const prepJson = (await prep.json()) as { error?: string; prepared?: Prepared };
       if (!prep.ok || !prepJson.prepared) throw new Error(prepJson.error ?? 'The order could not be prepared.');
       setPrepared(prepJson.prepared);
+      if (!cfg?.executionEnabled) {
+        setStage('prepared');
+        return;
+      }
       setStage('awaiting-signature');
       const sig = await signTypedData(address, prepJson.prepared.typedData);
       setStage('submitting');
@@ -354,7 +360,7 @@ export function ExecutionTicket({ thesis, quantity }: { thesis: Thesis; quantity
     setBusy(true);
     setError(null);
     try {
-      const params = new URLSearchParams({ address, network: cfg?.tradingLive ? 'mainnet' : 'testnet' });
+      const params = new URLSearchParams({ address, network: 'mainnet' });
       if (accountId) params.set('accountId', String(accountId));
       const res = await fetch(`/api/builder/orders?${params}`, { cache: 'no-store' });
       const json = (await res.json()) as {
@@ -397,7 +403,7 @@ export function ExecutionTicket({ thesis, quantity }: { thesis: Thesis; quantity
     setError(null);
     try {
       const clientId = receipt.clientOrderId ?? undefined;
-      const net = cfg?.tradingLive ? 'mainnet' : 'testnet';
+      const net = 'mainnet' as const;
       const nonce = await reserveSigningNonce(net, address);
       const prep = await fetch('/api/builder/prepare-cancel', {
         method: 'POST',
@@ -442,6 +448,7 @@ export function ExecutionTicket({ thesis, quantity }: { thesis: Thesis; quantity
   }
 
   const shownBook = preview?.mainnetBook ?? preview?.book ?? null;
+  const view = intentView(intent, orderType);
   const asks = useMemo(() => [...(shownBook?.asks ?? [])].reverse(), [shownBook]);
   const wrongChain = chainId != null && !VALUE_CHAINS.has(chainId);
   const stageLabel: Record<Stage, string> = {
@@ -459,19 +466,19 @@ export function ExecutionTicket({ thesis, quantity }: { thesis: Thesis; quantity
     <section className="execution" aria-label="SoDEX order">
       <header className="execution-head">
         <div>
-          <h2>Spot order</h2>
+          <h2>{view.title}</h2>
           <p>
-            {formatPair(symbol)} on {preview?.networkLabel ?? 'SoDEX'}. You sign each order. News and the assistant cannot send one.
+            {formatPair(symbol)} on SoDEX mainnet. The order payload uses chain 286623. News and the assistant cannot send it.
           </p>
         </div>
-        <span className={`badge ${cfg?.tradingLive ? 'live' : 'fallback'}`}>
-          {cfg?.tradingLive ? 'Mainnet signing' : 'Practice network'}
+        <span className={`badge ${cfg?.executionEnabled ? 'live' : 'fallback'}`}>
+          {cfg?.executionEnabled ? 'Submission on' : 'Submission off'}
         </span>
       </header>
 
-      {!cfg?.tradingLive ? (
-        <p className="execution-note">
-          Mainnet trading is not enabled. A signature on this deployment is prepared for the practice network. This build has not been checked against a live fill.
+      {!cfg?.executionEnabled ? (
+        <p className="execution-note" role="status">
+          Order submission is not enabled. You can review the exact mainnet order. Nothing is sent.
         </p>
       ) : null}
 
@@ -507,9 +514,6 @@ export function ExecutionTicket({ thesis, quantity }: { thesis: Thesis; quantity
                 </p>
                 <p className="execution-meta">
                   {shownBook.source}. As of {new Date(shownBook.fetchedAt).toISOString()} UTC.
-                  {preview?.book && preview.mainnetBook && preview.book.source !== preview.mainnetBook.source
-                    ? ` The order estimate uses the ${preview.book.source.toLowerCase()}, which is not this mainnet book.`
-                    : ''}
                 </p>
                 <div className="book-table" role="table" aria-label="Order book">
                   {asks.map((level) => (
@@ -528,7 +532,7 @@ export function ExecutionTicket({ thesis, quantity }: { thesis: Thesis; quantity
                 </div>
               </>
             ) : (
-              <p>{previewError ?? 'The practice-network book is not available. No estimate was substituted from another market.'}</p>
+              <p>{previewError ?? 'The mainnet book is not available right now.'}</p>
             )}
           </div>
         </div>
@@ -570,7 +574,7 @@ export function ExecutionTicket({ thesis, quantity }: { thesis: Thesis; quantity
                 </button>
               ))}
             </div>
-            {orderType === 'limit' ? (
+            {view.showLimitPrice ? (
               <label>
                 Limit price
                 <input className="field" inputMode="decimal" value={price} onChange={(e) => edit(() => setPrice(e.target.value))} />
@@ -656,7 +660,7 @@ export function ExecutionTicket({ thesis, quantity }: { thesis: Thesis; quantity
               />
               <span>
                 {cfg && !cfg.builderId
-                  ? 'App fee tagging is not configured on this deployment, so the order is sent without it.'
+                  ? 'Optional app fee is not applied.'
                   : 'Tag the app fee before signing. Leave this off and the tag is omitted. Spot buys do not pay it either way. The builder balance requirement is not a deposit from you.'}
               </span>
             </label>
@@ -695,7 +699,7 @@ export function ExecutionTicket({ thesis, quantity }: { thesis: Thesis; quantity
                   stage === 'accepted'
                 }
               >
-                {busy ? 'Working…' : 'Sign order'}
+                {busy ? 'Working…' : cfg?.executionEnabled ? 'Sign order' : 'Review order'}
               </button>
             </div>
             {address ? <p className="execution-meta">Wallet {address.slice(0, 6)}…{address.slice(-4)} {accountId ? `· account ${accountId}` : '· no trading account yet'}</p> : null}
@@ -721,6 +725,7 @@ export function ExecutionTicket({ thesis, quantity }: { thesis: Thesis; quantity
         <article className="panel">
           <div className="panel-head"><strong>Cost and stress</strong></div>
           <div className="panel-body">
+            <p className="execution-meta">{view.costNote}</p>
             <p className="execution-meta">{preview?.cost.budgetDetail}</p>
             <ul className="plain-list">
               {(preview?.cost.lines ?? []).map((line) => (
@@ -733,7 +738,11 @@ export function ExecutionTicket({ thesis, quantity }: { thesis: Thesis; quantity
               {(preview?.cost.stress ?? []).map((row) => (
                 <li key={row.label}>
                   <strong>{row.label}</strong>
-                  <span>{row.detail}</span>
+                  <span>
+                    {row.label === 'Funding' && view.engine === 'perps'
+                      ? 'An open perps position can pay or receive funding. This review does not invent a funding payment.'
+                      : row.detail}
+                  </span>
                 </li>
               ))}
             </ul>

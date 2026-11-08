@@ -57,13 +57,10 @@ export async function POST(req: Request) {
     );
   }
 
-  const network = body.network === "mainnet" ? "mainnet" : "testnet";
-  if (network === "mainnet" && !cfg.mainnetTradingEnabled) {
-    return NextResponse.json(
-      { error: "Live trading is not available right now. You can keep practicing on the practice network." },
-      { status: 403 },
-    );
+  if (!cfg.executionEnabled) {
+    return NextResponse.json({ error: "Order submission is not enabled." }, { status: 403 });
   }
+  const network = "mainnet" as const;
 
   const result = await relayBuilderApproval({
     userAddress,

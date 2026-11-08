@@ -59,7 +59,7 @@ export const MESSAGES: Record<Locale, Dict> = {
     badgeWave: "SoSoValue · SoDEX",
     footerLine: "FlowSentinel",
     footerRisk:
-      "Not financial advice. Practice mode by default; real trades only after you confirm.",
+      "Not financial advice. Order submission stays off until release. You confirm every order.",
     startTitle: "Start in three signatures",
     startLead:
       "Connect your wallet, approve a max builder fee with a clear disclosure, then confirm a guided first trade on testnet. No custody. No bots inventing volume.",
@@ -88,7 +88,7 @@ export const MESSAGES: Record<Locale, Dict> = {
     shareTitle: "Share this idea",
     shareCopy: "Copy link",
     shareCopied: "Copied",
-    shareBlurb: "A practice idea from FlowSentinel. Not financial advice.",
+    shareBlurb: "An idea from FlowSentinel. Not financial advice. Order submission stays off until release.",
     noSetupTitle: "No trade setup",
     noSetupBody: "No clear move right now. We'll show entry, stop and target when there is one.",
     standAside: "Stand aside today",

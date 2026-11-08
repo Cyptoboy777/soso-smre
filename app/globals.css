@@ -1088,11 +1088,12 @@ html.light .shell-header {
 .shell-actions { display: flex; align-items: center; gap: 10px; }
 .shell-main {
   flex: 1;
-  max-width: 1160px;
+  max-width: 1440px;
   width: 100%;
   margin: 0 auto;
-  padding: 28px 18px 80px;
+  padding: 20px 20px 96px;
 }
+.shell-header-inner { max-width: 1440px; }
 .shell-footer {
   border-top: 1px solid var(--line);
   padding: 22px 18px 28px;
@@ -2131,7 +2132,7 @@ html[data-motion="paused"] .ai-orb-ring,
 html[data-motion="paused"] .ai-orb-glow { animation-play-state: paused; }
 html[data-assistant='signing'] .ai-orb-ring { animation-duration: 2.6s; }
 
-.trade-intro { display: grid; gap: 8px; margin-bottom: 22px; max-width: 68ch; }
+.trade-intro { display: grid; gap: 6px; margin-bottom: 12px; max-width: none; }
 .trade-intro h1 {
   margin: 0;
   font-size: clamp(2rem, 4vw, 3.25rem);

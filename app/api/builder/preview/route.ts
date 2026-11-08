@@ -34,16 +34,14 @@ export async function GET(req: Request) {
   const budget = Number(url.searchParams.get("budget") ?? "");
   const address = (url.searchParams.get("address") ?? "").trim().toLowerCase();
   const cfg = getBuilderConfig();
-  const network = cfg.network;
-  const live = network === "mainnet" && cfg.mainnetTradingEnabled;
+  const network = "mainnet" as const;
+  const live = cfg.executionEnabled;
 
-  const [executionBook, mainnetBook, candles, news] = await Promise.all([
-    fetchOrderBookForNetwork(symbol, network, 40, engine),
-    network === "mainnet" ? Promise.resolve(null) : fetchOrderBookForNetwork(symbol, "mainnet", 40, engine),
+  const [book, candles, news] = await Promise.all([
+    fetchOrderBookForNetwork(symbol, "mainnet", 40, engine),
     engine === "spot" ? fetchKlinesForNetwork(symbol, "mainnet", "1h", 48) : Promise.resolve([]),
     fetchHotNews(),
   ]);
-  const book = executionBook;
 
   const lens = buildCostLens({
     side,
@@ -89,22 +87,17 @@ export async function GET(req: Request) {
 
   return NextResponse.json({
     symbol,
-    networkLabel: live ? "SoDEX mainnet" : "SoDEX practice network",
+    networkLabel: "SoDEX mainnet",
+    chainId: 286623,
+    executionEnabled: live,
+    submission: live ? "enabled" : "disabled",
     tradingLive: live,
-    mainnetBook: (mainnetBook ?? (live ? book : null))
-      ? {
-          bids: (mainnetBook ?? book)!.bids.slice(0, 8),
-          asks: (mainnetBook ?? book)!.asks.slice(0, 8),
-          fetchedAt: (mainnetBook ?? book)!.meta.fetchedAt,
-          source: "SoDEX mainnet public order book",
-        }
-      : null,
     book: book
       ? {
           bids: book.bids.slice(0, 8),
           asks: book.asks.slice(0, 8),
           fetchedAt: book.meta.fetchedAt,
-          source: live ? "SoDEX mainnet public order book" : "SoDEX practice-network order book",
+          source: "SoDEX mainnet public order book",
         }
       : null,
     cost: lens,

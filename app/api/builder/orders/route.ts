@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getBuilderConfig, type SodexNetworkLabel } from "@/lib/sodex-builder";
+import { type SodexNetworkLabel } from "@/lib/sodex-builder";
 import { readSpotBalances, readSpotOrders } from "@/lib/sodex-account-read";
 import { clientIp, rejectIfRateLimited } from "@/lib/request-guard";
 
@@ -19,10 +19,7 @@ export async function GET(req: Request) {
   if (!/^0x[0-9a-f]{40}$/.test(address)) {
     return NextResponse.json({ error: "Connect a valid wallet to continue." }, { status: 400 });
   }
-  const cfg = getBuilderConfig();
-  const requested = url.searchParams.get("network");
-  const network: SodexNetworkLabel =
-    requested === "mainnet" && cfg.mainnetTradingEnabled ? "mainnet" : "testnet";
+  const network: SodexNetworkLabel = "mainnet";
   const accountId = Number(url.searchParams.get("accountId") ?? "");
   const account = Number.isSafeInteger(accountId) && accountId > 0 ? accountId : undefined;
 
@@ -32,7 +29,7 @@ export async function GET(req: Request) {
   ]);
 
   return NextResponse.json({
-    networkLabel: network === "mainnet" ? "SoDEX mainnet" : "SoDEX practice network",
+    networkLabel: "SoDEX mainnet",
     fetchedAt: new Date().toISOString(),
     ordersAvailable: orders.available,
     open: orders.open,

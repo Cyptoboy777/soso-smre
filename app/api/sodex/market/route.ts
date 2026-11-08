@@ -65,7 +65,7 @@ function publicBundle(bundle: Awaited<ReturnType<typeof fetchMarketBundle>>) {
       note: 'Live prices',
     },
     label: 'Live prices',
-    practiceMode: true,
+    practiceMode: false,
   };
 }
 
@@ -78,7 +78,7 @@ export async function GET(req: NextRequest) {
   if (list === 'tickers') {
     const { tickers } = await fetchAllTickers();
     return NextResponse.json(
-      { tickers: tickers.map(publicTicker), label: 'Live prices', practiceMode: true },
+      { tickers: tickers.map(publicTicker), label: 'Live prices', practiceMode: false },
       { headers: { 'Cache-Control': 's-maxage=5, stale-while-revalidate=15' } },
     );
   }

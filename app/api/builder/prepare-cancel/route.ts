@@ -46,14 +46,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "That market is not available here." }, { status: 400 });
   }
   const cfg = getBuilderConfig();
-  const network: SodexNetworkLabel = body.network === "mainnet" ? "mainnet" : "testnet";
-  if (network === "mainnet" && !cfg.mainnetTradingEnabled) {
-    logServerError("prepare-cancel", "mainnet cancel refused");
-    return NextResponse.json(
-      { error: "Live trading is not available right now. You can keep using the practice network." },
-      { status: 403 },
-    );
-  }
+  const network: SodexNetworkLabel = "mainnet";
   try {
     const symbolId = await resolveSymbolIdOnNetwork(network, symbol);
     if (symbolId == null) {

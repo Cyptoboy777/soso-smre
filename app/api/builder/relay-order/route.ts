@@ -52,19 +52,11 @@ export async function POST(req: Request) {
     );
   }
 
-  const network = body.network === "mainnet" ? "mainnet" : "testnet";
-  if (network === "mainnet") {
-    if (!cfg.builderId || !cfg.mainnetTradingEnabled) {
-      logServerError("relay-order", "mainnet relay refused");
-      return NextResponse.json(
-        {
-          error:
-            "Live trading is not available right now. You can keep practicing on the practice network.",
-        },
-        { status: 403 },
-      );
-    }
+  if (!cfg.executionEnabled) {
+    logServerError("relay-order", "submission refused");
+    return NextResponse.json({ error: "Order submission is not enabled." }, { status: 403 });
   }
+  const network = "mainnet" as const;
 
   // Ensure builder tag matches server config when present
   const b = body.params.builder as { id?: number; fee?: number } | undefined;
@@ -102,7 +94,7 @@ export async function POST(req: Request) {
   if (receipt.stage === "accepted") recordRoutedOrder(userAddress);
   return NextResponse.json({
     ok: receipt.stage === "accepted",
-    mode: network === "mainnet" && cfg.mainnetTradingEnabled ? "live" : "practice",
+    mode: cfg.executionEnabled ? "live" : "review",
     receipt,
     retryAllowed: false,
   });

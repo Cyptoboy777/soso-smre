@@ -41,12 +41,12 @@ export async function POST(req: Request) {
   if (!route || !body.params || !body.nonce || !body.signature) {
     return NextResponse.json({ error: "Something is missing from the order request. Please try again." }, { status: 400 });
   }
-  const network: SodexNetworkLabel = body.network === "mainnet" ? "mainnet" : "testnet";
   const cfg = getBuilderConfig();
-  if (network === "mainnet" && !cfg.mainnetTradingEnabled) {
-    logServerError("relay-perps", "mainnet relay refused");
-    return NextResponse.json({ error: "Live trading is not available right now. You can keep using the practice network." }, { status: 403 });
+  if (!cfg.executionEnabled) {
+    logServerError("relay-perps", "submission refused");
+    return NextResponse.json({ error: "Order submission is not enabled." }, { status: 403 });
   }
+  const network: SodexNetworkLabel = "mainnet";
   const market = body.market === "spot" ? "spot" : "perps";
   if (market === "spot" && (body.signType === "newOrder" || body.signType === "cancelOrder" || body.signType === "replaceOrder" || body.signType === "modifyOrder")) {
     return NextResponse.json({ error: "That action is not available on spot from this path." }, { status: 400 });

@@ -33,9 +33,7 @@ export default function TradePage() {
     <div className="trade-page">
       <header className="trade-intro">
         <h1>Trade</h1>
-        <p>
-          One spot order at a time. The book, the cost, and the headlines stay next to the ticket. Nothing is sent until you sign, and an accepted order is not a fill.
-        </p>
+        <p>Review one mainnet order. Submission stays off until release.</p>
       </header>
       <ExecutionTicket thesis={TICKET} quantity={0} />
     </div>

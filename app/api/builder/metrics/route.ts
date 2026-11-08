@@ -19,7 +19,7 @@ export async function GET(req: Request) {
   const metrics = readBuilderMetrics();
   return NextResponse.json({
     builderReady: cfg.builderReady,
-    mode: cfg.network === "mainnet" && cfg.mainnetTradingEnabled ? "live" : "practice",
+    mode: cfg.executionEnabled ? "live" : "review",
     metrics: {
       ordersRouted: metrics.ordersRouted,
       uniqueWallets: metrics.uniqueWallets,

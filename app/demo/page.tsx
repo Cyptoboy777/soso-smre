@@ -66,7 +66,7 @@ export default function DemoPage() {
             <strong style={{ color: 'var(--text)' }}>GEMINI_API_KEY:</strong> LLM thesis (else deterministic rules).
           </li>
           <li>
-            <strong style={{ color: 'var(--text)' }}>Practice trading credentials:</strong> when present, EIP-712 signed practice-network orders; otherwise a labelled practice demo. Live trading stays off until explicitly enabled.
+            <strong style={{ color: 'var(--text)' }}>Order review:</strong> the ticket prepares a mainnet payload. Submission stays off until release.
           </li>
         </ul>
       </section>

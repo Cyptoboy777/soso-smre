@@ -67,17 +67,6 @@ export async function POST(req: Request) {
         ? "testnet"
         : cfg.network;
 
-  if (network === "mainnet" && !cfg.mainnetTradingEnabled && !dryRun) {
-    logServerError("prepare-approval", "mainnet approval refused");
-    return NextResponse.json(
-      {
-        error:
-          "Live trading is not available right now. You can keep practicing on the practice network.",
-      },
-      { status: 403 },
-    );
-  }
-
   try {
     const prepared = prepareBuilderApproval({
       userAddress,
@@ -89,7 +78,8 @@ export async function POST(req: Request) {
     void _e;
     return NextResponse.json({
       prepared: safePrepared,
-      practiceOnly: !(network === "mainnet" && cfg.mainnetTradingEnabled),
+      submission: cfg.executionEnabled ? "enabled" : "disabled",
+      chainId: 286623,
       disclosure: {
         maxFeeLabel: `up to ${cfg.maxApprovalPercent}`,
         feeLine: `Includes a ${cfg.appFeePercent} app fee`,
