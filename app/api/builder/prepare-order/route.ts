@@ -1,10 +1,14 @@
 import { NextResponse } from "next/server";
-import { getBuilderConfig, clampNotional, type SodexNetworkLabel } from "@/lib/sodex-builder";
+import { getBuilderConfig, spotApiBase, type SodexNetworkLabel } from "@/lib/sodex-builder";
 import { prepareUserSpotOrder, resolveSymbolIdOnNetwork } from "@/lib/sodex-wallet-trade";
 import { isAllowedTradeSymbol } from "@/lib/trade-guard";
 import { clientIp, rejectIfRateLimited } from "@/lib/request-guard";
 import { jsonPublicError, logServerError } from "@/lib/public-errors";
 import { readJsonBodyLimited } from "@/lib/builder-order-guard";
+import { quoteIsStale } from "@/lib/cost-lens";
+import { readSpotOrders, restingFrom } from "@/lib/sodex-account-read";
+import { selfTradeCheck } from "@/lib/self-trade";
+import { checkOrderFilters, multiplyDecimal, parseSymbolFilters } from "@/lib/decimal-rule";
 
 export const dynamic = "force-dynamic";
 
@@ -30,6 +34,9 @@ export async function POST(req: Request) {
     price?: string | number;
     confirmed?: boolean;
     dryRun?: boolean;
+    includeBuilder?: boolean;
+    requireFreshQuote?: boolean;
+    quoteFetchedAt?: string;
   };
   try {
     const _p = await readJsonBodyLimited(req);
@@ -75,21 +82,30 @@ export async function POST(req: Request) {
 
   const side = body.side === "sell" ? "sell" : "buy";
   const type = body.type === "market" ? "market" : "limit";
-  let quantity = String(body.quantity ?? "");
-  const price = body.price != null ? String(body.price) : undefined;
+  const quantity = String(body.quantity ?? "").trim();
+  const price = body.price != null ? String(body.price).trim() : undefined;
   const qtyNum = Number(quantity);
   const priceNum = price != null ? Number(price) : 0;
   if (!Number.isFinite(qtyNum) || qtyNum <= 0) {
     return NextResponse.json({ error: "Enter a valid size." }, { status: 400 });
   }
-  if (type === "limit") {
-    const notional = qtyNum * priceNum;
-    const capped = clampNotional(notional);
-    if (priceNum > 0 && notional > capped) {
-      quantity = String(capped / priceNum);
-    }
-  } else if (side === "buy") {
-    quantity = String(clampNotional(qtyNum));
+  const notional =
+    type === "limit"
+      ? qtyNum * priceNum
+      : side === "buy"
+        ? qtyNum
+        : 0;
+  if (type === "limit" && (!Number.isFinite(priceNum) || priceNum <= 0)) {
+    return NextResponse.json({ error: "Enter a valid limit price." }, { status: 400 });
+  }
+  if ((type === "limit" || (type === "market" && side === "buy")) && notional > cfg.maxNotionalUsdc + 1e-9) {
+    return NextResponse.json({ error: "Order size exceeds the app limit." }, { status: 400 });
+  }
+  if (body.requireFreshQuote && quoteIsStale(body.quoteFetchedAt)) {
+    return NextResponse.json(
+      { error: "The quote expired. Refresh the book and review the order again." },
+      { status: 409 },
+    );
   }
 
   const network: SodexNetworkLabel =
@@ -121,6 +137,40 @@ export async function POST(req: Request) {
         { status: 400 },
       );
     }
+
+    const filters = await readSymbolFilters(network, symbol);
+    const notionalText =
+      type === "limit" && price
+        ? multiplyDecimal(price, quantity)
+        : type === "market" && side === "buy"
+          ? quantity
+          : null;
+    const filterCheck = checkOrderFilters({
+      price: type === "limit" ? price : undefined,
+      quantity: type === "market" && side === "buy" ? undefined : quantity,
+      notional: notionalText ?? undefined,
+      filters: filters.filters,
+      filtersKnown: filters.known,
+    });
+    if (!filterCheck.ok) {
+      return NextResponse.json(
+        { error: filterCheck.issues[0]?.message ?? "That order does not match the market rules." },
+        { status: 400 },
+      );
+    }
+
+    const open = await readSpotOrders(network, userAddress, accountId);
+    const cross = selfTradeCheck({
+      side,
+      type,
+      price: type === "limit" ? priceNum : null,
+      resting: open.available ? restingFrom(open.open) : [],
+      bookKnown: open.available,
+    });
+    if (cross.state === "blocked") {
+      return NextResponse.json({ error: cross.detail }, { status: 409 });
+    }
+
     const prepared = prepareUserSpotOrder({
       network,
       accountId,
@@ -132,6 +182,8 @@ export async function POST(req: Request) {
       price: type === "limit" ? price : undefined,
       confirmed: Boolean(body.confirmed) || dryRun,
       dryRun: dryRun || (network === "mainnet" && !cfg.mainnetTradingEnabled),
+      signingAddress: userAddress,
+      includeBuilder: Boolean(body.includeBuilder),
     });
 
     // Strip internal fields from client payload
@@ -150,8 +202,8 @@ export async function POST(req: Request) {
       prepared: {
         ...signable,
         feeDisclosure: {
-          feeLabel: `Includes a ${cfg.appFeePercent} app fee`,
-          spotBuyNote: cfg.feeDisclosure.spotBuyExempt,
+          feeLabel: feeDisclosure.feeLabel,
+          spotBuyNote: feeDisclosure.spotBuyNote,
         },
         confirmSummary: {
           symbol: confirmSummary.symbol,
@@ -167,6 +219,8 @@ export async function POST(req: Request) {
           network === "mainnet" && cfg.mainnetTradingEnabled
             ? realFundsWarning
             : null,
+        selfTrade: cross.state,
+        filtersKnown: filters.known,
       },
       userAddress,
       mustConfirmAgain: true,
@@ -176,5 +230,33 @@ export async function POST(req: Request) {
   } catch (e) {
     const { body: b, status } = jsonPublicError("prepare-order", e);
     return NextResponse.json(b, { status });
+  }
+}
+
+async function readSymbolFilters(network: SodexNetworkLabel, symbol: string) {
+  try {
+    const res = await fetch(`${spotApiBase(network)}/markets/symbols`, {
+      headers: { Accept: "application/json" },
+      cache: "no-store",
+    });
+    if (!res.ok) return { filters: {}, known: false };
+    const body = (await res.json()) as {
+      code?: number;
+      data?: Array<Record<string, unknown>> | { list?: Array<Record<string, unknown>> };
+    };
+    if (typeof body.code === "number" && body.code !== 0) return { filters: {}, known: false };
+    const rows = Array.isArray(body.data)
+      ? body.data
+      : body.data && Array.isArray(body.data.list)
+        ? body.data.list
+        : [];
+    const want = symbol.replace(/[^A-Za-z0-9]/g, "").toUpperCase();
+    const hit = rows.find((row) => {
+      const name = String(row.name ?? "").replace(/[^A-Za-z0-9]/g, "").toUpperCase();
+      return name.includes(want) || want.includes(name);
+    });
+    return parseSymbolFilters(hit);
+  } catch {
+    return { filters: {}, known: false };
   }
 }

@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next';
 import { Inter_Tight, JetBrains_Mono } from 'next/font/google';
 import './globals.css';
 import { Shell } from '@/components/Shell';
+import { MotionActivity } from '@/components/MotionActivity';
 import { AiChatDock } from '@/components/AiChatDock';
 import { ThemeProvider } from '@/components/ThemeProvider';
 
@@ -75,6 +76,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         }
       >
         <ThemeProvider>
+          <MotionActivity />
           <a className="skip-link" href="#main">
             Skip to content
           </a>

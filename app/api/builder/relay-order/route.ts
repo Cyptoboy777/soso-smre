@@ -4,6 +4,7 @@ import { relayUserSpotOrder } from "@/lib/sodex-wallet-trade";
 import { recordRoutedOrder } from "@/lib/builder-metrics";
 import { clientIp, rejectIfRateLimited } from "@/lib/request-guard";
 import { logServerError, publicErrorMessage } from "@/lib/public-errors";
+import { parseBatchReceipt } from "@/lib/order-receipt";
 import {
   assertRelayOrderParams,
   readJsonBodyLimited,
@@ -67,16 +68,8 @@ export async function POST(req: Request) {
 
   // Ensure builder tag matches server config when present
   const b = body.params.builder as { id?: number; fee?: number } | undefined;
-  if (cfg.builderId != null) {
-    if (!b || b.id !== cfg.builderId) {
-      logServerError("relay-order", "builder id mismatch on order");
-      return NextResponse.json(
-        { error: "This order could not be verified. Please try again." },
-        { status: 400 },
-      );
-    }
-  } else if (b) {
-    logServerError("relay-order", "unexpected builder tag");
+  if (b && (cfg.builderId == null || b.id !== cfg.builderId)) {
+    logServerError("relay-order", "builder id mismatch on order");
     return NextResponse.json(
       { error: "This order could not be verified. Please try again." },
       { status: 400 },
@@ -97,7 +90,7 @@ export async function POST(req: Request) {
     apiKeyName: body.apiKeyName,
   });
 
-  if (!result.ok) {
+  if (!result.ok && !result.venueRejected) {
     logServerError("relay-order", result.error);
     return NextResponse.json(
       { error: publicErrorMessage(result.error) },
@@ -105,9 +98,12 @@ export async function POST(req: Request) {
     );
   }
 
-  recordRoutedOrder(userAddress);
+  const receipt = parseBatchReceipt(result.ok || result.venueRejected ? result.raw : undefined);
+  if (receipt.stage === "accepted") recordRoutedOrder(userAddress);
   return NextResponse.json({
-    ok: true,
+    ok: receipt.stage === "accepted",
     mode: network === "mainnet" && cfg.mainnetTradingEnabled ? "live" : "practice",
+    receipt,
+    retryAllowed: false,
   });
 }

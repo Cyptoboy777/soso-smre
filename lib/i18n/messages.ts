@@ -14,6 +14,7 @@ type Dict = {
   navStart: string;
   navStats: string;
   navTrack: string;
+  navTrade: string;
   navJudge: string;
   badgeWave: string;
   footerLine: string;
@@ -53,6 +54,7 @@ export const MESSAGES: Record<Locale, Dict> = {
     navStart: "Start",
     navStats: "Stats",
     navTrack: "Track record",
+    navTrade: "Trade",
     navJudge: "Judge path",
     badgeWave: "SoSoValue · SoDEX",
     footerLine: "FlowSentinel",
@@ -98,6 +100,7 @@ export const MESSAGES: Record<Locale, Dict> = {
     navStart: "Inicio",
     navStats: "Stats",
     navTrack: "Historial",
+    navTrade: "Operar",
     navJudge: "Ruta juez",
     badgeWave: "SoSoValue · SoDEX",
     footerLine: "FlowSentinel",
@@ -143,6 +146,7 @@ export const MESSAGES: Record<Locale, Dict> = {
     navStart: "Comecar",
     navStats: "Stats",
     navTrack: "Historico",
+    navTrade: "Operar",
     navJudge: "Rota juiz",
     badgeWave: "SoSoValue · SoDEX",
     footerLine: "FlowSentinel",
@@ -188,6 +192,7 @@ export const MESSAGES: Record<Locale, Dict> = {
     navStart: "开始",
     navStats: "数据",
     navTrack: "战绩",
+    navTrade: "下单",
     navJudge: "评审路径",
     badgeWave: "SoSoValue · SoDEX",
     footerLine: "FlowSentinel",
@@ -229,6 +234,7 @@ export const MESSAGES: Record<Locale, Dict> = {
     navStart: "Demarrer",
     navStats: "Stats",
     navTrack: "Historique",
+    navTrade: "Ordre",
     navJudge: "Parcours juge",
     badgeWave: "SoSoValue · SoDEX",
     footerLine: "FlowSentinel",

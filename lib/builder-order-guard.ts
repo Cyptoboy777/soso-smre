@@ -81,8 +81,9 @@ export function assertRelayOrderParams(
   }
 
   const builder = params.builder as BuilderParams | undefined;
-  if (cfg.builderId != null) {
-    if (!builder || builder.id !== cfg.builderId) {
+  // A missing tag is allowed. A present tag must match the configured fee exactly.
+  if (builder) {
+    if (cfg.builderId == null || builder.id !== cfg.builderId) {
       return { ok: false, error: "This order could not be verified." };
     }
     if (typeof builder.fee !== "number" || builder.fee !== cfg.builderFee) {
@@ -91,8 +92,6 @@ export function assertRelayOrderParams(
     if (builder.fee < 0 || builder.fee > cfg.maxApproval) {
       return { ok: false, error: "This order could not be verified." };
     }
-  } else if (builder) {
-    return { ok: false, error: "This order could not be verified." };
   }
 
   const accountID = asFiniteNumber(params.accountID);
