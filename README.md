@@ -4,7 +4,7 @@
 
 **AI one-person fund desk** for the [AKINDO SoSoValue buildathon Wave 3](https://app.akindo.io/wave-hacks/JBEQXgN4Zi2jA3wA) — *Build Your One-Person On-Chain Finance Business with SoSoValue*.
 
-SoSoValue ETF flows, hot news and ssiMAG7 become a daily thesis. A hard risk gate requires human confirm. Then a **SoDEX testnet EIP-712** order lands, and an honest track record logs the outcome. A voice co-pilot narrates the same ticket and never places orders.
+SoSoValue ETF flows, hot news and ssiMAG7 become a daily thesis. A hard risk gate requires human confirm. The main path is a **SoDEX Mainnet spot swap**: connect an injected EVM wallet, read the live mainnet book, review the order, and sign an EIP-712 `ExchangeAction` (domain `spot`, chainId `286623`) in your own wallet. FlowSentinel never holds your trading key. An honest track record logs the outcome. A voice co-pilot narrates the same ticket and never places orders.
 
 | | |
 | --- | --- |
@@ -13,7 +13,7 @@ SoSoValue ETF flows, hot news and ssiMAG7 become a daily thesis. A hard risk gat
 | **Track record** | https://flowsentinel-app.vercel.app/track-record |
 | **Branch** | `flowsentinel-wave3` (preview / PR — not production) |
 
-No wallet. No login.
+No login. Wallet only for the swap (injected EVM, signs in your wallet — no keys pasted into the app).
 
 ---
 
@@ -21,14 +21,14 @@ No wallet. No login.
 
 1. Open **[/judge](https://flowsentinel-app.vercel.app/judge)** — auto walkthrough: Data → thesis → risk → confirm → receipt  
 2. Or open the **Desk** (`/`) — FlowRadar, Live/Fallback panels, JARVIS ideas citing SoSoValue news  
-3. Tick **Confirm** on the risk gate → place order (labelled **TESTNET LIVE** or **DRY-RUN SIMULATED**)  
+3. Open **/trade** → pick a pair, see the live SoDEX mainnet ticker and book, enter amount (market or limit), review cost, tick **Confirm**, then your wallet shows the typed-data signature request. Mainnet submission stays off until the operator sets `SODEX_MAINNET_TRADING=1`; until then the review is prepared but not sent.  
 4. Open **[/track-record](https://flowsentinel-app.vercel.app/track-record)** — thesis id, risk decision, order status, hit rate  
 
 ---
 
-## SoDEX testnet proof (EIP-712)
+## SoDEX testnet proof (legacy server-key path, EIP-712)
 
-FlowSentinel places **real SoDEX testnet** orders when `SODEX_ACCOUNT_ID`, `SODEX_API_KEY_NAME`, and `SODEX_API_KEY_PRIVATE_KEY` are set (Preview branch + Development only). Without keys the desk stays labelled **DRY-RUN SIMULATED**. Mainnet is hard-locked out. Server max notional **10 USDC** per confirmed order.
+FlowSentinel places **real SoDEX testnet** orders when `SODEX_ACCOUNT_ID`, `SODEX_API_KEY_NAME`, and `SODEX_API_KEY_PRIVATE_KEY` are set (Preview branch + Development only). Without keys the desk stays labelled **DRY-RUN SIMULATED**. This server-key path is **testnet only** and is not the default; mainnet uses the wallet-signed path above. Server max notional **10 USDC** per confirmed order.
 
 Proven on account `60539` (`testnet-gw.sodex.dev`, chainId `138565`):
 
@@ -119,7 +119,9 @@ npx tsx scripts/register-testnet-api-key.ts
 
 ## Security notes
 
-- Mainnet trading path is **hard-locked out** in code
+- Mainnet orders are wallet-signed only (no backend user keys) and gated by an operator kill switch (`SODEX_MAINNET_TRADING`); off by default
+- Withdrawals / Mirror cross-chain are **not submitted** — no atomic cross-chain swap is claimed
+- Strategy bots are **drafts only** — no persistent worker, not live, not 24/7
 - Server enforces max notional **10 USDC** even after UI confirm
 - Voice / JARVIS **cannot** place orders — explicit checkbox + click required
 - No secrets in client bundles; SoDEX private key is server-only
@@ -162,7 +164,7 @@ Assets: `public/brand/`. Screenshots: `docs/hero.png`, `docs/desk.png`.
 1. Persist track record to durable storage with signed decision hashes  
 2. Optional Telegram one-tap **confirm** (still human-gated; no autonomous fire)  
 3. Broader SoSoValue surface (macro events) inside the same risk object  
-4. Mainnet only after explicit user unlock + higher caps — out of scope for Wave 3  
+4. Official Mirror withdraw (signed permit + status tracking) after the spot swap is proven on mainnet  
 
 See `CHANGELOG.md` for Wave 3 detail. License: MIT (`LICENSE`).
 

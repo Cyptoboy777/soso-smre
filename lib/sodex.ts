@@ -1,6 +1,6 @@
 /**
  * SoDEX testnet client - EIP-712 signed spot orders.
- * Default hard-locked to testnet (chainId 138565). Mainnet only via non-custodial /api/builder with SODEX_BUILDER_ID + SODEX_MAINNET_TRADING=1.
+ * Server-key path is testnet only (chainId 138565). Mainnet (286623) is wallet-signed via /api/builder, gated by SODEX_MAINNET_TRADING=1.
  *
  * Auth (official docs):
  * - X-API-Key = registered key *name* (not address / not private key)
