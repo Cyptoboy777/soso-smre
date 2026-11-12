@@ -1,6 +1,6 @@
 /**
  * SoDEX testnet client - EIP-712 signed spot orders.
- * Default hard-locked to testnet (chainId 138565). Mainnet only via non-custodial /api/builder with SODEX_BUILDER_ID + SODEX_MAINNET_TRADING=1.
+ * Server-key path is testnet only (chainId 138565). Mainnet (286623) is wallet-signed via /api/builder, gated by SODEX_MAINNET_TRADING=1.
  *
  * Auth (official docs):
  * - X-API-Key = registered key *name* (not address / not private key)
@@ -145,13 +145,10 @@ function sourceMeta(source: SourceMeta["source"], endpoint?: string, note?: stri
   return { source, endpoint, fetchedAt: new Date().toISOString(), note };
 }
 
-function fallbackMarket(): MarketPanel {
+function emptyMarket(note: string): MarketPanel {
   return {
-    tickers: [
-      { symbol: "vBTC_vUSDC", lastPrice: 95_000, changePct24h: 1.2, high: 96_200, low: 93_800, volume: 120 },
-      { symbol: "vETH_vUSDC", lastPrice: 3_450, changePct24h: 0.8, high: 3_510, low: 3_380, volume: 800 },
-    ],
-    meta: sourceMeta("fallback", "/markets/tickers", "Illustrative sample. SoDEX public tickers unavailable"),
+    tickers: [],
+    meta: sourceMeta("unavailable", "/markets/tickers", note),
   };
 }
 
@@ -193,32 +190,26 @@ function parseTickers(body: unknown, endpoint: string): MarketPanel {
     .slice(0, 6);
 
   if (!tickers.length) {
-    const fb = fallbackMarket();
-    fb.meta.note = "SoDEX returned no BTC/ETH tickers. Labelled fallback.";
-    return fb;
+    return emptyMarket("SoDEX returned no BTC/ETH tickers. No sample prices are shown.");
   }
   return { tickers, meta: sourceMeta("live", endpoint) };
 }
 
-/** Public spot tickers from SoDEX *testnet only* (no mainnet fallback). */
+/** Public spot tickers from SoDEX mainnet. Empty panel if the gateway is down — never sample prices. */
 export async function fetchSpotTickers(): Promise<MarketPanel> {
   const path = "/api/v1/spot/markets/tickers";
-  const base = requireTestnetOnly(process.env.SODEX_BASE_URL);
+  const base = "https://mainnet-gw.sodex.dev";
   try {
     const res = await fetch(`${base}${path}`, {
       headers: { Accept: "application/json" },
-      next: { revalidate: 30 },
+      cache: "no-store",
     });
     if (!res.ok) {
-      const fb = fallbackMarket();
-      fb.meta.note = `SoDEX testnet tickers HTTP ${res.status}. Labelled fallback.`;
-      return fb;
+      return emptyMarket(`SoDEX mainnet tickers are unavailable right now. No sample prices are shown.`);
     }
     return parseTickers(await res.json(), `${base}${path}`);
-  } catch (e) {
-    const fb = fallbackMarket();
-    fb.meta.note = `SoDEX fetch error (${e instanceof Error ? e.message : String(e)}). Labelled fallback.`;
-    return fb;
+  } catch {
+    return emptyMarket("SoDEX mainnet tickers are unavailable right now. No sample prices are shown.");
   }
 }
 
@@ -230,10 +221,10 @@ export function pickPrice(market: MarketPanel, symbol: string): number {
   );
   if (t?.lastPrice) return t.lastPrice;
   if (/BTC/i.test(symbol))
-    return market.tickers.find((x) => /BTC/i.test(x.symbol))?.lastPrice ?? 95_000;
+    return market.tickers.find((x) => /BTC/i.test(x.symbol))?.lastPrice ?? 0;
   if (/ETH/i.test(symbol))
-    return market.tickers.find((x) => /ETH/i.test(x.symbol))?.lastPrice ?? 3_450;
-  return market.tickers[0]?.lastPrice ?? 1;
+    return market.tickers.find((x) => /ETH/i.test(x.symbol))?.lastPrice ?? 0;
+  return market.tickers[0]?.lastPrice ?? 0;
 }
 
 async function publicGet<T>(path: string): Promise<T> {

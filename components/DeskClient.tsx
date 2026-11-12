@@ -296,7 +296,7 @@ export function DeskClient() {
           {btcFlow == null ? (
             <EmptyPanel
               title="No ETF print yet"
-              body="When SOSOVALUE_API_KEY is set, the latest US BTC ETF net inflow appears here."
+              body="The latest US BTC ETF net inflow appears here when SoSoValue data is available."
             />
           ) : (
             <>
@@ -320,7 +320,7 @@ export function DeskClient() {
         </DataCard>
         <DataCard title="ssiMAG7" meta={ssi.meta} index={3}>
           {ssi.price == null ? (
-            <EmptyPanel title="SSI unavailable" body="Index snapshot needs SOSOVALUE_API_KEY or will show labelled fallback." />
+            <EmptyPanel title="SSI unavailable" body="The index snapshot appears here when SoSoValue data is available. No sample values are shown." />
           ) : (
             <>
               <div className="tabular" style={{ fontSize: 28, fontWeight: 650, letterSpacing: '-0.03em' }}>

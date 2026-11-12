@@ -12,6 +12,7 @@ import type { ExecutionReceipt } from '@/lib/order-receipt';
 import { reserveSigningNonce } from '@/lib/nonce-browser';
 import { planGrid, type GridOrder } from '@/lib/grid-plan';
 import { intentView, type OrderIntent } from '@/lib/order-intent';
+import { DepthWalkMeter } from '@/components/DepthWalkMeter';
 import type { Thesis } from '@/types/flow';
 
 type BookLevel = { price: number; qty: number };
@@ -168,7 +169,8 @@ export function ExecutionTicket({ thesis, quantity }: { thesis: Thesis; quantity
     const timer = window.setTimeout(() => {
       void loadPreview().catch((e: unknown) => {
         setPreview(null);
-        setPreviewError(e instanceof Error ? e.message : 'The book could not be loaded.');
+        void e;
+        setPreviewError('The live SoDEX book could not be loaded. No sample book is shown.');
       });
     }, 280);
     return () => window.clearTimeout(timer);
@@ -196,7 +198,14 @@ export function ExecutionTicket({ thesis, quantity }: { thesis: Thesis; quantity
       if (!acc.ok) throw new Error(json.error ?? 'Could not load your account.');
       setAccountId(json.accountId ?? null);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not connect the wallet.');
+      const message = e instanceof Error ? e.message : '';
+      setError(
+        /reject|denied/i.test(message)
+          ? 'You declined the wallet connection. Nothing was shared.'
+          : message === 'No browser wallet found.'
+            ? 'No browser wallet found. Install or unlock an EVM wallet, then try again.'
+            : 'Could not connect the wallet. Unlock it and try again.',
+      );
     } finally {
       setBusy(false);
     }
@@ -726,6 +735,14 @@ export function ExecutionTicket({ thesis, quantity }: { thesis: Thesis; quantity
           <div className="panel-head"><strong>Cost and stress</strong></div>
           <div className="panel-body">
             <p className="execution-meta">{view.costNote}</p>
+            <DepthWalkMeter
+              side={side}
+              type={orderType}
+              size={Number(size) || 0}
+              limitPrice={orderType === 'limit' && Number(price) > 0 ? Number(price) : null}
+              bids={shownBook?.bids ?? []}
+              asks={shownBook?.asks ?? []}
+            />
             <p className="execution-meta">{preview?.cost.budgetDetail}</p>
             <ul className="plain-list">
               {(preview?.cost.lines ?? []).map((line) => (

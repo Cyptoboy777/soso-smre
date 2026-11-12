@@ -11,8 +11,8 @@ function ShellInner({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const { t } = useLocale();
   const NAV = [
-    { href: '/', label: t.navDesk },
-    { href: '/trade', label: t.navTrade },
+    { href: '/', label: t.navTrade },
+    { href: '/desk', label: t.navDesk },
     { href: '/start', label: t.navStart },
     { href: '/stats', label: t.navStats },
     { href: '/track-record', label: t.navTrack },
@@ -27,7 +27,7 @@ function ShellInner({ children }: { children: React.ReactNode }) {
           </Link>
           <nav className="shell-nav" aria-label="Primary">
             {NAV.map((n) => {
-              const active = n.href === '/' ? pathname === '/' : pathname.startsWith(n.href);
+              const active = n.href === '/' ? pathname === '/' || pathname.startsWith('/trade') : pathname.startsWith(n.href);
               return (
                 <Link
                   key={n.href}
@@ -52,7 +52,8 @@ function ShellInner({ children }: { children: React.ReactNode }) {
       <footer className="shell-footer">
         <p className="shell-disclaimer">{t.footerRisk}</p>
         <div className="shell-footer-links">
-          <Link href="/trade">{t.navTrade}</Link>
+          <Link href="/">{t.navTrade}</Link>
+          <Link href="/desk">{t.navDesk}</Link>
           <Link href="/start">{t.navStart}</Link>
           <Link href="/stats">{t.navStats}</Link>
           <Link href="/terms">Terms</Link>

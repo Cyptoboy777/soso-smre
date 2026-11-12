@@ -24,7 +24,7 @@ export default function PrivacyPage() {
         Review their policies as well.
       </p>
       <p>
-        <Link href="/">Back to desk</Link>
+        <Link href="/">Back to swap</Link>
       </p>
     </article>
   );

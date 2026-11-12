@@ -4,6 +4,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
   const base = process.env.NEXT_PUBLIC_APP_URL || 'https://flowsentinel-app.vercel.app';
   const paths = [
     '',
+    '/desk',
     '/start',
     '/stats',
     '/demo',
