@@ -1,7 +1,7 @@
 /**
  * Public SoDEX market data (no API keys).
- * Prefer MAINNET for live prices / books / klines (read-only).
- * Order signing remains testnet/practice-only elsewhere.
+ * Public reads use MAINNET only. If mainnet is down, return empty — never substitute testnet prices.
+ * Server-key order placement stays testnet-locked in lib/sodex.ts.
  */
 import type {
   MarketTicker,
@@ -45,13 +45,11 @@ async function getJson(
   }
 }
 
-/** Prefer mainnet for live public market reads; fall back to testnet. */
+/** Mainnet public reads only. Do not substitute testnet data. */
 async function publicFirst(path: string) {
   const a = await getJson(MAINNET, path);
   if (a.ok) return { ...a, gateway: 'mainnet' as const };
-  const b = await getJson(TESTNET, path);
-  if (b.ok) return { ...b, gateway: 'testnet' as const };
-  return { ok: false as const, error: `mainnet: ${a.error}; testnet: ${b.error}`, gateway: 'fallback' as const };
+  return { ok: false as const, error: `mainnet: ${a.error}`, gateway: 'fallback' as const };
 }
 
 function mapLevels(rows: unknown): SodexBookLevel[] {
@@ -154,7 +152,7 @@ export async function fetchOrderBook(symbol: string, limit = 40): Promise<SodexO
     blockTime: n(d.blockTime),
     updateId: n(d.updateID),
     gateway: res.gateway,
-    meta: meta('live', `${res.gateway === 'testnet' ? TESTNET : MAINNET}${path}`),
+    meta: meta('live', `${MAINNET}${path}`),
   };
 }
 
