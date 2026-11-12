@@ -68,33 +68,21 @@ function mapEtfRows(rows: Array<Record<string, unknown>>): EtfFlowDay[] {
   }));
 }
 
-/** Deterministic illustrative fallback - NEVER presented as live. */
-function fallbackEtf(symbol: 'BTC' | 'ETH'): EtfPanel {
-  // Deterministic, realistic-looking sample for demos - always labelled Fallback.
-  const series =
-    symbol === 'BTC'
-      ? [182.4, -94.2, 241.8, 67.5, -31.1, 312.0, 148.6]
-      : [41.2, -28.7, 55.4, 12.8, -19.3, 63.1, 22.5];
-  const history: EtfFlowDay[] = series.map((m, i) => {
-    const d = new Date();
-    d.setUTCDate(d.getUTCDate() - (series.length - i));
-    // skip weekends for realism
-    while (d.getUTCDay() === 0 || d.getUTCDay() === 6) d.setUTCDate(d.getUTCDate() - 1);
-    const inflow = m * 1_000_000;
-    return {
-      date: d.toISOString().slice(0, 10),
-      totalNetInflow: inflow,
-      totalValueTraded: (symbol === 'BTC' ? 4.2 : 1.1) * 1e9 + Math.abs(m) * 8e6,
-      totalNetAssets: symbol === 'BTC' ? 98.4e9 : 12.6e9,
-      cumNetInflow: (symbol === 'BTC' ? 42.1e9 : 6.8e9) + inflow,
-    };
-  }).reverse();
+/**
+ * Honest empty panel. No sample numbers are ever substituted for live data;
+ * the UI shows an empty state instead. Notes are user-facing and never name
+ * environment variables or echo upstream errors.
+ */
+const NOTE_OFFLINE = 'SoSoValue data is not available right now.';
+const NOTE_EMPTY = 'SoSoValue returned no rows for this view.';
+
+function emptyEtf(symbol: 'BTC' | 'ETH', note: string): EtfPanel {
   return {
     symbol,
     country: 'US',
-    latest: history[0] ?? null,
-    history,
-    meta: meta('fallback', '/etfs/summary-history', 'Labelled sample. Set SOSOVALUE_API_KEY for live ETF flows'),
+    latest: null,
+    history: [],
+    meta: meta('unavailable', '/etfs/summary-history', note),
   };
 }
 
@@ -106,9 +94,7 @@ export async function fetchEtfFlows(symbol: 'BTC' | 'ETH'): Promise<EtfPanel> {
   );
 
   if (!result.ok) {
-    const fb = fallbackEtf(symbol);
-    fb.meta.note = `Live fetch failed (${result.error}). Showing labelled fallback.`;
-    return fb;
+    return emptyEtf(symbol, NOTE_OFFLINE);
   }
 
   const raw = Array.isArray(result.data)
@@ -118,9 +104,7 @@ export async function fetchEtfFlows(symbol: 'BTC' | 'ETH'): Promise<EtfPanel> {
       : [];
 
   if (!raw.length) {
-    const fb = fallbackEtf(symbol);
-    fb.meta.note = 'Live response empty. Labelled fallback.';
-    return fb;
+    return emptyEtf(symbol, NOTE_EMPTY);
   }
 
   const history = mapEtfRows(raw);
@@ -136,29 +120,8 @@ export async function fetchEtfFlows(symbol: 'BTC' | 'ETH'): Promise<EtfPanel> {
 const SHOCK_RE =
   /\b(hack|exploit|sec\b|lawsuit|ban|crash|halt|insolvent|bankrupt|emergency|collapse|fraud|charged|indicted)\b/i;
 
-function fallbackNews(): NewsPanel {
-  return {
-    items: [
-      {
-        id: 'fb-1',
-        title: '[Fallback] Spot BTC ETF flows in focus ahead of weekly close',
-        url: 'https://sosovalue.com',
-        summary: 'Labelled sample: Spot BTC ETF books mixed prints into week-end (not live).',
-        publishedAt: new Date().toISOString(),
-        isShock: false,
-      },
-      {
-        id: 'fb-2',
-        title: '[Fallback] ETH staking yields steady as L2 activity cools',
-        url: 'https://sosovalue.com',
-        summary: 'Labelled sample: ETH staking yields steady as L2 fees cool (not live).',
-        publishedAt: new Date(Date.now() - 3_600_000).toISOString(),
-        isShock: false,
-      },
-    ],
-    shockActive: false,
-    meta: meta('fallback', '/news/hot', 'Labelled sample. Set SOSOVALUE_API_KEY for live hot news'),
-  };
+function emptyNews(note: string): NewsPanel {
+  return { items: [], shockActive: false, meta: meta('unavailable', '/news/hot', note) };
 }
 
 export async function fetchHotNews(): Promise<NewsPanel> {
@@ -174,16 +137,12 @@ export async function fetchHotNews(): Promise<NewsPanel> {
   }>(path, { page: '1', page_size: '12' });
 
   if (!result.ok) {
-    const fb = fallbackNews();
-    fb.meta.note = `Live fetch failed (${result.error}). Showing labelled fallback.`;
-    return fb;
+    return emptyNews(NOTE_OFFLINE);
   }
 
   const list = result.data.list ?? [];
   if (!list.length) {
-    const fb = fallbackNews();
-    fb.meta.note = 'Live response empty. Labelled fallback.';
-    return fb;
+    return emptyNews(NOTE_EMPTY);
   }
 
   const items: NewsItem[] = list.map((n, i) => {
@@ -207,13 +166,13 @@ export async function fetchHotNews(): Promise<NewsPanel> {
   };
 }
 
-function fallbackSsi(): SsiPanel {
+function emptySsi(ticker: string, note: string): SsiPanel {
   return {
-    ticker: 'ssiMAG7',
-    price: 21.4,
-    changePct24h: 0.0042,
-    roi7d: 0.018,
-    meta: meta('fallback', '/indices/ssimag7/market-snapshot', 'Labelled sample. Set SOSOVALUE_API_KEY for live SSI'),
+    ticker,
+    price: null,
+    changePct24h: null,
+    roi7d: null,
+    meta: meta('unavailable', `/indices/${ticker}/market-snapshot`, note),
   };
 }
 
@@ -226,9 +185,7 @@ export async function fetchSsiSnapshot(ticker = 'ssimag7'): Promise<SsiPanel> {
   }>(path);
 
   if (!result.ok) {
-    const fb = fallbackSsi();
-    fb.meta.note = `Live fetch failed (${result.error}). Showing labelled fallback.`;
-    return fb;
+    return emptySsi(ticker, NOTE_OFFLINE);
   }
 
   return {
@@ -238,4 +195,50 @@ export async function fetchSsiSnapshot(ticker = 'ssimag7'): Promise<SsiPanel> {
     roi7d: result.data.roi_7d ?? null,
     meta: meta('live', path),
   };
+}
+
+export type SectorMove = { name: string; changePct24h: number | null; dominance: number | null };
+export type SectorSpotlightPanel = {
+  sectors: SectorMove[];
+  spotlight: SectorMove[];
+  meta: SourceMeta;
+};
+
+function toNum(v: unknown): number | null {
+  const n = typeof v === 'string' ? Number(v) : typeof v === 'number' ? v : NaN;
+  return Number.isFinite(n) ? n : null;
+}
+
+/** Map the official `GET /currencies/sector-spotlight` response. Pure; exported for tests. */
+export function mapSectorSpotlight(data: unknown): { sectors: SectorMove[]; spotlight: SectorMove[] } {
+  const body = (data ?? {}) as { sector?: unknown; spotlight?: unknown };
+  const rows = (list: unknown): SectorMove[] =>
+    Array.isArray(list)
+      ? list
+          .filter((r): r is Record<string, unknown> => typeof r === 'object' && r !== null && typeof (r as { name?: unknown }).name === 'string')
+          .map((r) => ({
+            name: String(r.name).trim(),
+            // Docs show `24h_change_pct`; the live API returns `change_pct_24h`. Both are fractions.
+            changePct24h: toNum(r.change_pct_24h ?? r['24h_change_pct']),
+            dominance: toNum(r.marketcap_dom),
+          }))
+      : [];
+  return { sectors: rows(body.sector), spotlight: rows(body.spotlight) };
+}
+
+/**
+ * SoSoValue sector & spotlight moves.
+ * Docs: https://docs.sodex.com/for-developers/api-reference/market-data-api/currency/sector-spotlight
+ */
+export async function fetchSectorSpotlight(): Promise<SectorSpotlightPanel> {
+  const path = '/currencies/sector-spotlight';
+  const result = await sosoGet<unknown>(path);
+  if (!result.ok) {
+    return { sectors: [], spotlight: [], meta: meta('unavailable', path, NOTE_OFFLINE) };
+  }
+  const mapped = mapSectorSpotlight(result.data);
+  if (!mapped.sectors.length && !mapped.spotlight.length) {
+    return { ...mapped, meta: meta('unavailable', path, NOTE_EMPTY) };
+  }
+  return { ...mapped, meta: meta('live', path) };
 }

@@ -20,12 +20,12 @@ export default function TermsPage() {
         The assistant never places orders. You are responsible for any keys you load on your own device.
       </p>
       <p style={{ color: 'var(--text-muted)', lineHeight: 1.55 }}>
-        Data from SoSoValue and SoDEX may be delayed, incomplete, or labelled Fallback when live keys or
+        Data from SoSoValue and SoDEX may be delayed, incomplete, or marked Unavailable when live keys or
         network access are unavailable. Public track-record outcomes are illustrative and may use mark
         prices.
       </p>
       <p>
-        <Link href="/">Back to desk</Link>
+        <Link href="/">Back to swap</Link>
       </p>
     </article>
   );

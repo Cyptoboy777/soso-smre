@@ -124,7 +124,7 @@ export function JudgeClient() {
             <input type="checkbox" checked={auto} onChange={(e) => setAuto(e.target.checked)} />
             Auto-advance
           </label>
-          <Link href="/" className="btn btn-ghost">
+          <Link href="/desk" className="btn btn-ghost">
             Full desk
           </Link>
         </div>

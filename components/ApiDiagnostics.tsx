@@ -63,7 +63,7 @@ export function ApiDiagnostics() {
         </button>
       </header>
       <div className="diag-keys">
-        <span className={`mode-pill ${keys.sosovalue ? 'live' : 'sim'}`}>SoSoValue {keys.sosovalue ? 'key' : 'fallback'}</span>
+        <span className={`mode-pill ${keys.sosovalue ? 'live' : 'sim'}`}>SoSoValue {keys.sosovalue ? 'connected' : 'offline'}</span>
         <span className={`mode-pill ${keys.gemini ? 'live' : 'sim'}`}>Gemini {keys.gemini ? model || 'on' : 'off'}</span>
         <span className={`mode-pill ${keys.sodexTrade ? 'live' : 'sim'}`}>
           Orders {labels.orders || 'Not submitted'}

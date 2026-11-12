@@ -2205,3 +2205,86 @@ html[data-assistant='signing'] .ai-orb-ring { animation-duration: 2.6s; }
   from { opacity: 0; transform: translateY(6px); }
   to { opacity: 1; transform: none; }
 }
+
+/* ── Swap home (primary surface) ─────────────────────────────────── */
+.swap-page { display: grid; gap: var(--space-5); }
+.swap-intro { display: grid; gap: var(--space-3); max-width: 72ch; }
+.swap-intro h1 {
+  margin: 0;
+  font-size: clamp(1.75rem, 1.2rem + 2.2vw, 2.6rem);
+  line-height: 1.08;
+  letter-spacing: -0.025em;
+  text-wrap: balance;
+}
+.swap-intro p { margin: 0; color: var(--text-muted); font-size: 16px; line-height: 1.55; text-wrap: pretty; }
+.swap-steps {
+  list-style: none; margin: var(--space-2) 0 0; padding: 0;
+  display: flex; flex-wrap: wrap; gap: var(--space-2);
+}
+.swap-steps li {
+  display: inline-flex; align-items: center; gap: var(--space-2);
+  padding: 6px 12px 6px 6px;
+  border: 1px solid var(--line); border-radius: var(--radius-pill);
+  background: var(--surface-1); color: var(--text); font-size: 14px;
+}
+.swap-step-n {
+  display: inline-grid; place-items: center; width: 22px; height: 22px;
+  border-radius: 50%; background: var(--surface-3); color: var(--accent-soft);
+  font-size: 12px; font-weight: 600;
+}
+.swap-steps li:nth-child(5) .swap-step-n { background: var(--accent); color: var(--on-accent); }
+
+/* SoSoValue context strip */
+.ctx { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) minmax(0, 1fr); gap: var(--space-4); }
+.ctx-card {
+  display: grid; align-content: start; gap: var(--space-2);
+  padding: var(--space-4); border: 1px solid var(--line); border-radius: var(--radius-md);
+  background: var(--surface-1); box-shadow: var(--shadow-panel); min-width: 0;
+}
+.ctx-card h3 { margin: 0; font-size: 14px; font-weight: 600; color: var(--text-muted); letter-spacing: 0; }
+.ctx-card ul { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-2); }
+.ctx-news li { display: grid; gap: 2px; }
+.ctx-news a { color: var(--text); text-decoration: none; font-size: 15px; line-height: 1.35; }
+.ctx-news a:hover { color: var(--accent-soft); text-decoration: underline; text-underline-offset: 3px; }
+.ctx-news a:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: 4px; }
+.ctx-news time { color: var(--text-muted); font-size: 12px; }
+.ctx-figure { margin: 0; font-size: clamp(1.4rem, 1.1rem + 1vw, 1.9rem); font-weight: 600; letter-spacing: -0.02em; }
+.ctx-sub, .ctx-empty { margin: 0; color: var(--text-muted); font-size: 14px; line-height: 1.5; }
+.ctx-sectors li { display: flex; justify-content: space-between; gap: var(--space-3); font-size: 14px; }
+.ctx .up { color: var(--gain); }
+.ctx .down { color: var(--loss); }
+.ctx-skeleton {
+  height: 64px; border-radius: var(--radius-sm); background: var(--surface-2);
+  animation: ctx-pulse 1.4s ease-in-out infinite;
+}
+@keyframes ctx-pulse { 50% { opacity: 0.55; } }
+@media (max-width: 900px) { .ctx { grid-template-columns: 1fr; } }
+
+/* Depth walk meter */
+.walk { display: grid; gap: var(--space-3); margin: var(--space-2) 0; }
+.walk-empty { padding: var(--space-3); border: 1px dashed var(--line-strong); border-radius: var(--radius-sm); }
+.walk-empty strong { font-size: 14px; }
+.walk-empty p { margin: 4px 0 0; color: var(--text-muted); font-size: 14px; }
+.walk-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-3); margin: 0; }
+.walk-stats div { display: grid; gap: 2px; }
+.walk-stats dt { color: var(--text-muted); font-size: 12px; }
+.walk-stats dd { margin: 0; font-size: 16px; font-weight: 600; }
+.walk-calm { color: var(--gain); }
+.walk-watch { color: var(--warn); }
+.walk-hot { color: var(--loss); }
+.walk-rows { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.walk-row { display: grid; grid-template-columns: 7.5rem minmax(0, 1fr) 5.5rem; align-items: center; gap: var(--space-2); font-size: 13px; }
+.walk-row[data-taken='false'] { opacity: 0.55; }
+.walk-price, .walk-away { color: var(--text-muted); }
+.walk-away { text-align: right; }
+.walk-track { position: relative; height: 8px; border-radius: var(--radius-pill); background: var(--surface-3); overflow: hidden; }
+.walk-fill { position: absolute; inset: 0; transform-origin: left center; border-radius: inherit; }
+.walk-buy { background: var(--gain); }
+.walk-sell { background: var(--loss); }
+@media (max-width: 520px) {
+  .walk-stats { grid-template-columns: 1fr 1fr; }
+  .walk-row { grid-template-columns: 6rem minmax(0, 1fr) 4.5rem; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ctx-skeleton { animation: none; }
+}

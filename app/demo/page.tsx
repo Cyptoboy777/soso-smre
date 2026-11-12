@@ -9,7 +9,7 @@ export default function DemoPage() {
           Judge path
         </h1>
         <p style={{ margin: 0, color: 'var(--text-muted)' }}>
-          No wallet. No login. Works with or without API keys (fallback panels are labelled).
+          No wallet. No login. Missing data shows as unavailable, never as sample numbers.
         </p>
       </header>
 
@@ -18,15 +18,15 @@ export default function DemoPage() {
           {
             n: '1',
             title: 'Open the Desk',
-            body: 'See live/fallback SoSoValue ETF flows, hot news, SSI, and the AI/rules thesis with confidence.',
-            href: '/',
+            body: 'See live SoSoValue ETF flows, hot news, SSI, and the AI/rules thesis with confidence.',
+            href: '/desk',
             cta: 'Go to Desk',
           },
           {
             n: '2',
             title: 'Read the risk gate',
             body: 'Pass/fail reasons for size, drawdown, geometry, confidence, and news-shock pause. Tick confirm.',
-            href: '/#',
+            href: '/desk',
             cta: 'Stay on Desk',
           },
           {
@@ -57,13 +57,13 @@ export default function DemoPage() {
         <ul style={{ margin: 0, paddingLeft: 18, color: 'var(--text-muted)', fontSize: 14, lineHeight: 1.6 }}>
           <li>
             <strong style={{ color: 'var(--text)' }}>Always:</strong> Desk UI, risk gate, dry-run orders, track
-            record logging, labelled fallbacks.
+            record logging, clear empty states when a source is down.
           </li>
           <li>
-            <strong style={{ color: 'var(--text)' }}>SOSOVALUE_API_KEY:</strong> live ETF flows, hot news, SSI.
+            <strong style={{ color: 'var(--text)' }}>SoSoValue:</strong> live ETF flows, hot news, SSI, sectors when the server is connected.
           </li>
           <li>
-            <strong style={{ color: 'var(--text)' }}>GEMINI_API_KEY:</strong> LLM thesis (else deterministic rules).
+            <strong style={{ color: 'var(--text)' }}>AI thesis:</strong> model-written when available, otherwise deterministic rules.
           </li>
           <li>
             <strong style={{ color: 'var(--text)' }}>Order review:</strong> the ticket prepares a mainnet payload. Submission stays off until release.
