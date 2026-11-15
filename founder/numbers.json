@@ -1,0 +1,17 @@
+{
+  "business": "SoSwap (builder-fee revenue model; ALL volumes are ESTIMATES, not data)",
+  "unit": "USD 1,000 swapped",
+  "price": 0.30,
+  "variable": [
+    {"label": "Gemini API cost per $1,000 swapped (estimate: ~1 check per $500)", "cost": 0.01}
+  ],
+  "fixed_monthly": [
+    {"label": "Vercel + domain (estimate, free tier possible)", "cost": 20}
+  ],
+  "startup": [
+    {"label": "Builder account funding, 100 vUSDC Spot + 100 vUSDC Perps (returnable, not spent)", "cost": 200}
+  ],
+  "days_per_month": 30,
+  "plan_per_day": 50,
+  "ramp_per_day": [2, 4, 7, 10, 15, 20, 25, 30, 35, 40, 45, 50]
+}

@@ -1,22 +1,11 @@
 node_modules
 .next
-.out
-.env
-.env.local
-.env.*.local
-.env*
-!.env.example
-npm-debug.log*
-.DS_Store
-coverage
-*.pem
+out
 .vercel
-data/track-record.json
-
-# SoDEX local registration secrets
-*.secret.txt
-sodex_*.secret.txt
-
-# never commit local testnet keys (path)
-secrets/
-**/secrets/
+.env
+.env.*
+!.env.example
+*.pem
+*.log
+next-env.d.ts
+tsconfig.tsbuildinfo

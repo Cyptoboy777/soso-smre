@@ -1,0 +1,166 @@
+/* SoSwap AI — orange / black / white theme */
+.ss-launcher, .ss-panel, .ss-panel * { box-sizing: border-box; }
+.ss-launcher {
+  position: fixed; right: 28px; bottom: 28px; z-index: 9998;
+  width: 76px; height: 76px; border: 1px solid rgba(255,116,0,.7);
+  border-radius: 50%; background: #080808; display: grid; place-items: center;
+  cursor: pointer; box-shadow: 0 0 0 5px rgba(255,106,0,.08), 0 0 32px rgba(255,106,0,.32);
+  transition: transform .25s ease, box-shadow .25s ease;
+}
+.ss-launcher:hover { transform: translateY(-4px) scale(1.03); box-shadow: 0 0 0 8px rgba(255,106,0,.09), 0 0 42px rgba(255,106,0,.45); }
+.ss-launcher__close { color: #fff; font-size: 38px; line-height: 1; font-weight: 300; }
+.ss-launcher__ping { position: absolute; right: 4px; top: 5px; width: 12px; height: 12px; background: #ff7900; border: 2px solid #080808; border-radius: 50%; }
+.ss-orb { width: 62px; height: 62px; position: relative; display: grid; place-items: center; animation: ss-float 4s ease-in-out infinite; }
+.ss-orb--compact { width: 42px; height: 42px; }
+.ss-orb__halo { position: absolute; inset: 4%; border-radius: 50%; background: #ff7900; filter: blur(15px); opacity: .42; }
+.ss-orb__core {
+  position: relative; width: 68%; height: 68%; border-radius: 50%;
+  background: radial-gradient(circle at 32% 25%, #fff5df 0, #ffbd70 13%, #ff7900 42%, #a52c00 78%, #351000 100%);
+  border: 1px solid rgba(255,255,255,.85); box-shadow: inset -5px -7px 13px #471300, inset 4px 4px 9px rgba(255,255,255,.75), 0 0 18px rgba(255,111,0,.75);
+  overflow: hidden; z-index: 2;
+}
+.ss-orb__shine { position: absolute; width: 40%; height: 22%; border-radius: 50%; background: rgba(255,255,255,.8); filter: blur(5px); top: 10%; left: 17%; transform: rotate(-30deg); }
+.ss-orb__eye { position: absolute; top: 43%; width: 8%; height: 13%; background: #241008; border-radius: 50%; box-shadow: 0 0 5px #fff; }
+.ss-orb__eye--left { left: 31%; } .ss-orb__eye--right { right: 31%; }
+.ss-orb__mouth { position: absolute; left: 42%; top: 62%; width: 16%; height: 7%; border-bottom: 2px solid #451800; border-radius: 0 0 50% 50%; }
+.ss-orb__ring { position: absolute; width: 100%; height: 38%; border: 1px solid rgba(255,168,87,.9); border-radius: 50%; transform: rotate(-28deg); z-index: 3; }
+.ss-orb__ring--two { width: 115%; height: 52%; transform: rotate(42deg); border-color: rgba(255,255,255,.45); }
+.ss-orb__spark { position: absolute; width: 4px; height: 4px; border-radius: 50%; background: white; box-shadow: 0 0 8px #fff, 0 0 13px #ff7900; z-index: 4; }
+.ss-orb__spark--one { top: 7%; right: 18%; } .ss-orb__spark--two { bottom: 13%; left: 8%; }
+.ss-panel {
+  position: fixed; right: 28px; bottom: 120px; z-index: 9999;
+  width: min(410px, calc(100vw - 28px)); height: min(680px, calc(100dvh - 150px));
+  display: flex; flex-direction: column; overflow: hidden; color: #f8f8f8;
+  background: radial-gradient(ellipse at 80% 0%, rgba(255,106,0,.13), transparent 38%), #090909;
+  border: 1px solid rgba(255,128,30,.48); border-radius: 22px;
+  box-shadow: 0 24px 90px rgba(0,0,0,.75), 0 0 34px rgba(255,106,0,.13);
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  animation: ss-panel-in .25s ease-out;
+}
+.ss-panel__header { display:flex; align-items:center; justify-content:space-between; padding: 16px 17px; border-bottom:1px solid #29211b; background:rgba(10,10,10,.85); }
+.ss-panel__identity { display:flex; align-items:center; gap:10px; }
+.ss-panel__identity .ss-orb { width:43px; height:43px; }
+.ss-panel__name { font-weight:800; letter-spacing:-.4px; font-size:15px; }
+.ss-beta { color:#ff8a24; border:1px solid #743a12; border-radius:5px; padding:2px 5px; font-size:9px; letter-spacing:.8px; vertical-align:2px; margin-left:4px; }
+.ss-panel__status { color:#a8a8a8; font-size:11px; margin-top:3px; }
+.ss-panel__status i { display:inline-block; width:6px; height:6px; border-radius:50%; background:#ff7900; margin-right:5px; box-shadow:0 0 8px #ff7900; }
+.ss-icon-button { border:0; color:#aaa; background:transparent; font-size:27px; cursor:pointer; line-height:1; }
+.ss-panel__notice { margin:12px 14px 0; padding:10px 12px; border:1px solid #382719; border-radius:11px; background:rgba(255,106,0,.07); color:#d4c4b7; font-size:11px; }
+.ss-panel__notice span { color:#ff8a24; margin-right:5px; }
+.ss-chat { flex:1; overflow-y:auto; padding:16px 14px 10px; display:flex; flex-direction:column; gap:14px; scrollbar-width:thin; scrollbar-color:#5a321a transparent; }
+.ss-message { display:flex; align-items:flex-end; gap:8px; max-width:95%; }
+.ss-message--user { align-self:flex-end; }
+.ss-message--assistant { align-self:flex-start; }
+.ss-message__avatar { width:27px; height:27px; flex:0 0 27px; display:grid; place-items:center; border-radius:50%; background:#21140d; border:1px solid #6b3a18; overflow:hidden; }
+.ss-message__avatar .ss-orb { width:31px; height:31px; }
+.ss-message__bubble { padding:11px 13px; border-radius:14px 14px 14px 4px; background:#191919; border:1px solid #303030; color:#eee; font-size:12px; line-height:1.6; white-space:pre-wrap; overflow-wrap:anywhere; }
+.ss-message--user .ss-message__bubble { background:linear-gradient(135deg,#ff8a00,#e95b00); border-color:#ff9a32; color:#fff; border-radius:14px 14px 4px 14px; }
+.ss-typing { display:flex; align-items:center; gap:5px; color:#aaa; }
+.ss-typing i { width:5px; height:5px; border-radius:50%; background:#ff8a24; animation:ss-dot 1s infinite ease-in-out; }
+.ss-typing i:nth-child(2) { animation-delay:.15s; } .ss-typing i:nth-child(3) { animation-delay:.3s; }
+.ss-typing span { margin-left:5px; }
+.ss-suggestions { padding:2px 14px 12px; display:grid; gap:7px; }
+.ss-suggestions__label { color:#8f8f8f; font-size:9px; letter-spacing:1.3px; font-weight:700; }
+.ss-suggestions button { display:flex; align-items:center; justify-content:space-between; gap:8px; text-align:left; padding:9px 11px; border-radius:9px; border:1px solid #34302c; background:#111; color:#ddd; font-size:11px; cursor:pointer; }
+.ss-suggestions button:hover { border-color:#b85c17; background:#1b120c; }
+.ss-suggestions button b { color:#ff8a24; }
+.ss-composer { display:flex; align-items:flex-end; gap:7px; margin:0 12px 10px; padding:8px; border:1px solid #4a3323; border-radius:14px; background:#111; }
+.ss-composer textarea { flex:1; min-width:0; max-height:100px; resize:none; border:0; outline:0; background:transparent; color:#fff; font:inherit; font-size:12px; line-height:1.5; padding:6px 4px; }
+.ss-composer textarea::placeholder { color:#777; }
+.ss-voice, .ss-send { width:32px; height:32px; flex:0 0 32px; border:1px solid #49301f; border-radius:9px; background:#1b1713; color:#ff9a3d; cursor:pointer; font-size:19px; }
+.ss-voice.is-listening { background:#5a1e0a; color:#fff; animation:ss-pulse 1s infinite; }
+.ss-send { border-color:#ff8a24; background:linear-gradient(135deg,#ff9700,#ed5c00); color:#fff; font-size:20px; font-weight:700; }
+.ss-send:disabled { opacity:.35; cursor:not-allowed; }
+.ss-panel__footer { display:flex; justify-content:space-between; gap:8px; padding:0 14px 12px; color:#777; font-size:9px; }
+@keyframes ss-float { 0%,100%{transform:translateY(0) rotate(-2deg)} 50%{transform:translateY(-5px) rotate(2deg)} }
+@keyframes ss-panel-in { from{opacity:0;transform:translateY(12px) scale(.98)} to{opacity:1;transform:translateY(0) scale(1)} }
+@keyframes ss-dot { 0%,80%,100%{opacity:.35;transform:translateY(0)} 40%{opacity:1;transform:translateY(-4px)} }
+@keyframes ss-pulse { 50%{box-shadow:0 0 0 5px rgba(255,106,0,.18)} }
+@media (max-width:520px) {
+  .ss-launcher { right:16px; bottom:16px; width:66px; height:66px; }
+  .ss-panel { right:8px; bottom:92px; width:calc(100vw - 16px); height:min(690px,calc(100dvh - 108px)); border-radius:18px; }
+  .ss-panel__footer { flex-direction:column; gap:3px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ss-orb, .ss-typing i, .ss-voice, .ss-panel { animation:none !important; transition:none !important; }
+}
+
+/* ───── SoSwap AI helmet-orb (SVG) ───── */
+.ss-orb--v2 { animation: none; }
+.ss-orb--v2 svg { display: block; overflow: visible; }
+.ss-orb--stage { width: 100%; height: auto; aspect-ratio: 200 / 230; }
+.ss-orb--v2:not(.ss-orb--still):not(.ss-orb--stage) { animation: ss-float 4s ease-in-out infinite; }
+.ss-orb--v2 .ao-bob { animation: ao-bob 4.2s ease-in-out infinite; }
+.ss-orb--compact .ao-bob, .ss-orb--still .ao-bob { animation: none; }
+.ao-glow { filter: drop-shadow(0 0 3px #ff7a00) drop-shadow(0 0 7px rgba(255,122,0,.7)); }
+.ao-ring { filter: drop-shadow(0 0 3px rgba(255,122,0,.9)); }
+.ao-flow { animation: ao-flow 3.2s linear infinite; }
+.ao-flow--rev { animation-direction: reverse; animation-duration: 5s; }
+.ao-eye { transform-box: fill-box; transform-origin: center; animation: ao-blink 5.5s infinite, ao-look 9s ease-in-out infinite; }
+.ao-ears { transform-box: fill-box; transform-origin: 50% 100%; animation: ao-ear 6s ease-in-out infinite; }
+.ao-mouth { transform-box: fill-box; transform-origin: center top; }
+.ao-tongue { transform-box: fill-box; transform-origin: center top; opacity: 0; }
+.ao-spark { animation: ss-twinkle 2.4s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
+.ao-spark--b { animation-delay: .8s; } .ao-spark--c { animation-delay: 1.5s; }
+.ss-orb--talk .ao-eye { animation: ao-blink 2.6s infinite, ao-bounce .42s ease-in-out infinite alternate; }
+.ss-orb--talk .ao-mouth { animation: ss-talk .32s ease-in-out infinite alternate; }
+.ss-orb--talk .ao-tongue { opacity: 1; animation: ss-talk .32s ease-in-out infinite alternate; }
+.ss-orb--talk .ao-flow { animation-duration: 1.2s; }
+.ss-hero { display: grid; place-items: center; padding: 18px 0 2px; flex: 0 0 auto; }
+.ss-hero .ss-orb { width: 158px; }
+.ss-picker { display: flex; gap: 8px; padding: 10px 14px 0; flex-wrap: wrap; }
+.ss-picker button { width: 44px; height: 44px; border-radius: 14px; border: 1px solid #3a2a1d; background: #120d09; padding: 0; cursor: pointer; display: grid; place-items: center; transition: transform .15s, border-color .15s; }
+.ss-picker button:hover { transform: translateY(-2px); border-color: #b85c17; }
+.ss-picker button[aria-pressed="true"] { border-color: #ff8a24; box-shadow: 0 0 12px rgba(255,121,0,.45); background: #1f130a; }
+.ss-picker__label { width: 100%; color: #8f8f8f; font-size: 9px; letter-spacing: 1.3px; font-weight: 700; }
+@keyframes ao-bob { 0%,100% { transform: translateY(0) } 50% { transform: translateY(-5px) } }
+@keyframes ao-flow { from { stroke-dashoffset: 0 } to { stroke-dashoffset: -100 } }
+@keyframes ao-blink { 0%,93%,100% { transform: scaleY(1) } 96% { transform: scaleY(.1) } }
+@keyframes ao-look { 0%,100% { translate: 0 0 } 30% { translate: 2.5px 0 } 65% { translate: -2.5px 0 } }
+@keyframes ao-bounce { from { translate: 0 0 } to { translate: 0 -3px } }
+@keyframes ao-ear { 0%,86%,100% { transform: rotate(0) } 91% { transform: rotate(-2.500deg) } 95% { transform: rotate(2deg) } }
+@keyframes ao-pulse { 0%,100% { opacity: .4 } 50% { opacity: 1 } }
+@keyframes ss-twinkle { 0%,100% { opacity: .3; transform: scale(.6) } 50% { opacity: 1; transform: scale(1.3) } }
+@keyframes ss-talk { from { transform: scaleY(.7) } to { transform: scaleY(1.9) } }
+@media (prefers-reduced-motion: reduce) { .ss-orb--v2 *, .ss-orb--v2 { animation: none !important; } }
+
+.ss-panel__orbbtn { background: none; border: 0; padding: 0; cursor: pointer; display: grid; place-items: center; width: 43px; height: 43px; border-radius: 50%; }
+.ss-panel__orbbtn:focus-visible { outline: 2px solid #ff8a24; outline-offset: 2px; }
+.ss-hero + .ss-message { margin-top: -6px; }
+/* compact chips so the orb + first message keep room */
+.ss-suggestions { display: flex; flex-wrap: wrap; gap: 6px; padding: 2px 14px 10px; }
+.ss-suggestions__label { width: 100%; }
+.ss-suggestions button { padding: 6px 10px; border-radius: 999px; font-size: 11px; }
+.ss-suggestions button b { display: none; }
+.ss-chat { min-height: 0; }
+
+/* ───── motion modelled on the reference clip: head turns, expressions, ripples, flying sparks ───── */
+.ao-head { animation: ao-turn 14s ease-in-out infinite; transform-origin: 100px 100px; }
+.ao-eyes { animation: ao-gaze 14s ease-in-out infinite; }
+.ss-orb--compact .ao-head, .ss-orb--compact .ao-eyes, .ss-orb--still .ao-head, .ss-orb--still .ao-eyes { animation: none; }
+.ao-pop { transform-box: fill-box; transform-origin: center; animation: ao-pop .2s ease-out both; }
+.ao-ripple { transform-origin: 100px 196px; animation: ao-ripple 3.4s ease-out infinite; opacity: 0; }
+.ao-drift { animation: ao-drift 3.2s ease-out infinite; opacity: 0; }
+@keyframes ao-turn { 0%,12%,40%,64%,100% { transform: none } 22% { transform: translateX(-7px) scaleX(.93) skewY(-1.5deg) } 52% { transform: translateX(8px) scaleX(.9) skewY(2deg) } }
+@keyframes ao-gaze { 0%,12%,40%,64%,100% { translate: 0 0 } 22% { translate: -5px 0 } 52% { translate: 6px 0 } }
+@keyframes ao-pop { from { transform: scale(.55); opacity: 0 } to { transform: scale(1); opacity: 1 } }
+@keyframes ao-ripple { 0% { transform: scale(.3); opacity: .9 } 100% { transform: scale(1.18); opacity: 0 } }
+@keyframes ao-drift { 0% { transform: translate(0,0); opacity: 0 } 15% { opacity: 1 } 100% { transform: translate(var(--dx), var(--dy)); opacity: 0 } }
+
+.ss-hero { display: flex; align-items: center; justify-content: center; gap: 4px; padding: 14px 10px 2px; }
+.ss-hero .ss-orb { width: 148px; flex: 0 0 148px; }
+.ss-hero__stage { width: 168px; min-height: 96px; display: grid; align-items: start; }
+.ss-bubble { position: relative; border: 1px solid #ff8a24; border-radius: 14px; padding: 10px 12px; color: #fff; font-size: 12px; font-weight: 600; line-height: 1.35; background: rgba(24,11,3,.88); box-shadow: 0 0 14px rgba(255,121,0,.35), inset 0 0 12px rgba(255,121,0,.12); animation: ao-pop .22s ease-out both; transform-origin: 0 60%; }
+.ss-bubble::before { content: ""; position: absolute; left: -7px; top: 22px; width: 11px; height: 11px; background: rgba(24,11,3,.95); border-left: 1px solid #ff8a24; border-bottom: 1px solid #ff8a24; transform: rotate(45deg); }
+.ss-wave { display: flex; align-items: center; gap: 3px; height: 16px; margin-top: 7px; }
+.ss-wave i { width: 3px; height: 100%; border-radius: 2px; background: #ff8a24; transform-origin: center; animation: ss-wave .8s ease-in-out infinite; }
+.ss-wave i:nth-child(2n) { animation-delay: .15s; } .ss-wave i:nth-child(3n) { animation-delay: .3s; } .ss-wave i:nth-child(5n) { animation-delay: .45s; }
+@keyframes ss-wave { 0%,100% { transform: scaleY(.25) } 50% { transform: scaleY(1) } }
+.ss-bubble--menu { padding: 6px; display: grid; gap: 1px; }
+.ss-bubble--menu button { display: flex; align-items: center; gap: 8px; background: none; border: 0; color: #f4f4f4; font-size: 11.5px; font-weight: 600; padding: 6px 7px; border-radius: 8px; cursor: pointer; text-align: left; }
+.ss-bubble--menu button:hover { background: rgba(255,121,0,.16); }
+.ss-bubble--menu svg { color: #ff8a24; flex: 0 0 auto; }
+@media (prefers-reduced-motion: reduce) { .ao-ripple, .ao-drift, .ss-wave i, .ss-bubble { animation: none !important; } .ao-ripple { opacity: .5 } }
+
+/* Keep the assistant orb from covering app dialogs (connect wallet, review swap, ...) */
+body:has(div[role="dialog"][aria-modal="true"]:not(.ss-panel)) .ss-launcher { opacity: 0; pointer-events: none; transition: opacity .15s; }

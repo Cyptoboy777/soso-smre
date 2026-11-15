@@ -1,181 +1,109 @@
-# FlowSentinel
+# SoSwap
 
-![FlowSentinel hero](docs/hero.png)
+Non-custodial trading interface on the **SoDEX mainnet spot order book** with **SoSoValue** news / ETF flows / sectors and an animated **AI assistant** (orb + animal bot faces). Next.js 16 + React 19 (App Router, Node ≥ 20.9) · framer-motion page/card/tab transitions · Tailwind · lucide-react. Deploys to Vercel as-is.
 
-**AI one-person fund desk** for the [AKINDO SoSoValue buildathon Wave 3](https://app.akindo.io/wave-hacks/JBEQXgN4Zi2jA3wA) — *Build Your One-Person On-Chain Finance Business with SoSoValue*.
+- **Swap** with live Route Preview (walks the real SoDEX order book), limit orders, chart, order book
+- **Markets**: every SoDEX spot pair, SoSoValue news, ETF flows, sector moves
+- **Cross-Chain (Mirror)**: indicative estimate only (not an atomic swap)
+- **Bots (Drafts)**: DCA / Grid / Signal dry-run previews. They never send orders.
+- **SoSwap AI**: floating assistant with six animal faces (fox, bull, bear, owl, cat, panda). It reads a live SoDEX + SoSoValue snapshot server-side.
 
-SoSoValue ETF flows, hot news and ssiMAG7 become a daily thesis. A hard risk gate requires human confirm. Then a **SoDEX testnet EIP-712** order lands, and an honest track record logs the outcome. A voice co-pilot narrates the same ticket and never places orders.
+## How secrets are kept safe
 
-| | |
-| --- | --- |
-| **Live preview** | https://flowsentinel-app.vercel.app |
-| **60s judge path** | https://flowsentinel-app.vercel.app/judge |
-| **Track record** | https://flowsentinel-app.vercel.app/track-record |
-| **Branch** | `flowsentinel-wave3` (preview / PR — not production) |
+| Secret | Where it lives | Reaches the browser? |
+|---|---|---|
+| `SOSOVALUE_API_KEY` | Vercel env var, used only in `app/api/soso` and `app/api/assistant` | **No** |
+| `AI_API_KEY` / `AI_BASE_URL` / `AI_MODEL` | Vercel env var, used only in `app/api/assistant` | **No** |
+| Users' wallets / seed phrases | Never requested | n/a |
+| Users' SoDEX trading key | Generated in the user's own browser tab (sessionStorage), signs orders locally | Stays in that tab; only signatures are sent |
 
-No wallet. No login.
+- `.env*` files are git-ignored (only `.env.example` is committed). Never use the `NEXT_PUBLIC_` prefix for a secret.
+- `/api/soso` exposes only three read-only SoSoValue endpoints and caches them at the edge, so visitors can't drain your quota.
+- `/api/sodex` only forwards `GET/POST/DELETE /api/v1/spot/**` and key registration, to the two official gateways.
+- `/api/assistant` is rate limited per IP (15 msgs/min, best effort in memory). For strict limits add Vercel KV / Upstash.
 
----
-
-## 60-second judge path
-
-1. Open **[/judge](https://flowsentinel-app.vercel.app/judge)** — auto walkthrough: Data → thesis → risk → confirm → receipt  
-2. Or open the **Desk** (`/`) — FlowRadar, Live/Fallback panels, JARVIS ideas citing SoSoValue news  
-3. Tick **Confirm** on the risk gate → place order (labelled **TESTNET LIVE** or **DRY-RUN SIMULATED**)  
-4. Open **[/track-record](https://flowsentinel-app.vercel.app/track-record)** — thesis id, risk decision, order status, hit rate  
-
----
-
-## SoDEX testnet proof (EIP-712)
-
-FlowSentinel places **real SoDEX testnet** orders when `SODEX_ACCOUNT_ID`, `SODEX_API_KEY_NAME`, and `SODEX_API_KEY_PRIVATE_KEY` are set (Preview branch + Development only). Without keys the desk stays labelled **DRY-RUN SIMULATED**. Mainnet is hard-locked out. Server max notional **10 USDC** per confirmed order.
-
-Proven on account `60539` (`testnet-gw.sodex.dev`, chainId `138565`):
-
-| orderID | status | notes |
-| --- | --- | --- |
-| **1301914828** | FILLED / partial | MARKET IOC via `/api/trade` on live preview |
-| **1301909841** | FILLED | MARKET IOC buy; trade `9461764`; 0.00005 vBTC @ 78619 |
-| **1301909840** | NEW | LIMIT buy 0.001 @ 5000 (resting) |
-
-Signing: `X-API-Key` = key name, `X-API-Sign` = `0x01` + EIP-712 signature from the API-key wallet, `X-API-Nonce` = ms timestamp. Domain: SoDEX spot `ExchangeAction`.
-
----
-
-## Architecture
-
-```mermaid
-flowchart LR
-  SV[SoSoValue API<br/>ETF / news / SSI] --> Thesis["/api/thesis<br/>Gemini or rules"]
-  SD[SoDEX tickers] --> Thesis
-  Thesis --> Risk[Risk gate<br/>size / DD / shock]
-  Risk -->|user confirms| Trade["/api/trade<br/>EIP-712 testnet"]
-  Trade --> TR["/api/track-record"]
-  Voice[Voice co-pilot] -.->|narrates only| Thesis
-  Voice -.->|never orders| Risk
-```
-
-| Layer | Role |
-| --- | --- |
-| `lib/sosovalue.ts` | SoSoValue client (`x-soso-api-key`) + labelled fallbacks |
-| `lib/sodex.ts` | SoDEX testnet EIP-712 spot orders (dry-run when keys absent) |
-| `lib/signal.ts` | Deterministic flow → side scoring |
-| `lib/thesis.ts` | Gemini wrapper → rules fallback |
-| `lib/risk-engine.ts` | Pass/fail checks + position size |
-| `lib/track-record.ts` | File-backed honest log (`data/track-record.json`) |
-
-### SoSoValue endpoints used
-
-Base: `https://openapi.sosovalue.com/openapi/v1`
-
-| Method | Path | Use |
-| --- | --- | --- |
-| GET | `/etfs/summary-history?symbol=BTC\|ETH&country_code=US` | ETF net flows drive conviction |
-| GET | `/news/hot` | Hot news + shock filter; cited in thesis |
-| GET | `/indices/ssimag7/market-snapshot` | SSI momentum input |
-
-### SoDEX endpoints used
-
-Testnet: `https://testnet-gw.sodex.dev/api/v1/spot`
-
-| Method | Path | Use |
-| --- | --- | --- |
-| GET | `/markets/tickers` | Spot marks (public) |
-| POST | authenticated order batch | EIP-712 limit / market when keys set |
-| cancel | authenticated | Free margin on resting limits |
-
-App routes: `/api/thesis`, `/api/risk`, `/api/trade`, `/api/track-record`, `/api/soso/*`, `/judge`, `/demo`, `/track-record`.
-
----
-
-## Setup
+## Run locally
 
 ```bash
 npm install
-cp .env.example .env.local   # never commit secrets
-npm run test
-npm run dev                  # http://localhost:3000
-npm run build                # must pass
+cp .env.example .env.local      # fill in the values
+npm run dev                     # http://localhost:3000
 ```
 
-| Var | Required for | If missing |
-| --- | --- | --- |
-| `SOSOVALUE_API_KEY` | Live ETF / news / SSI | Labelled **Fallback** panels |
-| `GEMINI_API_KEY` | LLM thesis | Deterministic rules thesis |
-| `SODEX_ACCOUNT_ID` | Testnet EIP-712 order | Labelled **DRY-RUN** |
-| `SODEX_API_KEY_NAME` | Testnet EIP-712 order | Labelled **DRY-RUN** |
-| `SODEX_API_KEY_PRIVATE_KEY` | API-key wallet pk | Labelled **DRY-RUN** |
-| `NEXT_PUBLIC_APP_URL` | Absolute links | Preview URL |
-
-Secrets for this buildathon live outside the repo (gitignored). Preview/Dev env only on Vercel — not Production.
-
-To register a **testnet** API key on your own PC (never on a shared agent box):
+## Push to GitHub
 
 ```bash
-npx tsx scripts/register-testnet-api-key.ts
+cd soswap
+git init -b main            # skip if already a repo
+git add -A
+git status                  # confirm no .env file is listed
+git commit -m "SoSwap"
+# create an EMPTY repo on github.com (no README), then:
+git remote add origin https://github.com/<you>/soswap.git
+git push -u origin main
 ```
 
----
+## Deploy on Vercel
+
+1. vercel.com → **Add New… → Project** → import the GitHub repo (Framework: Next.js, nothing to change).
+2. **Environment Variables** (Production + Preview): `SOSOVALUE_API_KEY`, `AI_API_KEY`, `AI_MODEL`, and `AI_BASE_URL` if your provider isn't OpenAI.
+3. **Deploy.** Without a variable, that feature shows an honest empty state instead of fake data.
+4. After changing env vars, redeploy.
+
+## Before you call it production-ready
+
+- Test a **tiny** real swap on mainnet with a small balance first. The signed-order path was built from the official SoDEX docs/SDK but could not be exercised against mainnet from the build environment.
+- The trading key is a "hot key": its permissions are set by SoDEX. Users should fund only what they intend to trade and revoke keys at sodex.com/apikeys.
+- SoSwap is independent and not operated by SoDEX. Keep the footer disclaimer.
 
 ## Security notes
+- All secrets (`SOSOVALUE_API_KEY`, `AI_API_KEY`, `AI_BASE_URL`, `AI_MODEL`) are **server-side env vars only** — set them in Vercel → Settings → Environment Variables. Never prefix them with `NEXT_PUBLIC_`. `.env*` is gitignored.
+- Browser calls go through allowlisted proxies (`/api/sodex`, `/api/soso`, `/api/assistant`) with body caps, timeouts and per-IP rate limits (in-memory, best effort per serverless instance).
+- Response headers: CSP (`connect-src 'self'`, image CDNs allowlisted), HSTS, COOP, `X-Frame-Options: DENY`, nosniff, Referrer-Policy, Permissions-Policy.
+- The SoDEX API key is a hot key kept in `sessionStorage` for the tab only. Use a key with the minimum permissions SoDEX allows, and verify on SoDEX whether it can withdraw.
+- Order signing against mainnet has not been exercised from the build sandbox: test with tiny amounts (or testnet) first.
 
-- Mainnet trading path is **hard-locked out** in code
-- Server enforces max notional **10 USDC** even after UI confirm
-- Voice / JARVIS **cannot** place orders — explicit checkbox + click required
-- No secrets in client bundles; SoDEX private key is server-only
-- Soft API rate limit + security headers on responses
-- DRY-RUN vs TESTNET LIVE labelled everywhere judges look
+## Skills tab (risk checks + Gemini)
+- **Trade Check, Position Size, Portfolio** are deterministic code in `lib/risk.ts` (no AI, no cost). Every safe / caution / high-risk grade comes from there.
+- **Gemini** (`/api/skills`, key in `GEMINI_API_KEY`, server-side only) only *explains* those results and writes the Market Brief, News Impact and Plan Review. It is told never to give buy/sell calls, predictions or "no loss" promises, and can't override a grade.
+- Nothing in Skills places an order. No tool can guarantee against losses; the UI says so.
 
----
+## Builder code: earning points (buildsoso.xyz)
+The SoDEX Builder Race ranks apps by **builder fees** and **authorized users**. SoSwap tags every order with your builder code:
+1. Create/fund your builder account on SoDEX: it needs **≥ 100 vUSDC in both Spot and Perps**. Its account ID is your *builder ID*.
+2. Set `NEXT_PUBLIC_BUILDER_ID=<your account id>` and `NEXT_PUBLIC_BUILDER_FEE` (tenths of a bp; `30` = 3 bp) in Vercel and redeploy. These values are public by design.
+3. Users approve the fee once (wallet signature `ApproveBuilderFeeAction`, no gas) from *Get started* or the wallet menu, and can revoke it. Only approved users' orders carry `builder: {id, fee}` (last field of the signed batch, `id` before `fee`).
+4. Track earnings at buildsoso.xyz. The fee is shown on every swap confirmation.
 
-## Voice desk
+## Mobile
+- **Installable app (PWA):** manifest, icons and a service worker (`public/sw.js`, never caches `/api`). Android/desktop Chrome show *Install app*; iOS shows the Share → Add to Home Screen steps.
+- **Wallets on phones:** *Connect wallet* offers MetaMask / Trust / Coinbase / OKX deep links that reopen SoSwap inside the wallet's browser, plus a copy-link button.
 
-- English TTS: Kokoro-82M (in-browser); other languages: Piper / Web Speech
-- STT: Whisper tiny when loaded, else Web Speech
-- Commands: “read thesis”, “explain risk”, “ETF flows”, “news”
-- Continuous VAD conversation; Mute + barge-in; never places orders
+## Journal skill
+*Skills → Journal* reads your latest 100 SoDEX fills and shows volume, fees, maker share and realised P&L (FIFO, over that window only; unmatched sells are excluded and unrealised gains are not counted). `journalStats` in `lib/risk.ts` is pure and unit-tested; Gemini can optionally coach on the numbers.
 
----
+## Safer swaps
+- **Safety strip** under the Swap button runs the same code checks as *Skills → Trade Check* on the live books (worst leg wins). A "High risk" grade adds a warning to the confirm step; it never blocks you.
+- **Cost receipt** in the confirm step itemises price impact, SoDEX fee and the SoSwap fee in dollars, plus the total cost as a % of the order.
+- **Price alerts** (*Skills → Price Alerts*) are stored on the device and checked while SoSwap is open; browser notifications are optional.
 
-## Brand
+## Growth features
+- **Share card:** after a confirmed swap, the confirm dialog offers *Share* / *Download image*. The PNG is drawn in the browser (`components/shareCard.ts`), contains no address or balances, and is never uploaded.
+- **Watchlist:** star pairs in Markets; Home lists them with price, 24h change, a *Trade* button and an alert bell that opens *Skills → Price Alerts*.
+- The Builder Race leaderboard (buildsoso.xyz) has no public API, so earnings can't be shown in-app. Check it on the site.
 
-| Hex | Source |
-| --- | --- |
-| `#FF4F20` | SoSoValue primary |
-| `#FF7637` | SoDEX accent |
-| `#0A0A0A` / `#121212` / `#171717` | Ink |
-| `#1EA858` / `#F24237` | Gain / loss |
+## WalletConnect (phone wallets + QR)
+Set `NEXT_PUBLIC_WC_PROJECT_ID` (free at https://cloud.reown.com, public by design) in Vercel and redeploy. *Connect wallet* then shows a WalletConnect option that opens the QR / wallet-list modal; sessions are restored silently on return. The library loads only when tapped, and the CSP only allows WalletConnect hosts when the id is set.
+Known advisory: `npm audit` reports a `zod` memory-exhaustion DoS (<4.6.6) inside WalletConnect's dependency tree. It only affects the browser tab of the user who opens the WalletConnect modal. Re-check `npm audit` when WalletConnect ships an update.
 
-Assets: `public/brand/`. Screenshots: `docs/hero.png`, `docs/desk.png`.
+## Wallet picker and token logos
+- *Connect a wallet* is a two-pane picker: wallets detected on the device (real icons via EIP-6963) under **Installed**, then **Popular** (install links on desktop, wallet-browser deep links on phones), WalletConnect, and a plain-language "What is a wallet?" panel.
+- Popular-wallet badges are letter badges, not official logos. Detected wallets show their own real icon.
+- SoDEX's API has no icon field, so token logos come from CoinCap / spothq / Parqet, with SOSO and XAUT from CoinGecko's CDN (`ICON_OVERRIDES` in `app/page.tsx`). Anything without a logo shows a letter badge.
 
----
-
-## Tests
-
-- `tests/risk-engine.test.ts` — sizing, geometry, shock pause, drawdown
-- `tests/signal.test.ts` — flow scoring, LONG/SHORT/FLAT, thesis text
-
----
-
-## Roadmap
-
-1. Persist track record to durable storage with signed decision hashes  
-2. Optional Telegram one-tap **confirm** (still human-gated; no autonomous fire)  
-3. Broader SoSoValue surface (macro events) inside the same risk object  
-4. Mainnet only after explicit user unlock + higher caps — out of scope for Wave 3  
-
-See `CHANGELOG.md` for Wave 3 detail. License: MIT (`LICENSE`).
-
----
-
-## Design credits (inspiration only)
-
-| Resource | License | Inspiration |
-| --- | --- | --- |
-| shadcn/ui · Magic UI · Origin UI | MIT | Panels, motion, dense chrome |
-| Tremor | Apache-2.0 | Metric hierarchy |
-| Motion (`framer-motion`) | MIT | Springs / reduced-motion |
-| three.js · R3F · drei | MIT | Voice orb / hero field |
-| kokoro-js · Piper · transformers.js | Apache-2.0 / MIT | Free TTS / STT |
-
-FlowSentinel code is original; we did not vendor proprietary component source.
+## How signing works (any wallet from the picker)
+1. **Connect:** shares only your address.
+2. **Enable trading (one wallet signature):** an EIP-712 `AddAPIKey` message registers a fresh trade key. SoDEX verifies it on ValueChain (chain id 286623). If your wallet insists the typed-data chain equals its active network, SoSwap asks it to add/switch to ValueChain (RPC `https://mainnet.valuechain.xyz`, symbol SOSO, as published in SoDEX's support docs), as sodex.com does. Works with MetaMask-style wallets and WalletConnect.
+3. **Orders:** signed locally by the trade key, so there are no wallet pop-ups per trade. The key lives in `sessionStorage` for this tab only.
+4. **SoSwap fee (optional, one signature):** `ApproveBuilderFeeAction`, same network handling.
+Testnet's RPC isn't published, so on testnet SoSwap can't auto-add the network: add it manually or import a key from sodex.com/apikeys.
