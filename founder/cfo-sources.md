@@ -1,0 +1,4 @@
+- price 0.30: builder fee 3 bp = $0.30 per $1,000 (NEXT_PUBLIC_BUILDER_FEE=30 tenths of bp; in repo .env.example). Fact.
+- Unit = $1,000 swapped; plan_per_day 50 = $50,000/day volume. ESTIMATE; no real volume data exists. Ramp is an estimate.
+- Gemini cost, hosting: ESTIMATES. Check Gemini and Vercel price pages.
+- Startup 200: builder minimum from Builder Race rules (100 vUSDC Spot + Perps). Collateral, not a true cost.
