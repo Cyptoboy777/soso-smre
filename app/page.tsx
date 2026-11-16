@@ -2341,15 +2341,19 @@ function MarketsView() {
         <Segmented value={tab} onChange={setTab} options={[{ value: 'all', label: `All ${S.syms.length || ''}` }, { value: 'fav', label: 'Favorites' }, { value: 'up', label: 'Gainers' }, { value: 'down', label: 'Losers' }]} />
       </div>
       {S.marketErr && <div className="p-4"><ErrorBox msg={S.marketErr} onRetry={S.reloadMarkets} /></div>}
-      <div className="grid grid-cols-[1.4fr_1fr_.8fr] gap-2 px-4 py-2 text-[11px] font-medium uppercase tracking-wider text-zinc-600 sm:grid-cols-[minmax(170px,1.5fr)_1fr_.8fr_1fr_auto]">
+      <div className="hidden grid-cols-[minmax(170px,1.5fr)_1fr_.8fr_1fr_auto] gap-2 px-4 py-2 text-[11px] font-medium uppercase tracking-wider text-zinc-600 sm:grid">
         <H k="pair">Pair</H><H k="price" right>Price</H><H k="chg" right>24h</H>
-        <span className="hidden sm:block"><H k="vol" right>Volume (24h)</H></span><span className="hidden w-16 sm:block" />
+        <H k="vol" right>Volume (24h)</H><span className="w-28" />
+      </div>
+      <div className="flex items-center justify-between px-4 py-2 text-[11px] font-medium uppercase tracking-wider text-zinc-600 sm:hidden">
+        <H k="pair">Pair</H>
+        <div className="flex items-center gap-6"><H k="price" right>Price</H><H k="chg" right>24h</H></div>
       </div>
       <div>
         {S.marketLoading && !S.syms.length && Array.from({ length: 8 }).map((_, i) => <Skeleton key={i} className="mx-4 my-2 h-10" />)}
         {!S.marketLoading && !rows.length && !S.marketErr && <Empty icon={<Search className="h-5 w-5" />} title={tab === 'fav' ? 'No favorites yet' : 'No pairs match'} body={tab === 'fav' ? 'Tap the star next to a pair to pin it here.' : undefined} />}
         {rows.map(({ s, t }, i) => (
-          <div key={s.name} className="grid cursor-pointer grid-cols-[1.4fr_1fr_.8fr] items-center gap-2 border-t border-white/[0.04] px-4 py-2.5 transition hover:bg-white/[0.04] sm:grid-cols-[minmax(170px,1.5fr)_1fr_.8fr_1fr_auto]"
+          <div key={s.name} className="cursor-pointer border-t border-white/[0.04] px-4 py-2.5 transition hover:bg-white/[0.04] sm:grid sm:grid-cols-[minmax(170px,1.5fr)_1fr_.8fr_1fr_auto] sm:items-center sm:gap-2"
             onClick={() => { S.setSelected(s.name); S.setView('swap'); }}>
             <div className="flex min-w-0 items-center gap-2.5">
               <span className="tnum hidden w-4 text-[11px] text-zinc-600 sm:block">{i + 1}</span>
@@ -2357,20 +2361,31 @@ function MarketsView() {
                 <Star className={cx('h-4 w-4', S.favs.includes(s.name) && 'fill-orange-400 text-orange-400')} />
               </button>
               <TokenIcon name={s.base} size={28} />
-              <div className="min-w-0">
+              <div className="min-w-0 flex-1">
                 <div className="truncate text-sm font-semibold text-zinc-100">{s.display}</div>
-                {s.halted ? <Badge tone="rose">Halted</Badge> : (
+                {s.halted && <Badge tone="rose">Halted</Badge>}
+              </div>
+              {!s.halted && (
+                <button type="button" onClick={(e) => { e.stopPropagation(); goToTradeCheck(S, s.name); }}
+                  className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap text-[11px] font-semibold text-orange-300 hover:text-orange-200 sm:hidden">
+                  <ShieldCheck className="h-3 w-3" />Check this trade
+                </button>
+              )}
+            </div>
+            <div className="mt-1 flex items-center justify-end gap-4 sm:mt-0 sm:contents">
+              <div className="tnum text-right text-sm text-zinc-100">{t ? px(t.last) : <Skeleton className="ml-auto h-4 w-16" />}</div>
+              <div className="text-right">{t ? <Chg pct={t.changePct} /> : <Skeleton className="ml-auto h-4 w-12" />}</div>
+              <div className="tnum hidden text-right text-sm text-zinc-300 sm:block">{t ? '$' + compact(t.quoteVol) : '–'}</div>
+              <div className="hidden items-center justify-end gap-2 sm:flex">
+                {!s.halted && (
                   <button type="button" onClick={(e) => { e.stopPropagation(); goToTradeCheck(S, s.name); }}
-                    className="mt-0.5 inline-flex items-center gap-1 text-[11px] font-semibold text-orange-300 hover:text-orange-200">
+                    className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap text-[11px] font-semibold text-orange-300 hover:text-orange-200">
                     <ShieldCheck className="h-3 w-3" />Check this trade
                   </button>
                 )}
+                <Button size="sm" variant="secondary" disabled={s.halted}>Trade</Button>
               </div>
             </div>
-            <div className="tnum text-right text-sm text-zinc-100">{t ? px(t.last) : <Skeleton className="ml-auto h-4 w-16" />}</div>
-            <div className="text-right">{t ? <Chg pct={t.changePct} /> : <Skeleton className="ml-auto h-4 w-12" />}</div>
-            <div className="tnum hidden text-right text-sm text-zinc-300 sm:block">{t ? '$' + compact(t.quoteVol) : '–'}</div>
-            <div className="hidden w-16 justify-end sm:flex"><Button size="sm" variant="secondary" disabled={s.halted}>Trade</Button></div>
           </div>
         ))}
       </div>
@@ -3205,15 +3220,19 @@ function TradeCheck() {
     } catch (e: any) { setState({ loading: false, err: String(e?.message || 'Could not read the order book.') }); }
   };
   const r = state.res;
+  useEffect(() => {
+    const el = document.getElementById('trade-check-actions');
+    if (el) requestAnimationFrame(() => el.scrollIntoView({ behavior: 'smooth', block: 'nearest' }));
+  }, []);
   return (
     <Card className="p-4">
-      <p className="mb-3 text-[13px] text-zinc-400">Walks the live order book for your exact size and flags thin liquidity, wide spreads, price impact and volatility <b className="text-zinc-200">before</b> you trade. This is the most common way people lose money without noticing.</p>
+      <p className="mb-3 text-[13px] text-zinc-400"><span className="sm:hidden">Flags thin books, wide spreads and price impact <b className="text-zinc-200">before</b> you sign.</span><span className="hidden sm:inline">Walks the live order book for your exact size and flags thin liquidity, wide spreads, price impact and volatility <b className="text-zinc-200">before</b> you trade. This is the most common way people lose money without noticing.</span></p>
       <div className="grid gap-3 sm:grid-cols-3">
         <Field label="Pair"><PairSelect value={pair} onChange={(v) => { setPair(v); setState({ loading: false }); ai.reset(); }} /></Field>
         <Field label="Side"><Segmented value={side} onChange={(v) => { setSide(v); setState({ loading: false }); ai.reset(); }} options={[{ value: 'buy', label: 'Buy' }, { value: 'sell', label: 'Sell' }]} /></Field>
         <Field label="Order size"><AmountInput value={usdIn} onChange={(v) => { setUsdIn(v); setState({ loading: false }); ai.reset(); }} suffix="USDC" label="Order size in USDC" /></Field>
       </div>
-      <div className="mt-3 flex flex-wrap gap-2">
+      <div id="trade-check-actions" className="mt-3 flex flex-wrap gap-2">
         <Button variant="primary" onClick={scan} loading={state.loading}><ShieldCheck className="h-4 w-4" />Scan this trade</Button>
         <Button size="md" onClick={() => goToRoutePreview(S, pair, side, usdIn)}>Preview route<ArrowUpRight className="h-3.5 w-3.5" /></Button>
         {r && <AiButton ai={ai} onClick={() => ai.run('trade-check', { pair: sym?.display, side, sizeUsdc: usdN, grade: r.grade, spreadPct: +r.spreadPct.toFixed(3), priceImpactPct: +r.impactPct.toFixed(3), depthCoveragePct: +r.coveragePct.toFixed(0), range24hPct: +r.rangePct.toFixed(2), shareOf24hVolumePct: +r.volShare.toFixed(3), roundTripCostPct: +r.roundTripCostPct.toFixed(2), warnings: r.flags.map((f) => f.text) })} />}
@@ -3478,7 +3497,7 @@ function SkillsView() {
   return (
     <div className="mx-auto max-w-[900px]">
       <PageTitle icon={<span className="block drop-shadow-[0_0_14px_rgba(249,115,22,0.6)]"><SkillsMark size={44} /></span>} title="Skills" sub="Risk checks that run in your browser, plus AI explanations powered by Gemini." />
-      <div className="mb-4"><Notice tone="warn"><b>No tool can guarantee you won't lose money.</b> These skills help you avoid the common, avoidable losses: thin order books, wide spreads, oversized positions and concentration. Nothing here places an order. Every grade comes from plain code, and the AI only explains it.</Notice></div>
+      <div className="mb-4"><Notice tone="warn"><span className="sm:hidden"><b>No tool can guarantee you won't lose money.</b> Nothing here places an order.</span><span className="hidden sm:inline"><b>No tool can guarantee you won't lose money.</b> These skills help you avoid the common, avoidable losses: thin order books, wide spreads, oversized positions and concentration. Nothing here places an order. Every grade comes from plain code, and the AI only explains it.</span></Notice></div>
       <div className="mb-4 flex flex-wrap gap-1.5" role="tablist" aria-label="Skills">
         {tabs.map((t) => (
           <button key={t.value} role="tab" aria-selected={tab === t.value} onClick={() => setTab(t.value)}
@@ -3487,7 +3506,7 @@ function SkillsView() {
           </button>
         ))}
       </div>
-      <div className="mb-3 flex items-center gap-3">
+      <div className="mb-3 hidden items-center gap-3 sm:flex">
         <SkillTile active>{cur.icon(30)}</SkillTile>
         <div className="min-w-0"><div className="flex items-center gap-2 text-base font-bold text-zinc-50">{cur.label}<span className="rounded-md bg-white/[0.07] px-1.5 py-0.5 text-[11px] font-medium text-zinc-400">{cur.tag === 'AI' ? 'Gemini' : 'Runs in your browser'}</span></div><p className="text-[12px] text-zinc-500">{cur.blurb}</p></div>
       </div>
@@ -3554,6 +3573,10 @@ function WalletButton() {
 function Shell() {
   const S = useS();
   const view = S.view;
+  useEffect(() => {
+    document.documentElement.dataset.soswapView = view;
+    return () => { delete document.documentElement.dataset.soswapView; };
+  }, [view]);
   const Page = { home: HomeView, swap: SwapView, markets: MarketsHub, cross: CrossChainView, bots: BotsView, skills: SkillsView, guide: GuideView, portfolio: PortfolioView }[view];
   return (
     <div className="relative min-h-screen overflow-x-hidden bg-black font-sans text-zinc-200 selection:bg-orange-500/30">

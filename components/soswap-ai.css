@@ -164,3 +164,7 @@
 
 /* Keep the assistant orb from covering app dialogs (connect wallet, review swap, ...) */
 body:has(div[role="dialog"][aria-modal="true"]:not(.ss-panel)) .ss-launcher { opacity: 0; pointer-events: none; transition: opacity .15s; }
+/* Swap's Route Preview sits in the lower right; keep the orb from covering live quotes. Chat can still open from other screens, and the close button returns when the panel is open. */
+html[data-soswap-view="swap"] .ss-launcher { opacity: 0; pointer-events: none; }
+html[data-soswap-view="swap"]:has(.ss-panel) .ss-launcher { opacity: 1; pointer-events: auto; }
+
