@@ -8,6 +8,7 @@ import { NextRequest, NextResponse } from 'next/server';
  */
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
+export const maxDuration = 15;
 
 const HOSTS: Record<string, string> = {
   mainnet: 'https://mainnet-gw.sodex.dev',
@@ -59,7 +60,7 @@ async function handle(req: NextRequest, ctx: { params: Promise<{ path: string[] 
   }
 
   try {
-    const upstream = await fetch(`${host}/${path}${req.nextUrl.search}`, { method, headers, body, cache: 'no-store', signal: AbortSignal.timeout(10_000) });
+    const upstream = await fetch(`${host}/${path}${req.nextUrl.search}`, { method, headers, body, cache: 'no-store', signal: AbortSignal.timeout(8_000) });
     const text = await upstream.text();
     return new NextResponse(text, {
       status: upstream.status,

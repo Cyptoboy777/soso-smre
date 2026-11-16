@@ -56,9 +56,9 @@ export async function POST(request: NextRequest) {
     const data = await upstream.json().catch(() => null);
     if (!upstream.ok) return NextResponse.json({ error: "The AI assistant is busy right now. Please try again in a moment." }, { status: 502 });
     const reply = data?.choices?.[0]?.message?.content;
-    if (typeof reply !== "string" || !reply.trim()) return NextResponse.json({ error: "The AI provider returned an empty response." }, { status: 502 });
+    if (typeof reply !== "string" || !reply.trim()) return NextResponse.json({ error: "The AI did not answer. Please try again." }, { status: 502 });
     return NextResponse.json({ reply: reply.trim() });
   } catch {
-    return NextResponse.json({ error: "Could not reach the AI provider. Please try again." }, { status: 502 });
+    return NextResponse.json({ error: "Could not reach the AI. Please try again." }, { status: 502 });
   }
 }

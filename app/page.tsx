@@ -362,28 +362,44 @@ const serverNow = () => Date.now() + clockOffset;
 let lastNonce = 0;
 const nextNonce = () => { const n = Math.max(serverNow(), lastNonce + 1); lastNonce = n; return n; };
 
+const RETRYABLE = new Set([429, 502, 503, 504]);
 async function request<T>(net: Net, path: string, init: RequestInit & { timeoutMs?: number } = {}): Promise<T> {
-  const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), init.timeoutMs ?? 12_000);
-  init.signal?.addEventListener('abort', () => ctrl.abort());
-  let res: Response;
-  try {
-    res = await fetch(apiBase(net) + path, { ...init, signal: ctrl.signal });
-  } catch (e: any) {
-    if (init.signal?.aborted) throw e;
-    throw new ApiError(
-      e?.name === 'AbortError'
-        ? 'SoDEX did not answer in time.'
-        : 'Could not reach SoDEX (offline or blocked). If it persists, try again in a moment.',
-    );
-  } finally { clearTimeout(timer); }
-  let json: any = null;
-  try { json = await res.json(); } catch { /* non-JSON body */ }
-  if (json && typeof json.timestamp === 'number') clockOffset = json.timestamp - Date.now();
-  if (!res.ok || (json && typeof json.code === 'number' && json.code !== 0)) {
-    throw new ApiError(String(json?.error ?? json?.message ?? `HTTP ${res.status}`), Number(json?.code ?? res.status));
+  const isRead = !init.method || init.method === 'GET';
+  // Reads get one automatic retry on a timeout, a network drop or a gateway hiccup (cold start, flaky mobile data).
+  const attempts = isRead ? 2 : 1;
+  let lastErr: ApiError | null = null;
+  for (let a = 0; a < attempts; a++) {
+    if (a > 0) await new Promise((r) => setTimeout(r, 400));
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), init.timeoutMs ?? (a === 0 ? 9_000 : 14_000));
+    const onAbort = () => ctrl.abort();
+    init.signal?.addEventListener('abort', onAbort);
+    let res: Response;
+    try {
+      res = await fetch(apiBase(net) + path, { ...init, signal: ctrl.signal });
+    } catch (e: any) {
+      if (init.signal?.aborted) throw e;
+      lastErr = new ApiError(
+        e?.name === 'AbortError'
+          ? 'SoDEX is slow to answer right now. Please try again.'
+          : 'Could not reach SoDEX. Check your connection and try again.',
+      );
+      continue;
+    } finally { clearTimeout(timer); init.signal?.removeEventListener('abort', onAbort); }
+    let json: any = null;
+    try { json = await res.json(); } catch { /* non-JSON body */ }
+    if (json && typeof json.timestamp === 'number') clockOffset = json.timestamp - Date.now();
+    if (!res.ok && RETRYABLE.has(res.status)) {
+      lastErr = new ApiError(res.status === 429 ? 'Too many requests. Please wait a few seconds and try again.' : 'SoDEX is busy right now. Please try again.', -1);
+      if (res.status === 429) break;
+      continue;
+    }
+    if (!res.ok || (json && typeof json.code === 'number' && json.code !== 0)) {
+      throw new ApiError(String(json?.error ?? json?.message ?? `SoDEX could not complete this request (${res.status}).`), Number(json?.code ?? res.status));
+    }
+    return (json && 'data' in json ? json.data : json) as T;
   }
-  return (json && 'data' in json ? json.data : json) as T;
+  throw lastErr ?? new ApiError('Could not reach SoDEX. Please try again.');
 }
 
 const list = <T,>(d: any, ...keys: string[]): T[] => {
@@ -1051,14 +1067,15 @@ const iconSources = (name: string): string[] => {
   const l = t.toLowerCase();
   return [`https://assets.coincap.io/assets/icons/${l}@2x.png`, `https://raw.githubusercontent.com/spothq/cryptocurrency-icons/master/128/color/${l}.png`, `https://cdn.jsdelivr.net/gh/spothq/cryptocurrency-icons@master/128/color/${l}.png`];
 };
+const ICON_MISS = new Set<string>();
 const TokenIcon = ({ name, size = 28 }: { name: string; size?: number }) => {
   const h = hue(name);
-  const srcs = useMemo(() => iconSources(name), [name]);
+  const srcs = useMemo(() => iconSources(name).filter((u) => !ICON_MISS.has(u)), [name]);
   const [i, setI] = useState(0);
   useEffect(() => setI(0), [name]);
   if (i < srcs.length) {
     return (
-      <img src={srcs[i]} alt={name} width={size} height={size} loading="lazy" decoding="async" referrerPolicy="no-referrer" onError={() => setI((n) => n + 1)}
+      <img src={srcs[i]} alt={name} width={size} height={size} loading="lazy" decoding="async" referrerPolicy="no-referrer" onError={() => { ICON_MISS.add(srcs[i]); setI((n) => n + 1); }}
         className="shrink-0 select-none rounded-full bg-white/[0.06] object-cover" style={{ width: size, height: size }} />
     );
   }
@@ -3070,12 +3087,16 @@ function TradeCheck() {
   const sym = S.symByName[pair];
   const usdN = parseFloat(usdIn) || 0;
   const scan = async () => {
-    const t = S.tickers[pair];
-    if (!sym || !t) { setState({ loading: false, err: 'Market data is not loaded yet.' }); return; }
+    if (!sym) { setState({ loading: false, err: 'Markets are still loading. Please try again in a moment.' }); return; }
     if (usdN <= 0) { setState({ loading: false, err: 'Enter an amount in USDC.' }); return; }
     ai.reset(); setState({ loading: true });
     try {
-      const b = await fetchBook(S.net, pair, 50);
+      // book and (only if missing) the ticker load in parallel; both retry once on their own
+      const [b, t] = await Promise.all([
+        fetchBook(S.net, pair, 50),
+        S.tickers[pair] ? Promise.resolve(S.tickers[pair]) : fetchTickers(S.net).then((all) => all[pair]),
+      ]);
+      if (!t) throw new Error('No live price for this pair right now. Please try again.');
       setState({ loading: false, at: Date.now(), res: scanTrade({ side, usd: usdN, bids: b.bids, asks: b.asks, open: t.open, high: t.high, low: t.low, last: t.last, quoteVol: t.quoteVol, takerFee: sym.taker, halted: sym.halted }) });
     } catch (e: any) { setState({ loading: false, err: String(e?.message || 'Could not read the order book.') }); }
   };
@@ -3092,7 +3113,7 @@ function TradeCheck() {
         <Button variant="primary" onClick={scan} loading={state.loading}><ShieldCheck className="h-4 w-4" />Scan this trade</Button>
         {r && <AiButton ai={ai} onClick={() => ai.run('trade-check', { pair: sym?.display, side, sizeUsdc: usdN, grade: r.grade, spreadPct: +r.spreadPct.toFixed(3), priceImpactPct: +r.impactPct.toFixed(3), depthCoveragePct: +r.coveragePct.toFixed(0), range24hPct: +r.rangePct.toFixed(2), shareOf24hVolumePct: +r.volShare.toFixed(3), roundTripCostPct: +r.roundTripCostPct.toFixed(2), warnings: r.flags.map((f) => f.text) })} />}
       </div>
-      {state.err && <div className="mt-3"><Notice tone="error">{state.err}</Notice></div>}
+      {state.err && <div className="mt-3 space-y-2"><Notice tone="error">{state.err}</Notice><Button size="sm" onClick={scan} loading={state.loading}>Retry</Button></div>}
       {r && (
         <div className="ss-fade mt-4 rounded-xl border border-white/[0.07] bg-black/25 p-3.5">
           <div className="mb-3 flex items-center justify-between"><GradeBadge g={r.grade} /><span className="text-[10px] text-zinc-500">book snapshot {new Date(state.at!).toLocaleTimeString()}</span></div>
@@ -3440,14 +3461,14 @@ function Shell() {
         </nav>
       </header>
 
-      <main className="relative z-10 mx-auto max-w-[1180px] px-4 pb-10 pt-6">
+      <main className="relative z-10 mx-auto max-w-[1180px] px-4 pb-28 pt-6 sm:pb-10">
         <AnimatePresence mode="wait" initial={false}><MotionPage key={view}><Page /></MotionPage></AnimatePresence>
-        <footer className="mt-12 border-t border-white/[0.06] pt-5 text-[11px] leading-relaxed text-zinc-600">{DISCLAIMER}</footer>
+        <footer className="mt-12 border-t border-white/[0.06] pt-5 pr-0 text-[11px] max-[520px]:pr-20 leading-relaxed text-zinc-600">{DISCLAIMER}</footer>
       </main>
 
       <WalletModal /><KeyModal /><SettingsModal />
 
-      <div className="pointer-events-none fixed bottom-4 right-4 z-[70] flex w-[min(92vw,360px)] flex-col gap-2" aria-live="polite">
+      <div className="pointer-events-none fixed bottom-24 right-4 z-[70] sm:bottom-4 flex w-[min(92vw,360px)] flex-col gap-2" aria-live="polite">
         {S.toasts.map((t) => (
           <div key={t.id} className={cx('ss-toast pointer-events-auto rounded-xl border px-4 py-3 text-[13px] shadow-2xl backdrop-blur', t.kind === 'ok' ? 'border-emerald-500/40 bg-emerald-950/90 text-emerald-100' : t.kind === 'err' ? 'border-rose-500/40 bg-rose-950/90 text-rose-100' : 'border-white/15 bg-zinc-900/95 text-zinc-100')}>{t.text}</div>
         ))}

@@ -77,7 +77,7 @@
 @keyframes ss-dot { 0%,80%,100%{opacity:.35;transform:translateY(0)} 40%{opacity:1;transform:translateY(-4px)} }
 @keyframes ss-pulse { 50%{box-shadow:0 0 0 5px rgba(255,106,0,.18)} }
 @media (max-width:520px) {
-  .ss-launcher { right:16px; bottom:16px; width:66px; height:66px; }
+  .ss-launcher { right:16px; bottom:calc(16px + env(safe-area-inset-bottom)); width:66px; height:66px; }
   .ss-panel { right:8px; bottom:92px; width:calc(100vw - 16px); height:min(690px,calc(100dvh - 108px)); border-radius:18px; }
   .ss-panel__footer { flex-direction:column; gap:3px; }
 }

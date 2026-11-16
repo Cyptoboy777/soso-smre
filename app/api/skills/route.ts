@@ -44,7 +44,7 @@ const clip = (v: unknown, n: number) => String(v ?? "").replace(/[\u0000-\u0008\
 export async function POST(request: NextRequest) {
   const key = process.env.GEMINI_API_KEY;
   const model = (process.env.GEMINI_MODEL || "gemini-2.5-flash").replace(/[^a-zA-Z0-9._-]/g, "");
-  if (!key) return NextResponse.json({ error: "AI skills are not configured on this deployment yet (GEMINI_API_KEY missing)." }, { status: 503 });
+  if (!key) return NextResponse.json({ error: "AI explanations are not available right now." }, { status: 503 });
 
   const ip = (request.headers.get("x-forwarded-for") ?? "unknown").split(",")[0].trim();
   if (limited(`skills:${ip}`, 12, 60_000)) return NextResponse.json({ error: "Too many requests. Please wait a minute." }, { status: 429 });
@@ -82,13 +82,13 @@ export async function POST(request: NextRequest) {
       signal: AbortSignal.timeout(30_000),
     });
     const j: any = await r.json().catch(() => null);
-    if (!r.ok) return NextResponse.json({ error: j?.error?.message ? `Gemini: ${String(j.error.message).slice(0, 200)}` : `Gemini returned ${r.status}.` }, { status: 502 });
+    if (!r.ok) return NextResponse.json({ error: r.status === 429 ? "The AI is busy right now. Please try again in a minute." : "The AI could not answer right now. Please try again." }, { status: 502 });
     const text = j?.candidates?.[0]?.content?.parts?.map((p: any) => p?.text ?? "").join("") ?? "";
     let out: any;
     try { out = JSON.parse(text); } catch { return NextResponse.json({ error: "The AI returned an unreadable answer. Please try again." }, { status: 502 }); }
     const arr = (x: unknown) => (Array.isArray(x) ? x.slice(0, 6).map((s) => clip(s, 300)).filter(Boolean) : []);
     return NextResponse.json({ headline: clip(out.headline, 120), summary: clip(out.summary, 900), points: arr(out.points), watch: arr(out.watch), at: Date.now() });
   } catch {
-    return NextResponse.json({ error: "Could not reach Gemini. Please try again." }, { status: 502 });
+    return NextResponse.json({ error: "Could not reach the AI. Please try again." }, { status: 502 });
   }
 }
