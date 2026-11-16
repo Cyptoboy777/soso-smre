@@ -26,6 +26,7 @@ import SwapFeedback from '@/components/motion/SwapFeedback';
 import { drawShareCard, canvasToBlob, SHARE_W, SHARE_H, type ShareData } from '@/components/shareCard';
 import { WC_PROJECT_ID, connectWalletConnect, restoreWalletConnect } from '@/components/walletconnect';
 import { InstallButton } from '@/components/Pwa';
+import { WalletGlyph, OfficialMark, resolveWalletKind } from '@/components/WalletLogos';
 import { SkillsMark, TradeCheckIcon, PositionIcon, PortfolioIcon, BriefIcon, NewsIcon, PlanIcon, JournalIcon, AlertIcon, SkillTile } from '@/components/SkillIcons';
 import { scanTrade, sizePosition, portfolioHealth, journalStats, type Grade, type Flag, type ScanOut } from '@/lib/risk';
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
@@ -1249,6 +1250,13 @@ function BuilderBlock() {
   );
 }
 
+function friendlyConnectError(e: any, kind: 'wallet' | 'wc') {
+  const code = e?.code;
+  const m = String(e?.message ?? e ?? '');
+  if (code === 4001 || /reject|denied|closed|cancel/i.test(m)) return 'Connection was cancelled in the wallet.';
+  return kind === 'wc' ? 'Could not open WalletConnect. Please try again.' : 'Could not connect. Please try that wallet again.';
+}
+
 function WalletModal() {
   const S = useS();
   const [busy, setBusy] = useState<string | null>(null);
@@ -1259,17 +1267,14 @@ function WalletModal() {
   const doConnect = async (w: WalletInfo) => {
     setBusy(w.id); setErr(null);
     try { await S.connect(w); close(); S.toast('ok', `Connected ${w.name}`); }
-    catch (e: any) { setErr(e?.code === 4001 ? 'Connection request was rejected in the wallet.' : e?.message ?? 'Could not connect.'); }
+    catch (e: any) { setErr(friendlyConnectError(e, 'wallet')); }
     finally { setBusy(null); }
   };
 
   const doConnectWC = async () => {
     setBusy('walletconnect'); setErr(null);
     try { await S.connectWC(); close(); S.toast('ok', 'Connected with WalletConnect'); }
-    catch (e: any) {
-      const m = String(e?.message ?? e ?? '');
-      setErr(/reject|denied|closed|cancel/i.test(m) ? 'Connection was cancelled.' : m || 'Could not connect with WalletConnect.');
-    }
+    catch (e: any) { setErr(friendlyConnectError(e, 'wc')); }
     finally { setBusy(null); }
   };
 
@@ -1279,7 +1284,7 @@ function WalletModal() {
       <Modal open={open} onClose={close} title="Wallet">
         <div className="space-y-4">
           <div className="flex items-center gap-3 rounded-2xl border border-white/[0.07] bg-black/30 p-3">
-            {S.wallet.info.icon ? <img src={S.wallet.info.icon} alt="" className="h-9 w-9 rounded-xl" /> : <div className="grid h-9 w-9 place-items-center rounded-xl bg-white/[0.06]"><Wallet className="h-4 w-4" /></div>}
+            <WalletGlyph id={S.wallet.info.id} name={S.wallet.info.name} src={S.wallet.info.icon} size={36} />
             <div className="min-w-0 flex-1">
               <div className="text-sm font-semibold text-zinc-100">{S.wallet.info.name}</div>
               <div className="tnum flex items-center gap-1 text-xs text-zinc-500">{short(S.wallet.address)}<CopyBtn text={S.wallet.address} /></div>
@@ -1325,17 +1330,22 @@ function WalletModal() {
   );
 }
 
-type PopularWallet = { id: string; name: string; hue: string; install: string; mobile?: (url: string) => string };
+type PopularWallet = { id: string; name: string; install: string; mobile?: (url: string) => string };
 const POPULAR_WALLETS: PopularWallet[] = [
-  { id: 'metamask', name: 'MetaMask', hue: '#f6851b', install: 'https://metamask.io/download', mobile: (u) => `https://metamask.app.link/dapp/${u.replace(/^https?:\/\//, '')}` },
-  { id: 'rabby', name: 'Rabby', hue: '#7084ff', install: 'https://rabby.io' },
-  { id: 'coinbase', name: 'Coinbase Wallet', hue: '#1652f0', install: 'https://www.coinbase.com/wallet/downloads', mobile: (u) => `https://go.cb-w.com/dapp?cb_url=${encodeURIComponent(u)}` },
-  { id: 'okx', name: 'OKX Wallet', hue: '#202020', install: 'https://www.okx.com/web3', mobile: (u) => `https://www.okx.com/download?deeplink=${encodeURIComponent(`okx://wallet/dapp/url?dappUrl=${encodeURIComponent(u)}`)}` },
-  { id: 'trust', name: 'Trust Wallet', hue: '#3375bb', install: 'https://trustwallet.com/download', mobile: (u) => `https://link.trustwallet.com/open_url?coin_id=60&url=${encodeURIComponent(u)}` },
-  { id: 'rainbow', name: 'Rainbow', hue: '#6f4cff', install: 'https://rainbow.me/download' },
+  { id: 'metamask', name: 'MetaMask', install: 'https://metamask.io/download', mobile: (u) => `https://metamask.app.link/dapp/${u.replace(/^https?:\/\//, '')}` },
+  { id: 'rabby', name: 'Rabby', install: 'https://rabby.io' },
+  { id: 'coinbase', name: 'Coinbase Wallet', install: 'https://www.coinbase.com/wallet/downloads', mobile: (u) => `https://go.cb-w.com/dapp?cb_url=${encodeURIComponent(u)}` },
+  { id: 'okx', name: 'OKX Wallet', install: 'https://www.okx.com/web3', mobile: (u) => `https://www.okx.com/download?deeplink=${encodeURIComponent(`okx://wallet/dapp/url?dappUrl=${encodeURIComponent(u)}`)}` },
+  { id: 'trust', name: 'Trust Wallet', install: 'https://trustwallet.com/download', mobile: (u) => `https://link.trustwallet.com/open_url?coin_id=60&url=${encodeURIComponent(u)}` },
+  { id: 'rainbow', name: 'Rainbow', install: 'https://rainbow.me/download' },
+  { id: 'brave', name: 'Brave Wallet', install: 'https://brave.com/wallet/' },
 ];
 
-/** Two-pane wallet picker: installed wallets first, then popular ones, with a plain-language explainer beside it. */
+function isDetectedPopular(wallets: WalletInfo[], p: PopularWallet) {
+  return wallets.some((w) => resolveWalletKind(w.id, w.name) === p.id || w.name.toLowerCase().includes(p.name.toLowerCase()) || w.id.toLowerCase().includes(p.id));
+}
+
+/** Two-pane wallet picker: detected EIP-6963 wallets first (real icons), then popular ones with official logos and install links. */
 function ConnectPicker({ wallets, wcEnabled, busy, err, onPick, onWC }: {
   wallets: WalletInfo[]; wcEnabled: boolean; busy: string | null; err: string | null; onPick: (w: WalletInfo) => void; onWC: () => void;
 }) {
@@ -1347,38 +1357,41 @@ function ConnectPicker({ wallets, wcEnabled, busy, err, onPick, onWC }: {
     const ua = navigator.userAgent;
     setMobile(/android|iphone|ipad|ipod|mobile/i.test(ua) || (/Macintosh/i.test(ua) && navigator.maxTouchPoints > 1));
   }, []);
-  const installedNames = wallets.map((w) => w.name.toLowerCase());
-  const popular = POPULAR_WALLETS.filter((p) => !installedNames.some((n) => n.includes(p.id) || n.includes(p.name.toLowerCase())) && (!mobile || p.mobile));
-  const rowCls = 'flex w-full items-center gap-3 rounded-xl px-2.5 py-2 text-left transition hover:bg-white/[0.06] disabled:opacity-60';
-  const badge = (name: string, hue: string) => <span className="grid h-9 w-9 shrink-0 place-items-center rounded-[10px] text-sm font-bold text-white" style={{ background: hue }}>{name[0]}</span>;
-  const group = (t: string) => <div className="mb-1 mt-3 px-2.5 text-[12px] font-semibold text-orange-300 first:mt-0">{t}</div>;
+  const popular = POPULAR_WALLETS.filter((p) => !isDetectedPopular(wallets, p) && (!mobile || p.mobile));
+  const rowCls = 'flex w-full items-center gap-3 rounded-2xl px-2.5 py-2 text-left transition hover:bg-white/[0.06] disabled:opacity-60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-400';
+  const group = (t: string) => <div className="mb-1.5 mt-3.5 px-2.5 text-[11px] font-semibold uppercase tracking-wider text-zinc-500 first:mt-0">{t}</div>;
   return (
-    <div className="grid gap-5 sm:grid-cols-[minmax(0,300px)_1fr]">
+    <div className="grid gap-5 sm:grid-cols-[minmax(0,320px)_1fr]">
       <div className="min-w-0">
         {wallets.length > 0 && (<>{group('Installed')}
           {wallets.map((w) => (
-            <button key={w.id} onClick={() => onPick(w)} disabled={!!busy} className={rowCls}>
-              {w.icon ? <img src={w.icon} alt="" className="h-9 w-9 rounded-[10px]" /> : <span className="grid h-9 w-9 place-items-center rounded-[10px] bg-white/[0.08]"><Plug className="h-4 w-4" /></span>}
-              <span className="flex-1 text-[15px] font-semibold text-zinc-50">{w.name}</span>{busy === w.id && <Spinner />}
+            <button key={w.id} type="button" onClick={() => onPick(w)} disabled={!!busy} className={rowCls}>
+              <WalletGlyph id={w.id} name={w.name} src={w.icon} />
+              <span className="min-w-0 flex-1 truncate text-[15px] font-semibold text-zinc-50">{w.name}</span>
+              {busy === w.id ? <Spinner /> : <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-300">Detected</span>}
             </button>
           ))}</>)}
-        {group(wallets.length ? 'Popular' : mobile ? 'Open SoSwap in your wallet' : 'Popular wallets')}
+        {group(wallets.length ? 'Popular' : mobile ? 'Open SoSwap in your wallet' : 'Popular')}
         {popular.map((p) => {
-          const common = { className: rowCls } as const;
-          const inner = (<>{badge(p.name, p.hue)}<span className="flex-1 text-[15px] font-semibold text-zinc-50">{p.name}</span>{!mobile && <span className="text-[11px] text-zinc-500">Install</span>}</>);
           const href = mobile && p.mobile && url ? p.mobile(url) : p.install;
-          return <a key={p.id} href={href} target="_blank" rel="noreferrer noopener" {...common}>{inner}</a>;
+          return (
+            <a key={p.id} href={href} target="_blank" rel="noreferrer noopener" className={rowCls} aria-label={`${mobile ? 'Open' : 'Install'} ${p.name}`}>
+              <WalletGlyph id={p.id} name={p.name} />
+              <span className="min-w-0 flex-1 truncate text-[15px] font-semibold text-zinc-50">{p.name}</span>
+              <span className="text-[12px] font-medium text-zinc-500">{mobile && p.mobile ? 'Open' : 'Get'}</span>
+            </a>
+          );
         })}
         {wcEnabled && (
-          <button onClick={onWC} disabled={!!busy} className={rowCls}>
-            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-[10px] bg-[#3b99fc]"><WcMark /></span>
-            <span className="flex-1"><span className="block text-[15px] font-semibold text-zinc-50">WalletConnect</span><span className="block text-[11px] text-zinc-500">QR code or any phone wallet</span></span>
+          <button type="button" onClick={onWC} disabled={!!busy} className={rowCls}>
+            <OfficialMark kind="walletconnect" size={40} />
+            <span className="min-w-0 flex-1"><span className="block text-[15px] font-semibold text-zinc-50">WalletConnect</span><span className="block text-[11px] text-zinc-500">QR code or any phone wallet</span></span>
             {busy === 'walletconnect' && <Spinner />}
           </button>
         )}
         {mobile && url && (
-          <button onClick={() => { navigator.clipboard?.writeText(url).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1800); }).catch(() => undefined); }}
-            className="mt-2 h-10 w-full rounded-xl border border-white/10 bg-white/[0.04] text-[12px] font-semibold text-zinc-300">{copied ? 'Link copied' : 'Copy link to open in a wallet browser'}</button>
+          <button type="button" onClick={() => { navigator.clipboard?.writeText(url).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1800); }).catch(() => undefined); }}
+            className="mt-3 h-10 w-full rounded-xl border border-white/10 bg-white/[0.04] text-[12px] font-semibold text-zinc-300">{copied ? 'Link copied' : 'Copy link to open in a wallet browser'}</button>
         )}
         {err && <div className="mt-3"><Notice tone="error">{err}</Notice></div>}
         {mobile && wallets.length === 0 && <p className="mt-3 px-1 text-[11px] leading-relaxed text-zinc-500">Phone browsers cannot reach wallets directly. Tapping a wallet reopens SoSwap inside that wallet's own browser. Press Connect there.</p>}
@@ -1399,10 +1412,6 @@ function ConnectPicker({ wallets, wcEnabled, busy, err, onPick, onWC }: {
     </div>
   );
 }
-
-const WcMark = () => (
-  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" aria-hidden><path d="M4.5 10.5a10 10 0 0 1 15 0" /><path d="M8 14a5.5 5.5 0 0 1 8 0" /><circle cx="12" cy="17.8" r=".6" fill="#fff" /></svg>
-);
 
 function KeyModal() {
   const S = useS();
