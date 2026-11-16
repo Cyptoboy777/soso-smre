@@ -1842,14 +1842,22 @@ const TokenBtn = ({ a, onClick }: { a?: Asset; onClick: () => void }) => (
 );
 
 
+function takeSwapIntent() {
+  const i = { side: swapIntent.side, usd: swapIntent.usd, focus: !!swapIntent.focus };
+  swapIntent.pair = undefined; swapIntent.side = undefined; swapIntent.usd = undefined; swapIntent.focus = undefined;
+  return i;
+}
+
 function SwapPanel() {
   const S = useS();
+  const path = useRef(takeSwapIntent()).current;
   const [fromKey, setFromKey] = useState('USDC');
   const [toKey, setToKey] = useState('BTC');
   const [amount, setAmount] = useState('');
   const [picker, setPicker] = useState<'from' | 'to' | null>(null);
   const [review, setReview] = useState(false);
   const [slipOpen, setSlipOpen] = useState(false);
+  const [pulsePreview, setPulsePreview] = useState(path.focus);
 
   const fromA = S.assetByKey[fromKey], toA = S.assetByKey[toKey];
   const slip = clamp(parseFloat(S.slippage) || 0.5, 0.01, 20);
@@ -1857,9 +1865,40 @@ function SwapPanel() {
   // keep the chart pair in sync when the user changes the pair here, and adopt pairs picked elsewhere
   useEffect(() => {
     const s = S.symByName[S.selected];
-    if (s && S.assetByKey[s.base] && fromKey !== s.base && toKey !== s.base) { setToKey(s.base); setFromKey('USDC'); }
+    if (!s || !S.assetByKey[s.base]) return;
+    if (path.side === 'sell') {
+      if (fromKey !== s.base || toKey !== 'USDC') { setFromKey(s.base); setToKey('USDC'); }
+    } else if (fromKey !== s.base && toKey !== s.base) {
+      setToKey(s.base); setFromKey('USDC');
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [S.selected, S.symByName]);
+
+  useEffect(() => {
+    if (!path.usd && !path.focus) return;
+    const s = S.symByName[S.selected];
+    if (!s) return;
+    if (path.usd) {
+      const usdN = Number(path.usd);
+      if (usdN > 0) {
+        if (path.side === 'sell') {
+          const last = S.tickers[s.name]?.last;
+          if (!last) return;
+          setAmount(floorStep(usdN / last, s.step));
+        } else {
+          setAmount(fixedStr(usdN, 6));
+        }
+      }
+      path.usd = undefined;
+    }
+    if (path.focus) {
+      path.focus = false;
+      setPulsePreview(true);
+      const t = window.setTimeout(() => setPulsePreview(false), 2600);
+      requestAnimationFrame(() => document.getElementById('route-preview')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }));
+      return () => clearTimeout(t);
+    }
+  }, [S.selected, S.symByName, S.tickers]);
 
   const chooseFrom = (a: Asset) => { if (a.key === toKey) setToKey(fromKey); setFromKey(a.key); const r = a.isQuote ? S.assetByKey[a.key === toKey ? fromKey : toKey] : a; if (r?.symbol) S.setSelected(r.symbol.name); };
   const chooseTo = (a: Asset) => { if (a.key === fromKey) setFromKey(toKey); setToKey(a.key); const r = a.isQuote ? S.assetByKey[a.key === fromKey ? toKey : fromKey] : a; if (r?.symbol) S.setSelected(r.symbol.name); };
@@ -2048,7 +2087,7 @@ function SwapPanel() {
           </div>
         </div>
 
-        <div className="rounded-2xl border border-orange-500/20 bg-black/40 p-4">
+        <div id="route-preview" className={cx('rounded-2xl border border-orange-500/20 bg-black/40 p-4 transition', pulsePreview && 'ring-2 ring-orange-400/80 shadow-[0_0_40px_-10px_rgba(249,115,22,0.75)]')}>
           <div className="mb-3 flex items-center justify-between">
             <h3 className="flex items-center gap-2 text-sm font-semibold text-zinc-100"><Star className="h-4 w-4 fill-orange-400 text-orange-400" />Route Preview (SoDEX)</h3>
             <span className="rounded-md border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[11px] font-semibold text-emerald-300">{S.marketErr ? 'Offline' : 'Live'}</span>
@@ -2318,7 +2357,15 @@ function MarketsView() {
                 <Star className={cx('h-4 w-4', S.favs.includes(s.name) && 'fill-orange-400 text-orange-400')} />
               </button>
               <TokenIcon name={s.base} size={28} />
-              <div className="min-w-0"><div className="truncate text-sm font-semibold text-zinc-100">{s.display}</div>{s.halted && <Badge tone="rose">Halted</Badge>}</div>
+              <div className="min-w-0">
+                <div className="truncate text-sm font-semibold text-zinc-100">{s.display}</div>
+                {s.halted ? <Badge tone="rose">Halted</Badge> : (
+                  <button type="button" onClick={(e) => { e.stopPropagation(); goToTradeCheck(S, s.name); }}
+                    className="mt-0.5 inline-flex items-center gap-1 text-[11px] font-semibold text-orange-300 hover:text-orange-200">
+                    <ShieldCheck className="h-3 w-3" />Check this trade
+                  </button>
+                )}
+              </div>
             </div>
             <div className="tnum text-right text-sm text-zinc-100">{t ? px(t.last) : <Skeleton className="ml-auto h-4 w-16" />}</div>
             <div className="text-right">{t ? <Chg pct={t.changePct} /> : <Skeleton className="ml-auto h-4 w-12" />}</div>
@@ -2571,7 +2618,9 @@ function Watchlist() {
             <li key={sym.name} className="flex items-center gap-3 py-2">
               <TokenIcon name={sym.base} size={26} />
               <div className="min-w-0 flex-1"><div className="text-sm font-semibold text-zinc-100">{sym.display}</div>
-                <div className="tnum text-xs text-zinc-400">{t ? num(t.last, 6) : '–'} {t && <span className={t.changePct >= 0 ? 'text-emerald-400' : 'text-rose-400'}>{t.changePct >= 0 ? '+' : ''}{t.changePct.toFixed(2)}%</span>}</div></div>
+                <div className="tnum text-xs text-zinc-400">{t ? num(t.last, 6) : '–'} {t && <span className={t.changePct >= 0 ? 'text-emerald-400' : 'text-rose-400'}>{t.changePct >= 0 ? '+' : ''}{t.changePct.toFixed(2)}%</span>}</div>
+                {!sym.halted && <button type="button" onClick={() => goToTradeCheck(S, sym.name)} className="mt-0.5 inline-flex items-center gap-1 text-[11px] font-semibold text-orange-300 hover:text-orange-200"><ShieldCheck className="h-3 w-3" />Check this trade</button>}
+              </div>
               <button aria-label={`Set a price alert for ${sym.display}`} title="Price alert" onClick={() => { S.setSelected(sym.name); skillIntent.tab = 'alerts'; S.setView('skills'); }} className="grid h-9 w-9 place-items-center rounded-lg border border-white/10 text-zinc-400 transition hover:border-orange-500/50 hover:text-orange-300"><AlertIcon size={20} /></button>
               <Button size="sm" onClick={() => { S.setSelected(sym.name); S.setView('swap'); }}>Trade</Button>
             </li>
@@ -2633,7 +2682,34 @@ function HomeView() {
 
 /* ───────── markets hub (pairs · news · ETF flows · sectors) ───────── */
 
+/** Map a headline to a live SoDEX pair only when a listed base (or a well-known name for one) actually appears in the text. */
+const NEWS_BASE_ALIAS: Record<string, string> = {
+  bitcoin: 'BTC', ethereum: 'ETH', solana: 'SOL', dogecoin: 'DOGE', ripple: 'XRP',
+  cardano: 'ADA', litecoin: 'LTC', polkadot: 'DOT', avalanche: 'AVAX', chainlink: 'LINK',
+};
+function escapeRe(s: string) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
+function pairFromText(text: string, syms: Sym[]): string | null {
+  if (!text || !syms.length) return null;
+  const byBase = new Map<string, Sym>();
+  for (const sym of syms) { if (!sym.halted && !byBase.has(sym.base)) byBase.set(sym.base, sym); }
+  const hits: { name: string; index: number; len: number }[] = [];
+  const push = (sym: Sym, re: RegExp, src: string) => { const m = re.exec(src); if (m) hits.push({ name: sym.name, index: m.index, len: m[0].length }); };
+  for (const [base, sym] of byBase) {
+    if (base.length < 2) continue;
+    push(sym, new RegExp(`(?<![A-Za-z0-9_])${escapeRe(base)}(?![A-Za-z0-9_])`, 'i'), text);
+  }
+  for (const [alias, base] of Object.entries(NEWS_BASE_ALIAS)) {
+    const sym = byBase.get(base); if (sym) push(sym, new RegExp(`\\b${escapeRe(alias)}\\b`, 'i'), text);
+  }
+  if (!hits.length) return null;
+  hits.sort((a, b) => a.index - b.index || b.len - a.len);
+  return hits[0].name;
+}
+
 function NewsRow({ n, big }: { n: NewsItem; big?: boolean }) {
+  const S = useS();
+  const pair = pairFromText(`${n.title} ${n.summary}`, S.syms);
+  const display = pair ? (S.symByName[pair]?.display ?? pair) : null;
   const inner = (
     <>
       <div className="grid h-14 w-[72px] shrink-0 place-items-center rounded-lg border border-orange-500/20 bg-gradient-to-br from-orange-500/20 via-orange-500/5 to-sky-500/10 text-orange-300"><LineChart className="h-6 w-6" /></div>
@@ -2645,7 +2721,19 @@ function NewsRow({ n, big }: { n: NewsItem; big?: boolean }) {
     </>
   );
   const cls = 'flex gap-3 rounded-xl p-2 transition hover:bg-white/[0.04]';
-  return n.url ? <a href={n.url} target="_blank" rel="noreferrer" className={cls}>{inner}</a> : <div className={cls}>{inner}</div>;
+  return (
+    <div className="rounded-xl">
+      {n.url ? <a href={n.url} target="_blank" rel="noreferrer" className={cls}>{inner}</a> : <div className={cls}>{inner}</div>}
+      {pair && display && (
+        <div className="flex justify-end px-2 pb-2">
+          <button type="button" onClick={() => goToTradeCheck(S, pair)}
+            className="inline-flex items-center gap-1 text-[11px] font-semibold text-orange-300 transition hover:text-orange-200">
+            <ShieldCheck className="h-3.5 w-3.5" />Check this trade<span className="font-medium text-zinc-500">· {display}</span>
+          </button>
+        </div>
+      )}
+    </div>
+  );
 }
 
 function NewsPanel({ onAll, limit = 3 }: { onAll?: () => void; limit?: number }) {
@@ -2656,6 +2744,19 @@ function NewsPanel({ onAll, limit = 3 }: { onAll?: () => void; limit?: number })
       <FeedState feed={feed} what="news" />
       {feed.data && (feed.data.length ? <div className="p-2">{feed.data.slice(0, limit).map((n) => <NewsRow key={n.id} n={n} />)}</div> : <Empty icon={<Newspaper className="h-5 w-5" />} title="No news right now" />)}
     </Card>
+  );
+}
+
+function EtfTradeCheck({ symbol }: { symbol: 'BTC' | 'ETH' }) {
+  const S = useS();
+  const pair = S.syms.find((s) => s.base === symbol && !s.halted)?.name;
+  if (!pair) return null;
+  const display = S.symByName[pair]?.display ?? pair;
+  return (
+    <button type="button" onClick={() => goToTradeCheck(S, pair)}
+      className="inline-flex items-center gap-1 text-[11px] font-semibold text-orange-300 transition hover:text-orange-200">
+      <ShieldCheck className="h-3.5 w-3.5" />Check this trade<span className="font-medium text-zinc-500">· {display}</span>
+    </button>
   );
 }
 
@@ -2679,7 +2780,10 @@ function EtfCard({ symbol }: { symbol: 'BTC' | 'ETH' }) {
             ))}
           </div>
           <div className="mt-1 flex gap-2">{days.map((d) => <div key={d.date} className="flex-1 text-center text-[10px] text-zinc-600">{d.date.slice(5, 10)}</div>)}</div>
-          <div className="mt-3 text-[11px] text-zinc-500">Latest day: <span className={cx('tnum font-semibold', days[days.length - 1].inflow >= 0 ? 'text-emerald-400' : 'text-rose-400')}>{days[days.length - 1].inflow >= 0 ? '+' : '-'}${compact(Math.abs(days[days.length - 1].inflow))}</span> net inflow</div>
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+            <div className="text-[11px] text-zinc-500">Latest day: <span className={cx('tnum font-semibold', days[days.length - 1].inflow >= 0 ? 'text-emerald-400' : 'text-rose-400')}>{days[days.length - 1].inflow >= 0 ? '+' : '-'}${compact(Math.abs(days[days.length - 1].inflow))}</span> net inflow</div>
+            <EtfTradeCheck symbol={symbol} />
+          </div>
         </div>
       ) : <Empty icon={<BarChart3 className="h-5 w-5" />} title="No ETF data returned" />)}
     </Card>
@@ -3079,7 +3183,7 @@ function PairSelect({ value, onChange }: { value: string; onChange: (v: string) 
 
 function TradeCheck() {
   const S = useS();
-  const [pair, setPair] = useState(S.selected);
+  const [pair, setPair] = useState(() => { const p = skillIntent.pair || S.selected; skillIntent.pair = undefined; return p; });
   const [side, setSide] = useState<'buy' | 'sell'>('buy');
   const [usdIn, setUsdIn] = useState('100');
   const [state, setState] = useState<{ loading: boolean; err?: string; res?: ScanOut; at?: number }>({ loading: false });
@@ -3111,6 +3215,7 @@ function TradeCheck() {
       </div>
       <div className="mt-3 flex flex-wrap gap-2">
         <Button variant="primary" onClick={scan} loading={state.loading}><ShieldCheck className="h-4 w-4" />Scan this trade</Button>
+        <Button size="md" onClick={() => goToRoutePreview(S, pair, side, usdIn)}>Preview route<ArrowUpRight className="h-3.5 w-3.5" /></Button>
         {r && <AiButton ai={ai} onClick={() => ai.run('trade-check', { pair: sym?.display, side, sizeUsdc: usdN, grade: r.grade, spreadPct: +r.spreadPct.toFixed(3), priceImpactPct: +r.impactPct.toFixed(3), depthCoveragePct: +r.coveragePct.toFixed(0), range24hPct: +r.rangePct.toFixed(2), shareOf24hVolumePct: +r.volShare.toFixed(3), roundTripCostPct: +r.roundTripCostPct.toFixed(2), warnings: r.flags.map((f) => f.text) })} />}
       </div>
       {state.err && <div className="mt-3 space-y-2"><Notice tone="error">{state.err}</Notice><Button size="sm" onClick={scan} loading={state.loading}>Retry</Button></div>}
@@ -3124,7 +3229,7 @@ function TradeCheck() {
           </div>
           <FlagList flags={r.flags} />
           <div className="mt-3 flex flex-wrap gap-2">
-            <Button size="sm" onClick={() => { S.setSelected(pair); S.setView('swap'); }}>Open in Swap<ArrowUpRight className="h-3.5 w-3.5" /></Button>
+            <Button size="sm" onClick={() => goToRoutePreview(S, pair, side, usdIn)}>Preview route<ArrowUpRight className="h-3.5 w-3.5" /></Button>
           </div>
         </div>
       )}
@@ -3338,8 +3443,25 @@ function PlanReview() {
 }
 
 /** Lets other screens open Skills on a given tab (e.g. the Home watchlist bell). */
-const skillIntent: { tab: SkillTab | null } = { tab: null };
+const skillIntent: { tab: SkillTab | null; pair?: string } = { tab: null };
+/** One-shot handoff from Trade Check to Swap so Route Preview opens on the same pair and size. */
+const swapIntent: { pair?: string; side?: 'buy' | 'sell'; usd?: string; focus?: boolean } = {};
 type SkillTab = 'trade' | 'size' | 'portfolio' | 'journal' | 'alerts' | 'brief' | 'news' | 'plan';
+
+function goToTradeCheck(S: Store, pair: string) {
+  S.setSelected(pair);
+  skillIntent.tab = 'trade';
+  skillIntent.pair = pair;
+  S.setView('skills');
+}
+function goToRoutePreview(S: Store, pair: string, side: 'buy' | 'sell', usd?: string) {
+  S.setSelected(pair);
+  swapIntent.pair = pair;
+  swapIntent.side = side;
+  swapIntent.usd = usd && Number(usd) > 0 ? usd : undefined;
+  swapIntent.focus = true;
+  S.setView('swap');
+}
 function SkillsView() {
   const [tab, setTab] = useState<SkillTab>(() => { const t = skillIntent.tab; skillIntent.tab = null; return t ?? 'trade'; });
   const tabs: { value: SkillTab; label: string; tag: 'code' | 'AI'; icon: (s: number) => React.ReactNode; blurb: string }[] = [
