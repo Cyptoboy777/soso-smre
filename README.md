@@ -1,12 +1,21 @@
 # SoSwap
 
-Non-custodial trading interface on the **SoDEX mainnet spot order book** with **SoSoValue** news / ETF flows / sectors and an animated **AI assistant** (orb + animal bot faces). Next.js 16 + React 19 (App Router, Node ≥ 20.9) · framer-motion page/card/tab transitions · Tailwind · lucide-react. Deploys to Vercel as-is.
+Non-custodial trading interface on the **SoDEX mainnet spot order book** with **SoSoValue** news / ETF flows / sectors and an animated **AI assistant** (orb + animal bot faces). Next.js 16 + React 19 (App Router, Node ≥ 20.9) · framer-motion page/card/tab transitions · Tailwind · lucide-react. Deploys to Vercel as-is. Licensed under MIT.
 
-- **Swap** with live Route Preview (walks the real SoDEX order book), limit orders, chart, order book
-- **Markets**: every SoDEX spot pair, SoSoValue news, ETF flows, sector moves
+| | |
+| --- | --- |
+| **Live app** | https://soswap-sodex.vercel.app |
+| **Repo** | https://github.com/Cyptoboy777/soso-smre |
+| **Builder Race** | https://www.buildsoso.xyz (builder ID `2674`) |
+
+Open the live app for current screens of Swap, Markets, Skills and the AI assistant.
+
+- **Swap** with live Route Preview (walks the real SoDEX order book), limit orders, chart, order book, a safety strip, and a cost receipt before you confirm
+- **Markets**: every SoDEX spot pair, SoSoValue news, ETF flows, sector moves, and a local watchlist
+- **Skills**: Trade Check, Position Size and Portfolio are deterministic code in `lib/risk.ts`. Journal and Price Alerts are also in this tab. Gemini only explains those results; it cannot override a grade or place an order.
+- **SoSwap AI**: floating assistant with six animal faces (fox, bull, bear, owl, cat, panda). It reads a live SoDEX + SoSoValue snapshot server-side. If `AI_API_KEY` is unset, it uses `GEMINI_API_KEY`.
 - **Cross-Chain (Mirror)**: indicative estimate only (not an atomic swap)
 - **Bots (Drafts)**: DCA / Grid / Signal dry-run previews. They never send orders.
-- **SoSwap AI**: floating assistant with six animal faces (fox, bull, bear, owl, cat, panda). It reads a live SoDEX + SoSoValue snapshot server-side.
 
 ## How secrets are kept safe
 
@@ -14,6 +23,7 @@ Non-custodial trading interface on the **SoDEX mainnet spot order book** with **
 |---|---|---|
 | `SOSOVALUE_API_KEY` | Vercel env var, used only in `app/api/soso` and `app/api/assistant` | **No** |
 | `AI_API_KEY` / `AI_BASE_URL` / `AI_MODEL` | Vercel env var, used only in `app/api/assistant` | **No** |
+| `GEMINI_API_KEY` / `GEMINI_MODEL` | Vercel env var, used in `app/api/skills` and as the assistant fallback | **No** |
 | Users' wallets / seed phrases | Never requested | n/a |
 | Users' SoDEX trading key | Generated in the user's own browser tab (sessionStorage), signs orders locally | Stays in that tab; only signatures are sent |
 
@@ -30,23 +40,26 @@ cp .env.example .env.local      # fill in the values
 npm run dev                     # http://localhost:3000
 ```
 
-## Push to GitHub
+## GitHub
+
+This project already lives at https://github.com/Cyptoboy777/soso-smre (default branch: `main`). Vercel production auto-deploys from `main`.
 
 ```bash
-cd soswap
-git init -b main            # skip if already a repo
 git add -A
 git status                  # confirm no .env file is listed
-git commit -m "SoSwap"
-# create an EMPTY repo on github.com (no README), then:
-git remote add origin https://github.com/<you>/soswap.git
-git push -u origin main
+git commit -m "Your message"
+git push origin main
 ```
 
 ## Deploy on Vercel
 
 1. vercel.com → **Add New… → Project** → import the GitHub repo (Framework: Next.js, nothing to change).
-2. **Environment Variables** (Production + Preview): `SOSOVALUE_API_KEY`, `AI_API_KEY`, `AI_MODEL`, and `AI_BASE_URL` if your provider isn't OpenAI.
+2. **Environment Variables** (Production + Preview):
+   - `SOSOVALUE_API_KEY` (news, ETF flows, sectors)
+   - `GEMINI_API_KEY` (Skills explanations and, if `AI_API_KEY` is empty, the SoSwap AI chat). Optional: `GEMINI_MODEL` (default `gemini-2.5-flash`)
+   - Optional: `AI_API_KEY`, `AI_MODEL`, and `AI_BASE_URL` if you want a non-Gemini provider for the assistant
+   - `NEXT_PUBLIC_BUILDER_ID` and `NEXT_PUBLIC_BUILDER_FEE` (public by design; `10` = 0.01%)
+   - Optional: `NEXT_PUBLIC_WC_PROJECT_ID` for WalletConnect
 3. **Deploy.** Without a variable, that feature shows an honest empty state instead of fake data.
 4. After changing env vars, redeploy.
 
@@ -57,7 +70,7 @@ git push -u origin main
 - SoSwap is independent and not operated by SoDEX. Keep the footer disclaimer.
 
 ## Security notes
-- All secrets (`SOSOVALUE_API_KEY`, `AI_API_KEY`, `AI_BASE_URL`, `AI_MODEL`) are **server-side env vars only** — set them in Vercel → Settings → Environment Variables. Never prefix them with `NEXT_PUBLIC_`. `.env*` is gitignored.
+- All secrets (`SOSOVALUE_API_KEY`, `GEMINI_API_KEY`, `AI_API_KEY`, `AI_BASE_URL`, `AI_MODEL`) are **server-side env vars only** — set them in Vercel → Settings → Environment Variables. Never prefix them with `NEXT_PUBLIC_`. `.env*` is gitignored.
 - Browser calls go through allowlisted proxies (`/api/sodex`, `/api/soso`, `/api/assistant`) with body caps, timeouts and per-IP rate limits (in-memory, best effort per serverless instance).
 - Response headers: CSP (`connect-src 'self'`, image CDNs allowlisted), HSTS, COOP, `X-Frame-Options: DENY`, nosniff, Referrer-Policy, Permissions-Policy.
 - The SoDEX API key is a hot key kept in `sessionStorage` for the tab only. Use a key with the minimum permissions SoDEX allows, and verify on SoDEX whether it can withdraw.
@@ -71,7 +84,7 @@ git push -u origin main
 ## Builder code: earning points (buildsoso.xyz)
 The SoDEX Builder Race ranks apps by **builder fees** and **authorized users**. SoSwap tags every order with your builder code:
 1. Create/fund your builder account on SoDEX: it needs **≥ 100 vUSDC in both Spot and Perps**. Its account ID is your *builder ID*.
-2. Set `NEXT_PUBLIC_BUILDER_ID=<your account id>` and `NEXT_PUBLIC_BUILDER_FEE` (tenths of a bp; `30` = 3 bp) in Vercel and redeploy. These values are public by design.
+2. Set `NEXT_PUBLIC_BUILDER_ID=<your account id>` and `NEXT_PUBLIC_BUILDER_FEE` (tenths of a bp; `10` = 1 bp = 0.01%) in Vercel and redeploy. These values are public by design.
 3. Users approve the fee once (wallet signature `ApproveBuilderFeeAction`, no gas) from *Get started* or the wallet menu, and can revoke it. Only approved users' orders carry `builder: {id, fee}` (last field of the signed batch, `id` before `fee`).
 4. Track earnings at buildsoso.xyz. The fee is shown on every swap confirmation.
 
@@ -90,7 +103,7 @@ The SoDEX Builder Race ranks apps by **builder fees** and **authorized users**. 
 ## Growth features
 - **Share card:** after a confirmed swap, the confirm dialog offers *Share* / *Download image*. The PNG is drawn in the browser (`components/shareCard.ts`), contains no address or balances, and is never uploaded.
 - **Watchlist:** star pairs in Markets; Home lists them with price, 24h change, a *Trade* button and an alert bell that opens *Skills → Price Alerts*.
-- The Builder Race leaderboard (buildsoso.xyz) has no public API, so earnings can't be shown in-app. Check it on the site.
+- Builder Race standings are at [buildsoso.xyz](https://www.buildsoso.xyz). A public JSON feed is at `https://www.buildsoso.xyz/api/leaderboard`. Earnings are not shown in-app; check the leaderboard on the site.
 
 ## WalletConnect (phone wallets + QR)
 Set `NEXT_PUBLIC_WC_PROJECT_ID` (free at https://cloud.reown.com, public by design) in Vercel and redeploy. *Connect wallet* then shows a WalletConnect option that opens the QR / wallet-list modal; sessions are restored silently on return. The library loads only when tapped, and the CSP only allows WalletConnect hosts when the id is set.
