@@ -18,9 +18,11 @@ Bots in SoSwap are drafts (dry-run previews) and never send orders.
 Do not give personalised financial advice or promise profits; describe data neutrally. Reply in the user's language (including Telugu or Hinglish if they write that way).`;
 
 export async function POST(request: NextRequest) {
-  const apiKey = process.env.AI_API_KEY;
-  const baseUrl = (process.env.AI_BASE_URL || "https://api.openai.com/v1").replace(/\/$/, "");
-  const model = process.env.AI_MODEL;
+  // Uses AI_* when set; otherwise falls back to Gemini's OpenAI-compatible endpoint with GEMINI_API_KEY.
+  const gemini = !process.env.AI_API_KEY && !!process.env.GEMINI_API_KEY;
+  const apiKey = process.env.AI_API_KEY || process.env.GEMINI_API_KEY;
+  const baseUrl = (process.env.AI_BASE_URL || (gemini ? "https://generativelanguage.googleapis.com/v1beta/openai" : "https://api.openai.com/v1")).replace(/\/$/, "");
+  const model = process.env.AI_MODEL || (gemini ? (process.env.GEMINI_MODEL || "gemini-2.5-flash") : undefined);
 
   if (!apiKey || !model) {
     return NextResponse.json({ error: "The AI assistant is not configured on this deployment yet." }, { status: 503 });
@@ -52,7 +54,7 @@ export async function POST(request: NextRequest) {
       signal: AbortSignal.timeout(30_000),
     });
     const data = await upstream.json().catch(() => null);
-    if (!upstream.ok) return NextResponse.json({ error: data?.error?.message || `AI provider returned ${upstream.status}.` }, { status: 502 });
+    if (!upstream.ok) return NextResponse.json({ error: "The AI assistant is busy right now. Please try again in a moment." }, { status: 502 });
     const reply = data?.choices?.[0]?.message?.content;
     if (typeof reply !== "string" || !reply.trim()) return NextResponse.json({ error: "The AI provider returned an empty response." }, { status: 502 });
     return NextResponse.json({ reply: reply.trim() });
