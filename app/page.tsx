@@ -41,8 +41,14 @@ import MoveNewsLine from '@/components/MoveNewsLine';
 import AskSoSwap from '@/components/AskSoSwap';
 import {
   bookMetrics, computeGuard, computeSafeSize, pickMoveNews, suggestExit,
-  type ExitSuggestion, type GuardInput, type NewsHeadline,
+  type ExitSuggestion, type GuardInput, type GuardResult, type NewsHeadline,
 } from '@/lib/trade-guard';
+import {
+  feePctText, feeFraction, feeToUsd, gridClOrdId, isGridClOrdId,
+  inventoryFromFills, markToMarketPnl, oppositeIndex, previewGrid,
+  shouldStopGrid, wouldTakeLiquidity, combineGridVerdict, gridStyleVerdict,
+  type GridStopReason,
+} from '@/lib/grid-bot';
 
 import {
   buildUserSignedAddApiKey, friendlySodexError, isKeyGone, isUnrecognizedChain, isUserRejected,
@@ -2812,7 +2818,11 @@ function LimitPanel({ sym, book, pickedPrice }: { sym?: Sym; book?: { bids: Leve
   const p = parseFloat(price) || 0, qn = parseFloat(qty) || 0;
   const total = p * qn;
   const availQuote = S.available(QUOTE), availBase = sym ? S.available(sym.baseCoin) : 0;
-  const best = side === 'buy' ? book?.bids[0]?.price : book?.asks[0]?.price;
+  const bestBid = book?.bids[0]?.price, bestAsk = book?.asks[0]?.price;
+  const best = side === 'buy' ? bestBid : bestAsk;
+  const makerTxt = feePctText(sym?.maker);
+  const takerTxt = feePctText(sym?.taker);
+  const crosses = !!post && p > 0 && wouldTakeLiquidity(side, p, bestBid, bestAsk);
 
   let cta = `Place limit ${side}`, dis = false, act: () => void = () => setReview(true);
   if (!S.wallet) { cta = 'Connect wallet'; act = () => S.setUi('connect', true); }
@@ -2845,15 +2855,30 @@ function LimitPanel({ sym, book, pickedPrice }: { sym?: Sym; book?: { bids: Leve
       <Field label={`Size (${sym?.base ?? ''})`} hint={<button className="hover:text-orange-400" onClick={() => sym && setQty(side === 'sell' ? floorStep(availBase, sym.step) : p ? floorStep(availQuote / p, sym.step) : '')}>Max</button>}>
         <AmountInput value={qty} onChange={setQty} suffix={sym?.base} label="Limit size" />
       </Field>
-      <label className="flex cursor-pointer items-center gap-2 text-xs text-zinc-400"><input type="checkbox" checked={post} onChange={(e) => setPost(e.target.checked)} className="accent-orange-500" />Post-only (maker only, rejected if it would take liquidity)</label>
-      <div className="space-y-1.5 rounded-xl border border-white/[0.07] bg-black/20 p-3">
-        <Row k="Total" v={total ? usd(total) : '–'} />
-        <Row k="Maker fee" v={sym ? `${(sym.maker * 100).toFixed(3)}%` : '–'} />
-        <Row k="Tick / step" v={sym ? `${sym.tick} / ${sym.step}` : '–'} />
+      <div className="space-y-2 rounded-xl border border-white/[0.07] bg-black/20 p-3">
+        <label className="flex cursor-pointer items-start gap-2.5">
+          <input type="checkbox" checked={post} onChange={(e) => setPost(e.target.checked)} className="mt-0.5 accent-orange-500" />
+          <span>
+            <span className="block text-xs font-medium text-zinc-200">Low-fee mode</span>
+            <span className="block text-[11px] text-zinc-500">Post-only (maker). The exchange rejects the order if it would take liquidity.</span>
+          </span>
+        </label>
+        <div className="ss-grid__fee" data-win={post && makerTxt && takerTxt && (sym?.maker ?? 1) < (sym?.taker ?? 0) ? 'true' : undefined}>
+          {makerTxt ? <span>Maker <b>{makerTxt}</b></span> : null}
+          {takerTxt ? <span>Taker <b>{takerTxt}</b></span> : null}
+          {post && makerTxt && takerTxt && (sym?.maker ?? 1) < (sym?.taker ?? 0) ? <span className="ss-grid__save">You pay the maker fee if this rests on the book</span> : null}
+        </div>
+        {crosses && (
+          <p className="text-[11px] text-amber-300">This price would take liquidity, so a post-only order may be rejected.{(side === 'buy' ? bestBid : bestAsk) ? <> <button type="button" className="underline hover:text-orange-300" onClick={() => setPrice(roundTick((side === 'buy' ? bestBid : bestAsk) as number, sym?.tick ?? '0.01'))}>Use the best {side === 'buy' ? 'bid' : 'ask'}</button> to rest on the book.</> : null}</p>
+        )}
+        <div className="space-y-1.5 border-t border-white/[0.06] pt-2">
+          <Row k="Total" v={total ? usd(total) : '–'} />
+          <Row k="Tick / step" v={sym ? `${sym.tick} / ${sym.step}` : '–'} />
+        </div>
       </div>
       <Button variant="primary" size="lg" className="w-full" disabled={dis} onClick={act}>{cta}</Button>
       <ReviewModal open={review} onClose={() => setReview(false)} title={`Review limit ${side}`} confirmLabel="Place order" run={run}
-        rows={[{ k: 'Pair', v: sym?.display ?? '' }, { k: 'Side', v: side.toUpperCase(), tone: side === 'buy' ? 'good' : 'bad' }, { k: 'Price', v: `${price} USDC` }, { k: 'Size', v: `${qty} ${sym?.base ?? ''}` }, { k: 'Total', v: usd(total) }, { k: 'Type', v: post ? 'Post-only (GTX)' : 'Good till cancelled (GTC)' }, ...(S.builder.active ? [{ k: 'SoSwapDEX fee (max)', v: `${bpText(Math.min(S.builder.fee, S.builder.approvedFee ?? 0))} of each fill` }] : []), { k: 'Network', v: NETS[S.net].label, tone: S.net === 'mainnet' ? 'warn' : undefined }]} />
+        rows={[{ k: 'Pair', v: sym?.display ?? '' }, { k: 'Side', v: side.toUpperCase(), tone: side === 'buy' ? 'good' : 'bad' }, { k: 'Price', v: `${price} USDC` }, { k: 'Size', v: `${qty} ${sym?.base ?? ''}` }, { k: 'Total', v: usd(total) }, { k: 'Type', v: post ? 'Low-fee post-only (GTX)' : 'Good till cancelled (GTC)' }, ...(S.builder.active ? [{ k: 'SoSwapDEX fee (max)', v: `${bpText(Math.min(S.builder.fee, S.builder.approvedFee ?? 0))} of each fill` }] : []), { k: 'Network', v: NETS[S.net].label, tone: S.net === 'mainnet' ? 'warn' : undefined }]} />
     </div>
   );
 }
@@ -4333,17 +4358,23 @@ type SetupDraft = {
 };
 type BotCfg = {
   dca: { on: boolean; pair: string; amount: string; every: 'hourly' | 'daily' | 'weekly' };
-  grid: { on: boolean; pair: string; lower: string; upper: string; levels: string; budget: string };
+  grid: { on: boolean; pair: string; lower: string; upper: string; levels: string; budget: string; dailyLossCap: string };
   signal: { on: boolean; pair: string; asset: 'BTC' | 'ETH'; threshold: string };
   setup: SetupDraft;
 };
 const BOT_DEFAULT: BotCfg = {
   dca: { on: false, pair: '', amount: '25', every: 'daily' },
-  grid: { on: false, pair: '', lower: '', upper: '', levels: '8', budget: '200' },
+  grid: { on: false, pair: '', lower: '', upper: '', levels: '8', budget: '200', dailyLossCap: '' },
   signal: { on: false, pair: '', asset: 'BTC', threshold: '100000000' },
   setup: { on: false, pair: '', entry: '', stop: '', tp1: '', tp2: '', qty: '', notional: '', riskPct: '1', equity: '', grade: '', rr: '', trend: '', at: 0 },
 };
 const BOT_LS = 'soswap.bots.v1';
+const GRID_SS = 'soswap.grid.run.v1';
+const GRID_POLL_MS = 4000;
+const localDayKey = (t = Date.now()) => {
+  const d = new Date(t);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
 const EVERY_MS = { hourly: 3_600_000, daily: 86_400_000, weekly: 604_800_000 };
 
 function BotPreview({ kind, cfg, sym, price }: { kind: BotKind; cfg: BotCfg; sym?: Sym; price: number }) {
@@ -4427,7 +4458,8 @@ function BotEditor({ kind, cfg, setCfg, onClose }: { kind: BotKind; cfg: BotCfg;
         </>}
         {kind === 'grid' && <>
           <div className="grid grid-cols-2 gap-3"><Field label="Lower price"><AmountInput value={c.lower} onChange={(v) => upd({ lower: v })} placeholder="auto −10%" label="Lower price" /></Field><Field label="Upper price"><AmountInput value={c.upper} onChange={(v) => upd({ upper: v })} placeholder="auto +10%" label="Upper price" /></Field></div>
-          <div className="grid grid-cols-2 gap-3"><Field label="Grid levels"><AmountInput value={c.levels} onChange={(v) => upd({ levels: v })} label="Levels" /></Field><Field label="Budget (USDC)"><AmountInput value={c.budget} onChange={(v) => upd({ budget: v })} label="Budget" /></Field></div>
+          <div className="grid grid-cols-2 gap-3"><Field label="Grid levels"><AmountInput value={c.levels} onChange={(v) => upd({ levels: v })} label="Levels" /></Field><Field label="Total amount (USDC)"><AmountInput value={c.budget} onChange={(v) => upd({ budget: v })} label="Total amount" /></Field></div>
+          <Field label="Daily loss cap (USDC)" hint="The grid stops and cancels its orders if realized plus mark-to-market loss reaches this cap today."><AmountInput value={c.dailyLossCap} onChange={(v) => upd({ dailyLossCap: v })} label="Daily loss cap" /></Field>
         </>}
         {kind === 'signal' && <>
           <Field label="ETF asset"><Segmented value={c.asset} onChange={(v) => upd({ asset: v })} options={[{ value: 'BTC', label: 'BTC ETFs' }, { value: 'ETH', label: 'ETH ETFs' }]} /></Field>
@@ -4882,6 +4914,424 @@ function SetupBuilder({ cfg, setCfg }: { cfg: BotCfg; setCfg: (c: BotCfg) => voi
   );
 }
 
+type GridOpen = { index: number; side: 'buy' | 'sell'; clOrdID: string; orderID?: number; priceStr: string; qtyStr: string };
+type GridRunFill = { tradeID: number; orderID?: number; side: 'buy' | 'sell'; price: number; qty: number; feeUsd: number; time: number; levelIndex: number };
+type GridRunState = {
+  id: string; pair: string; symbolID: number; display: string; base: string; baseCoin: string;
+  startedAt: number; lower: number; upper: number; dailyLossCap: number;
+  levels: { index: number; price: number; priceStr: string; qtyStr: string; qty: number }[];
+  open: GridOpen[]; fills: GridRunFill[];
+  status: 'starting' | 'running' | 'stopping' | 'stopped';
+  stopReason?: GridStopReason | 'error'; stopNote?: string;
+};
+
+const GRID_STOP_TEXT: Record<GridStopReason | 'error', string> = {
+  'out-of-range': 'Price left your range, so the grid stopped and its open orders were cancelled.',
+  'daily-loss': 'The daily loss cap was reached, so the grid stopped and its open orders were cancelled.',
+  'user-stop': 'Grid stopped. Open grid orders were cancelled.',
+  error: 'The grid stopped because an order could not be updated. Open grid orders were cancelled.',
+};
+
+function GridBotPanel({ cfg, setCfg }: { cfg: BotCfg; setCfg: (c: BotCfg) => void }) {
+  const S = useS();
+  const g = cfg.grid;
+  const upd = (patch: Partial<BotCfg['grid']>) => setCfg({ ...cfg, grid: { ...g, ...patch } });
+  const sym = S.symByName[g.pair || S.selected] ?? S.syms[0];
+  const ticker = sym ? S.tickers[sym.name] : undefined;
+  const last = ticker?.last ?? 0;
+  const { books } = useBooks(sym ? [sym.name] : [], 2000, 20);
+  const book = sym ? books[sym.name] : undefined;
+  const bestBid = book?.bids[0]?.price || ticker?.bid || 0;
+  const bestAsk = book?.asks[0]?.price || ticker?.ask || 0;
+  const [run, setRun] = useState<GridRunState | null>(null);
+  const [confirm, setConfirm] = useState(false);
+  const [ackRisky, setAckRisky] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const runRef = useRef(run);
+  runRef.current = run;
+  const placing = useRef(false);
+  const handled = useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    const saved = ssGet<GridRunState | null>(GRID_SS, null);
+    if (saved && (saved.status === 'running' || saved.status === 'starting' || saved.status === 'stopping')) {
+      setRun({ ...saved, status: 'running' });
+      for (const f of saved.fills) {
+        const k = String(f.orderID || f.tradeID);
+        if (k) handled.current.add(k);
+      }
+    } else if (saved) setRun(saved);
+  }, []);
+  useEffect(() => { if (run) ssSet(GRID_SS, run); else ssSet(GRID_SS, null); }, [run]);
+
+  const lower = parseFloat(g.lower);
+  const upper = parseFloat(g.upper);
+  const lo = Number.isFinite(lower) && lower > 0 ? lower : last > 0 ? last * 0.9 : 0;
+  const hi = Number.isFinite(upper) && upper > 0 ? upper : last > 0 ? last * 1.1 : 0;
+  const builderFrac = S.builder.active ? Math.min(S.builder.fee, S.builder.approvedFee ?? 0) / 100000 : 0;
+  const liveCfg = sym ? {
+    lower: lo, upper: hi, levels: Math.round(parseFloat(g.levels) || 0), budget: parseFloat(g.budget) || 0,
+    dailyLossCap: parseFloat(g.dailyLossCap) || 0, makerFee: sym.maker, builderFee: builderFrac,
+    tick: sym.tick, step: sym.step, minNotional: parseFloat(sym.minNotional) || 0, minQty: parseFloat(sym.minQty) || 0,
+  } : null;
+  const built = liveCfg && last > 0 ? previewGrid(liveCfg, last) : null;
+  const preview = built && built.ok ? built.preview : null;
+  const previewErr = built && !built.ok ? built.error : (!sym ? 'Select a pair.' : !last ? 'Waiting for a live price…' : null);
+
+  const availQuote = S.available(QUOTE);
+  const availBase = sym ? S.available(sym.baseCoin) : 0;
+  const portfolioUsd = S.balances.reduce((s, b) => s + (b.total * (S.priceOf(b.coin) || 0)), 0);
+  const guard: GuardResult | null = useMemo(() => {
+    if (!preview || !sym || !liveCfg) return null;
+    const notional = preview.buyQuote || liveCfg.budget;
+    const m = bookMetrics(book, 'buy', notional > 0 ? notional : liveCfg.budget);
+    const frac = feeFraction(sym.maker, builderFrac);
+    return computeGuard({
+      amount: liveCfg.budget, available: availQuote, isFromQuote: true, quoteDecimals: 6,
+      notionalUsd: notional || liveCfg.budget, feeUsd: frac != null ? frac * (notional || liveCfg.budget) : 0,
+      impactPct: 0, spreadPct: m?.spreadPct ?? 0, coveragePct: 100,
+      rangePct: ticker && ticker.low > 0 ? ((ticker.high - ticker.low) / ticker.low) * 100 : 0,
+      volShare: ticker && ticker.quoteVol > 0 && notional > 0 ? (notional / ticker.quoteVol) * 100 : 0,
+      halted: sym.halted, bookReady: !!m, portfolioUsd: portfolioUsd > 0 ? portfolioUsd : null,
+      newsLoaded: false, etfLoaded: false, now: Date.now(), base: sym.base, side: 'buy',
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [preview, sym?.name, last, book, availQuote, portfolioUsd, builderFrac, ticker, liveCfg?.budget]);
+  const gridV = preview && liveCfg ? combineGridVerdict(gridStyleVerdict(preview, last, liveCfg.lower, liveCfg.upper, !!sym?.halted), guard) : null;
+  const makerTxt = feePctText(sym?.maker);
+  const takerTxt = feePctText(sym?.taker);
+  const running = !!run && (run.status === 'running' || run.status === 'starting' || run.status === 'stopping');
+
+  const inv = run ? inventoryFromFills(run.fills) : { base: 0, costUsd: 0, realizedPnl: 0 };
+  const mtm = run ? markToMarketPnl(inv.base, inv.costUsd, last) : 0;
+  const today = localDayKey();
+  const beforeToday = run ? inventoryFromFills(run.fills.filter((f) => localDayKey(f.time) !== today)).realizedPnl : 0;
+  const dayPnl = run ? (inv.realizedPnl - beforeToday) + mtm : 0;
+
+  const blocking = !preview ? (previewErr || 'Waiting for a preview…')
+    : sym?.halted ? 'This market is not in trading status right now.'
+    : preview.issues.some((i) => /stop immediately|rounds down to zero|minimum order|at least|eat the whole step|two distinct prices/.test(i))
+      ? preview.issues.find((i) => /stop immediately|rounds down to zero|minimum order|at least|eat the whole step|two distinct prices/.test(i))!
+    : null;
+
+  const cancelGridOrders = async (state: GridRunState) => {
+    const items = [
+      ...state.open.filter((o) => o.orderID).map((o) => ({ symbolID: state.symbolID, orderID: o.orderID as number })),
+      ...S.openOrders.filter((o) => o.symbol === state.pair && isGridClOrdId(o.clOrdID) && o.orderID)
+        .filter((o) => !state.open.some((x) => x.orderID === o.orderID))
+        .map((o) => ({ symbolID: state.symbolID, orderID: o.orderID })),
+    ];
+    if (!items.length) return;
+    try { await S.cancel(items); } catch (e: any) { S.toast('err', userFacingError(e, 'Could not cancel grid orders.')); }
+  };
+
+  const stopGrid = async (reason: GridStopReason | 'error', msg?: string) => {
+    const cur = runRef.current;
+    if (!cur || cur.status === 'stopped') return;
+    setRun({ ...cur, status: 'stopping' });
+    await cancelGridOrders(cur);
+    await S.refreshAccount().catch(() => null);
+    const note = msg || GRID_STOP_TEXT[reason];
+    setRun((r) => r ? { ...r, status: 'stopped', stopReason: reason, stopNote: note, open: [] } : r);
+    S.toast('ok', note);
+  };
+
+  const placeOne = async (orders: OrderIn[]) => {
+    for (let a = 0; a < 4; a++) {
+      try { return await S.place(orders); }
+      catch (e: any) {
+        const m = String(e?.message || '');
+        if (/already being submitted/i.test(m) && a < 3) { await sleep(700); continue; }
+        throw e;
+      }
+    }
+    throw new Error('An order is already being submitted. Please wait.');
+  };
+
+  const startGrid = async () => {
+    if (!sym || !preview || !liveCfg || blocking) return;
+    if (!S.wallet) { S.setUi('connect', true); return; }
+    if (S.accountID == null) { S.toast('err', 'Fund your SoDEX account first.'); return; }
+    if (!S.keyValid) { S.setUi('key', true); return; }
+    const buys = preview.levels.filter((l) => l.startSide === 'buy' && !wouldTakeLiquidity('buy', l.price, bestBid, bestAsk)).sort((a, b) => b.price - a.price);
+    const sells = preview.levels.filter((l) => l.startSide === 'sell' && !wouldTakeLiquidity('sell', l.price, bestBid, bestAsk)).sort((a, b) => a.price - b.price);
+    let quoteLeft = availQuote, baseLeft = availBase;
+    const planned: { level: typeof preview.levels[0]; side: 'buy' | 'sell' }[] = [];
+    for (const l of sells) { if (l.qty > 0 && baseLeft + 1e-12 >= l.qty) { planned.push({ level: l, side: 'sell' }); baseLeft -= l.qty; } }
+    for (const l of buys) { if (l.quote > 0 && quoteLeft + 1e-9 >= l.quote) { planned.push({ level: l, side: 'buy' }); quoteLeft -= l.quote; } }
+    if (!planned.length) { S.toast('err', 'Not enough available balance to place any grid orders.'); return; }
+    setBusy(true);
+    const id = gridClOrdId();
+    const state: GridRunState = {
+      id, pair: sym.name, symbolID: sym.id, display: sym.display, base: sym.base, baseCoin: sym.baseCoin,
+      startedAt: Date.now(), lower: liveCfg.lower, upper: liveCfg.upper, dailyLossCap: liveCfg.dailyLossCap,
+      levels: preview.levels.map((l) => ({ index: l.index, price: l.price, priceStr: l.priceStr, qtyStr: l.qtyStr, qty: l.qty })),
+      open: [], fills: [], status: 'starting',
+    };
+    const orders: OrderIn[] = planned.map((p) => ({
+      symbolID: sym.id, clOrdID: gridClOrdId(), side: p.side === 'buy' ? 1 : 2, type: OTYPE.LIMIT, tif: TIF.GTX,
+      price: p.level.priceStr, quantity: p.level.qtyStr,
+    }));
+    try {
+      const results = await placeOne(orders);
+      const open: GridOpen[] = [];
+      const skipped: string[] = [];
+      results.forEach((res, i) => {
+        const p0 = planned[i];
+        const err = orderError(res);
+        if (err || res.code !== 0) {
+          skipped.push(`Level ${p0.level.priceStr} was not accepted. A post-only order is rejected if it would take liquidity.`);
+          return;
+        }
+        open.push({ index: p0.level.index, side: p0.side, clOrdID: orders[i].clOrdID, orderID: res.orderID, priceStr: p0.level.priceStr, qtyStr: p0.level.qtyStr });
+      });
+      if (!open.length) {
+        S.toast('err', skipped[0] || 'No grid orders were accepted.');
+        setBusy(false);
+        return;
+      }
+      const next = { ...state, open, status: 'running' as const };
+      setRun(next);
+      setConfirm(false);
+      setAckRisky(false);
+      S.refreshAccount().catch(() => null);
+      const extra = skipped.length ? ` ${skipped.length} level${skipped.length === 1 ? '' : 's'} skipped.` : '';
+      const invNote = preview.sellLevels > planned.filter((p) => p.side === 'sell').length
+        ? ' Some sell levels wait until buys fill and you have the token.'
+        : '';
+      S.toast('ok', `Grid started with ${open.length} post-only orders.${extra}${invNote}`);
+    } catch (e: any) {
+      S.toast('err', userFacingError(e, 'Could not start the grid.'));
+    } finally { setBusy(false); }
+  };
+
+  useEffect(() => {
+    if (!run || (run.status !== 'running' && run.status !== 'starting')) return;
+    let stop = false;
+    const tick = async () => {
+      if (stop || placing.current) return;
+      const cur = runRef.current;
+      if (!cur || cur.status === 'stopped' || cur.status === 'stopping') return;
+      const lastPx = S.tickers[cur.pair]?.last ?? last;
+      try { await S.refreshAccount(); } catch { /* next tick */ }
+      if (stop) return;
+      const invNow = inventoryFromFills(cur.fills);
+      const mtmNow = markToMarketPnl(invNow.base, invNow.costUsd, lastPx);
+      const day = localDayKey();
+      const dayReal = invNow.realizedPnl - inventoryFromFills(cur.fills.filter((f) => localDayKey(f.time) !== day)).realizedPnl;
+      const halt = shouldStopGrid({ lastPrice: lastPx, lower: cur.lower, upper: cur.upper, realizedPnl: dayReal, markToMarket: mtmNow, dailyLossCap: cur.dailyLossCap });
+      if (halt.stop && halt.reason) { await stopGrid(halt.reason); return; }
+      if (!S.wallet || S.accountID == null) return;
+      try {
+        const hist = await fetchOrderHistory(S.net, S.wallet.address, cur.pair, 100, S.accountID ?? undefined);
+        const fills = await fetchFills(S.net, S.wallet.address, { symbol: cur.pair, limit: 100, aid: S.accountID ?? undefined });
+        if (stop) return;
+        const opens = S.openOrders;
+        const nextOpen: GridOpen[] = [];
+        const newFills: GridRunFill[] = [];
+        const toPlace: { index: number; side: 'buy' | 'sell' }[] = [];
+        for (const o of cur.open) {
+          const still = opens.find((x) => (o.orderID && x.orderID === o.orderID) || (o.clOrdID && x.clOrdID === o.clOrdID));
+          if (still) { nextOpen.push(o); continue; }
+          const h = hist.find((x) => (o.orderID && x.orderID === o.orderID) || (o.clOrdID && x.clOrdID === o.clOrdID));
+          const executed = h?.executed ?? 0;
+          const key = String(o.orderID || o.clOrdID);
+          if (executed > 0 && key && !handled.current.has(key)) {
+            handled.current.add(key);
+            const related = fills.filter((f) => (o.orderID && f.orderID === o.orderID) || (o.clOrdID && f.clOrdID === o.clOrdID));
+            const feeUsd = related.reduce((s, f) => {
+              const u = feeToUsd(f.fee, f.feeCoin, f.price, [QUOTE, 'USDC', 'vUSDC'], [cur.baseCoin, cur.base]);
+              return s + (u ?? 0);
+            }, 0);
+            const qty = related.length ? related.reduce((s, f) => s + f.qty, 0) : executed;
+            const px = related.length ? related.reduce((s, f) => s + f.price * f.qty, 0) / qty : (h?.price ?? Number(o.priceStr));
+            newFills.push({ tradeID: related[0]?.tradeID ?? (o.orderID || 0), orderID: o.orderID, side: o.side, price: px, qty, feeUsd, time: related[0]?.time ?? Date.now(), levelIndex: o.index });
+            const opp = oppositeIndex(o.index, o.side, cur.levels.length);
+            const oppSide: 'buy' | 'sell' = o.side === 'buy' ? 'sell' : 'buy';
+            if (opp != null && !cur.open.some((x) => x.index === opp) && !nextOpen.some((x) => x.index === opp)) toPlace.push({ index: opp, side: oppSide });
+          }
+        }
+        let openAcc = nextOpen;
+        if (newFills.length) {
+          const merged = { ...cur, open: openAcc, fills: [...cur.fills, ...newFills] };
+          setRun(merged);
+          runRef.current = merged;
+        }
+        if (toPlace.length && !placing.current) {
+          placing.current = true;
+          try {
+            const live = runRef.current ?? cur;
+            const tkr = S.tickers[cur.pair];
+            const bid = bestBid || tkr?.bid || 0;
+            const ask = bestAsk || tkr?.ask || 0;
+            const batch: OrderIn[] = [];
+            const meta: { index: number; side: 'buy' | 'sell'; priceStr: string; qtyStr: string }[] = [];
+            let qLeft = S.available(QUOTE);
+            let bLeft = S.available(cur.baseCoin);
+            for (const p0 of toPlace) {
+              const lv = live.levels[p0.index];
+              if (!lv) continue;
+              if (wouldTakeLiquidity(p0.side, lv.price, bid, ask)) continue;
+              if (p0.side === 'buy' && lv.qty * lv.price > qLeft + 1e-9) continue;
+              if (p0.side === 'sell' && lv.qty > bLeft + 1e-12) continue;
+              const cl = gridClOrdId();
+              batch.push({ symbolID: cur.symbolID, clOrdID: cl, side: p0.side === 'buy' ? 1 : 2, type: OTYPE.LIMIT, tif: TIF.GTX, price: lv.priceStr, quantity: lv.qtyStr });
+              meta.push({ index: p0.index, side: p0.side, priceStr: lv.priceStr, qtyStr: lv.qtyStr });
+              if (p0.side === 'buy') qLeft -= lv.qty * lv.price; else bLeft -= lv.qty;
+            }
+            if (batch.length) {
+              const results = await placeOne(batch);
+              const added: GridOpen[] = [];
+              results.forEach((res, i) => {
+                if (res.code === 0) added.push({ ...meta[i], clOrdID: batch[i].clOrdID, orderID: res.orderID });
+              });
+              if (added.length) {
+                setRun((r) => r ? { ...r, open: [...r.open.filter((o) => !newFills.some((f) => f.orderID && f.orderID === o.orderID) && !handled.current.has(String(o.orderID || o.clOrdID))), ...added] } : r);
+              }
+            }
+            if (newFills.length && !batch.length) {
+              setRun((r) => r ? { ...r, open: r.open.filter((o) => !handled.current.has(String(o.orderID || o.clOrdID))) } : r);
+            }
+          } catch (e: any) {
+            S.toast('err', userFacingError(e, 'A replacement grid order could not be placed.'));
+          } finally { placing.current = false; }
+        } else if (newFills.length) {
+          setRun((r) => r ? { ...r, open: r.open.filter((o) => !handled.current.has(String(o.orderID || o.clOrdID))) } : r);
+        }
+      } catch { /* retry next tick */ }
+    };
+    tick();
+    const id = setInterval(tick, GRID_POLL_MS);
+    const onVis = () => { if (document.visibilityState === 'visible') tick(); };
+    document.addEventListener('visibilitychange', onVis);
+    return () => { stop = true; clearInterval(id); document.removeEventListener('visibilitychange', onVis); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [run?.id, run?.status, S.net, S.wallet?.address, S.accountID]);
+
+  let cta = 'Review and start', ctaDis = false, ctaAct = () => { setAckRisky(false); setConfirm(true); };
+  if (!S.wallet) { cta = 'Connect wallet'; ctaAct = () => S.setUi('connect', true); }
+  else if (S.accountID == null) { cta = 'Deposit on SoDEX first'; ctaDis = true; ctaAct = () => {}; }
+  else if (!S.keyValid) { cta = 'Enable trading'; ctaAct = () => S.setUi('key', true); }
+  else if (running) { cta = 'Grid is running'; ctaDis = true; }
+  else if (blocking) { cta = 'Fix the preview to start'; ctaDis = true; }
+  else if (sym?.halted) { cta = 'Market halted'; ctaDis = true; }
+
+  const verdictLabel = gridV ? (gridV.verdict === 'good' ? 'Good to go' : gridV.verdict === 'wait' ? 'Wait' : 'Risky') : null;
+
+  return (
+    <AnimatedCard className="ss-grid rounded-2xl border border-orange-500/20 bg-white/[0.03] p-3 sm:p-4">
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="grid h-14 w-14 shrink-0 place-items-center"><AnimalOrb kind="owl" size={54} compact still /></div>
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-base font-bold text-zinc-50">Low-fee grid</span>
+            <span className="ss-grid__badge" data-on={running ? 'true' : undefined}>{running ? 'Running in this tab' : 'Spot · post-only'}</span>
+          </div>
+          <p className="text-[13px] text-zinc-400">Maker limit orders in a price range. The grid runs only while this tab is open.</p>
+        </div>
+      </div>
+      <Notice tone="info">This grid runs while this tab is open. Orders are signed here with your trading session key; the server never sees that key. If you close the tab, open grid orders stay on the book until you come back and cancel them, or they fill. You can end the trading session in Settings.</Notice>
+
+      {(!run || run.status === 'stopped') && (
+        <div className="mt-3 space-y-3">
+          <Field label="Pair"><select value={g.pair || S.selected} onChange={(e) => upd({ pair: e.target.value })} className="h-10 w-full rounded-xl border border-white/10 bg-black/30 px-3 text-sm text-zinc-100 outline-none focus:border-orange-500/60">{S.syms.map((s) => <option key={s.name} value={s.name}>{s.display}</option>)}</select></Field>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Lower price"><AmountInput value={g.lower} onChange={(v) => upd({ lower: v })} placeholder={last ? px(last * 0.9) : '0'} label="Lower price" /></Field>
+            <Field label="Upper price"><AmountInput value={g.upper} onChange={(v) => upd({ upper: v })} placeholder={last ? px(last * 1.1) : '0'} label="Upper price" /></Field>
+          </div>
+          <button type="button" className="text-[11px] text-zinc-400 underline hover:text-orange-300" onClick={() => last && upd({ lower: roundTick(last * 0.9, sym?.tick ?? '0.01'), upper: roundTick(last * 1.1, sym?.tick ?? '0.01') })}>Use ±10% around the live price</button>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Grid levels"><AmountInput value={g.levels} onChange={(v) => upd({ levels: v })} label="Levels" /></Field>
+            <Field label="Total amount (USDC)"><AmountInput value={g.budget} onChange={(v) => upd({ budget: v })} label="Total amount" /></Field>
+          </div>
+          <Field label="Daily loss cap (USDC)" hint="Required. The grid stops if realized plus mark-to-market loss reaches this cap today (your local date)."><AmountInput value={g.dailyLossCap} onChange={(v) => upd({ dailyLossCap: v })} label="Daily loss cap" /></Field>
+          <div className="ss-grid__fee">{makerTxt ? <span>Maker <b>{makerTxt}</b></span> : null}{takerTxt ? <span>Taker <b>{takerTxt}</b></span> : null}{S.builder.active ? <span>SoSwapDEX fee <b>{bpText(Math.min(S.builder.fee, S.builder.approvedFee ?? 0))} of each fill</b></span> : null}</div>
+
+          {previewErr && !preview ? <Notice tone="warn">{previewErr}</Notice> : null}
+          {preview && (
+            <div className="space-y-1.5 rounded-xl border border-white/[0.07] bg-black/30 p-3 text-xs">
+              <div className="mb-1 flex items-center justify-between gap-2">
+                <span className="font-semibold text-zinc-200">Before you start</span>
+                {verdictLabel && gridV && <span className="ss-guard__badge" data-verdict={gridV.verdict}>{verdictLabel}</span>}
+              </div>
+              <Row k="Levels" v={String(preview.levelCount)} />
+              <Row k="Step" v={`${px(preview.minSpacing)} · ${preview.spacingPct.toFixed(2)}% of price`} />
+              <Row k="Per-step profit after maker fees" v={preview.netProfitPct == null ? 'Fee % is not published for this pair' : `${preview.netProfitPct.toFixed(3)}%`} />
+              <Row k="Fee cost per round trip" v={preview.roundTripFee == null ? '—' : usd(preview.roundTripFee, 4)} />
+              <Row k="Worst-case drop to lower bound" v={usd(preview.worstCaseLoss)} />
+              <Row k="Break-even" v={preview.breakEvenRoundTrips == null ? (preview.netProfitPct == null ? '—' : 'Fees would eat the step') : preview.breakEvenRoundTrips === 0 ? 'No inventory loss at the lower bound' : `About ${preview.breakEvenRoundTrips} round trip${preview.breakEvenRoundTrips === 1 ? '' : 's'} after fees`} />
+              <Row k="Buys / sells at start" v={`${preview.buyLevels} buy · ${preview.sellLevels} sell${preview.skippedLevels ? ` · ${preview.skippedLevels} at mid skipped` : ''}`} />
+              <Row k="USDC for buys" v={usd(preview.buyQuote)} />
+              {preview.sellBase > 0 && <Row k={`Needs ${sym?.base ?? ''} for sells`} v={`${num(preview.sellBase, 6)} ${sym?.base ?? ''} (${usd(preview.sellQuote)})`} />}
+              {gridV?.reasons.map((r) => <p key={r} className="pt-1 text-[11px] text-zinc-400">{r}</p>)}
+              {preview.issues.map((i) => <p key={i} className="text-[11px] text-amber-300">{i}</p>)}
+              {guard && <div className="pt-2"><TradeGuardCard result={{ ...guard, verdict: gridV?.verdict ?? guard.verdict, reasons: gridV?.reasons ?? guard.reasons }} /></div>}
+            </div>
+          )}
+          {run?.status === 'stopped' && run.stopNote && <Notice tone="ok">{run.stopNote}</Notice>}
+          <Button variant="primary" size="lg" className="w-full" disabled={ctaDis || busy} onClick={ctaAct}>{cta}</Button>
+        </div>
+      )}
+
+      {run && running && (
+        <div className="mt-3 space-y-3">
+          <div className="space-y-1.5 rounded-xl border border-white/[0.07] bg-black/30 p-3 text-xs">
+            <Row k="Pair" v={run.display} />
+            <Row k="Range" v={`${px(run.lower)} – ${px(run.upper)}`} />
+            <Row k="Live price" v={last ? px(last) : '—'} />
+            <Row k="Open grid orders" v={String(run.open.length)} />
+            <Row k="Realized" v={usd(inv.realizedPnl, 3)} tone={inv.realizedPnl > 0 ? 'good' : inv.realizedPnl < 0 ? 'bad' : undefined} />
+            <Row k="Mark-to-market" v={usd(mtm, 3)} tone={mtm > 0 ? 'good' : mtm < 0 ? 'bad' : undefined} />
+            <Row k="Today vs loss cap" v={`${usd(dayPnl, 3)} / −${usd(run.dailyLossCap)}`} tone={dayPnl < 0 ? 'warn' : undefined} />
+          </div>
+          <div className="ss-grid__ladder">
+            {run.levels.map((lv) => {
+              const open = run.open.find((o) => o.index === lv.index);
+              const filled = run.fills.some((f) => f.levelIndex === lv.index);
+              return (
+                <div key={lv.index} className="ss-grid__lvl" data-side={open?.side} data-state={open ? 'open' : filled ? 'filled' : undefined}>
+                  <span>{open ? open.side.toUpperCase() : filled ? 'Filled' : 'Idle'} @ {lv.priceStr}</span>
+                  <span>{lv.qtyStr} {run.base}</span>
+                </div>
+              );
+            })}
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button variant="primary" onClick={() => stopGrid('user-stop')} disabled={run.status === 'stopping'}>{run.status === 'stopping' ? 'Stopping…' : 'Stop'}</Button>
+            <Button onClick={() => cancelGridOrders(run).then(() => S.refreshAccount()).then(() => S.toast('ok', 'Cancel requested for open grid orders.')).catch((e: any) => S.toast('err', userFacingError(e, 'Could not cancel grid orders.')))}>Cancel all grid orders</Button>
+          </div>
+        </div>
+      )}
+
+      {confirm && preview && liveCfg && (
+        <Modal open onClose={() => setConfirm(false)} title="Start low-fee grid">
+          <div className="space-y-3">
+            <p className="text-[13px] text-zinc-400">The grid will place post-only maker orders now, then replace filled levels with the opposite order one step away. Keep this tab open.</p>
+            {gridV && <div className="flex items-center justify-between rounded-xl border border-white/[0.07] bg-black/30 px-3 py-2 text-xs"><span className="text-zinc-400">Grid check</span><span className="ss-guard__badge" data-verdict={gridV.verdict}>{verdictLabel}</span></div>}
+            <div className="space-y-1 rounded-xl border border-white/[0.07] bg-black/30 p-3 text-xs">
+              <Row k="Pair" v={sym?.display ?? ''} />
+              <Row k="Range" v={`${px(liveCfg.lower)} – ${px(liveCfg.upper)}`} />
+              <Row k="Levels" v={String(preview.levelCount)} />
+              <Row k="Total amount" v={usd(liveCfg.budget)} />
+              <Row k="Daily loss cap" v={usd(liveCfg.dailyLossCap)} />
+              <Row k="Per-step net" v={preview.netProfitPct == null ? '—' : `${preview.netProfitPct.toFixed(3)}%`} />
+              <Row k="Network" v={NETS[S.net].label} tone={S.net === 'mainnet' ? 'warn' : undefined} />
+            </div>
+            {gridV?.verdict === 'risky' && (
+              <label className="flex cursor-pointer items-start gap-2 text-[12px] text-zinc-300">
+                <input type="checkbox" checked={ackRisky} onChange={(e) => setAckRisky(e.target.checked)} className="mt-0.5 accent-orange-500" />
+                I understand this preview is marked Risky and I still want to start.
+              </label>
+            )}
+            <Button variant="primary" className="w-full" loading={busy} disabled={busy || (gridV?.verdict === 'risky' && !ackRisky)} onClick={startGrid}>Start grid</Button>
+          </div>
+        </Modal>
+      )}
+    </AnimatedCard>
+  );
+}
+
+
 function BotsView() {
   const S = useS();
   const [cfg, setCfgState] = useState<BotCfg>(BOT_DEFAULT);
@@ -4891,14 +5341,13 @@ function BotsView() {
   const bots: { kind: BotKind; name: string; desc: string; icon: React.ReactNode }[] = [
     ...(cfg.setup.at ? [{ kind: 'setup' as const, name: 'AI Setup Bot', desc: 'Saved spot-buy levels from the builder above. Draft only.', icon: <span className="grid h-14 w-14 place-items-center rounded-full border border-orange-500/30 bg-orange-500/10 text-orange-300"><Target className="h-6 w-6" /></span> }] : []),
     { kind: 'dca', name: 'DCA Bot', desc: 'Buy at intervals (e.g., daily/weekly).', icon: <AnimalOrb kind="dog" size={54} compact still /> },
-    { kind: 'grid', name: 'Grid Bot', desc: 'Trade in a price range.', icon: <AnimalOrb kind="owl" size={54} compact still /> },
     { kind: 'signal', name: 'Signal Bot', desc: 'Act on market signals (e.g., ETF/news).', icon: <AnimalOrb kind="bull" size={54} compact still /> },
   ];
   return (
     <div className="mx-auto max-w-[900px]">
-      <PageTitle icon={<Bot className="h-8 w-8" />} title="Bots (Drafts)" sub="Build a code-checked spot-buy setup, or draft a DCA, grid or signal plan. Nothing runs unattended."
-        right={<span className="rounded-lg border border-indigo-400/30 bg-indigo-500/20 px-3 py-2 text-xs font-semibold text-indigo-200">Draft Mode</span>} />
+      <PageTitle icon={<Bot className="h-8 w-8" />} title="Bots" sub="Low-fee grid trading runs in this tab after you confirm. DCA, signal and AI setup stay drafts." />
       <ArmedCard />
+      <div className="mb-4"><GridBotPanel cfg={cfg} setCfg={setCfg} /></div>
       <SetupBuilder cfg={cfg} setCfg={setCfg} />
       <div className="mt-4 space-y-3">
         {bots.map((b, bi) => {
@@ -4922,7 +5371,7 @@ function BotsView() {
           );
         })}
       </div>
-      <div className="mt-4"><Notice tone="warn"><b>Drafts only.</b> No orders are sent automatically. Order sending stays off until it is turned on, because it uses real funds. The switches above only show a preview.</Notice></div>
+      <div className="mt-4"><Notice tone="warn"><b>Drafts below stay drafts.</b> DCA, signal and AI setup never send orders. Only the low-fee grid can place post-only orders after you confirm, and only while this tab is open.</Notice></div>
       {edit && <BotEditor kind={edit} cfg={cfg} setCfg={setCfg} onClose={() => setEdit(null)} />}
     </div>
   );
@@ -4937,7 +5386,7 @@ const GUIDE: { id: string; icon: React.ReactNode; title: string; sub: string; bo
   { id: 'route', icon: <Star className="h-4 w-4" />, title: 'Route Preview', sub: 'See the live route and estimate before you sign.', body: <>The Route Preview walks the live SoDEX order book to estimate what you receive, the price impact and the taker fee. It is an estimate: the book can move before your order fills, so a minimum-received limit based on your slippage setting protects each order.</> },
   { id: 'markets', icon: <BarChart3 className="h-4 w-4" />, title: 'Markets & Insights', sub: 'Get SoSoValue news, ETF flows, and sector moves.', body: <>Markets lists every SoDEX spot pair with live price, 24h change and volume. News, ETF flows and sectors come from SoSoValue and need a free API key (paste it in the panel). If a feed is down or no key is set you see an empty state, never sample numbers.</> },
   { id: 'cross', icon: <Link2 className="h-4 w-4" />, title: 'Cross-Chain', sub: 'Add funds from another chain, or withdraw to one.', body: <>Add funds finds a route that lands a SoDEX-supported token in your own wallet. You sign every step. Deposit and withdrawal still happen on sodex.com — SoSwapDEX never holds funds or deposits for you. Route quotes are estimates: fees and time can change. A deposit below the official minimum, or on an unsupported token or chain, can be lost or not credited.</> },
-  { id: 'bots', icon: <Bot className="h-4 w-4" />, title: 'Bots (Drafts)', sub: 'Create trading strategies. Draft only. Nothing runs unattended.', body: <>The AI Setup Builder computes a spot-buy plan from live 1-hour candles and the order book (trend, stop, targets and size). Gemini only explains those numbers and cannot change them. You can also arm a setup: while the tab is open it re-checks every 45 seconds and asks you to confirm when your minimum grade is met. It never places an order by itself, and no stop-loss is placed on the exchange. DCA, Grid and Signal bots are also drafts: they compute a dry-run preview from live prices and never send orders. Nothing runs in the background, and a closed tab means nothing happens.</> },
+  { id: 'bots', icon: <Bot className="h-4 w-4" />, title: 'Bots', sub: 'A low-fee grid can run in this tab after you confirm. Other bots stay drafts.', body: <>The low-fee grid places post-only maker orders in a price range after you review a live preview and confirm. It runs only while this tab is open, signs orders with your trading session key in this browser, and stops if price leaves the range, if your daily loss cap is reached, or if you tap Stop. If you close the tab, open grid orders stay on the book until you come back and cancel them, or they fill. The AI Setup Builder computes a spot-buy plan from live 1-hour candles and the order book. Gemini only explains those numbers and cannot change them. You can also arm a setup: while the tab is open it re-checks every 45 seconds and asks you to confirm when your minimum grade is met. It never places an order by itself. DCA and Signal bots stay drafts and never send orders.</> },
   { id: 'safety', icon: <ShieldCheck className="h-4 w-4" />, title: 'Safety & FAQs', sub: 'How SoSwapDEX handles your keys and funds.', body: <><ul className="list-disc space-y-1.5 pl-5"><li>SoSwapDEX never holds your funds and never asks for a seed phrase.</li><li>The session API key is a hot key kept in this tab (sessionStorage). Its permissions are set by SoDEX; fund only what you intend to trade and revoke keys on sodex.com/apikeys.</li><li>{DISCLAIMER}</li></ul></> },
 ];
 
@@ -4967,8 +5416,8 @@ function GuideView() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [watch, setWatch] = useState(false);
   const cur = GUIDE.find((g) => g.id === sec)!;
-  const flow = [{ i: <Wallet className="h-5 w-5" />, a: 'Connect', b: 'Wallet' }, { i: <ArrowDownUp className="h-5 w-5" />, a: 'Swap', b: '(Preview & Sign)' }, { i: <BarChart3 className="h-5 w-5" />, a: 'Markets', b: '(News & ETF Flows)' }, { i: <Link2 className="h-5 w-5" />, a: 'Cross-Chain', b: '(Add funds)' }, { i: <Bot className="h-5 w-5" />, a: 'Bots', b: '(Drafts)' }];
-  const checks = ['Uses real SoDEX mainnet markets and routes', 'Shows a clear preview before you sign', 'Integrates SoSoValue news, ETF flows, and sector data', 'Cross-chain routes land tokens in your wallet; deposits and withdrawals stay on SoDEX', 'Bots are draft only (no unattended trading), and the AI Setup Builder never places an order', 'If a feed is down, you see an empty state (not sample prices)'];
+  const flow = [{ i: <Wallet className="h-5 w-5" />, a: 'Connect', b: 'Wallet' }, { i: <ArrowDownUp className="h-5 w-5" />, a: 'Swap', b: '(Preview & Sign)' }, { i: <BarChart3 className="h-5 w-5" />, a: 'Markets', b: '(News & ETF Flows)' }, { i: <Link2 className="h-5 w-5" />, a: 'Cross-Chain', b: '(Add funds)' }, { i: <Bot className="h-5 w-5" />, a: 'Bots', b: '(Grid & drafts)' }];
+  const checks = ['Uses real SoDEX mainnet markets and routes', 'Shows a clear preview before you sign', 'Integrates SoSoValue news, ETF flows, and sector data', 'Cross-chain routes land tokens in your wallet; deposits and withdrawals stay on SoDEX', 'The low-fee grid runs only while this tab is open, after you confirm; DCA, signal and the AI Setup Builder never place an order unattended', 'If a feed is down, you see an empty state (not sample prices)'];
   const detail = sec === 'overview' ? (
     <>
       <div className="my-4 flex flex-wrap items-start justify-between gap-2">
