@@ -3,7 +3,8 @@ const isDev = process.env.NODE_ENV !== 'production';
 const WC = !!process.env.NEXT_PUBLIC_WC_PROJECT_ID; // WalletConnect hosts are only allowed when it is enabled
 const wcConnect = WC ? ' https://*.walletconnect.org https://*.walletconnect.com wss://*.walletconnect.org wss://*.walletconnect.com https://*.reown.com wss://*.reown.com https://*.web3modal.org https://*.web3modal.com wss://www.walletlink.org https://mainnet.valuechain.xyz' : '';
 const wcImg = WC ? ' https://*.walletconnect.com https://*.walletconnect.org https://*.web3modal.org https://*.reown.com' : '';
-const wcFrame = WC ? "frame-src https://verify.walletconnect.com https://verify.walletconnect.org https://secure.walletconnect.com https://secure.walletconnect.org" : "frame-src 'none'";
+const ytFrame = 'https://www.youtube-nocookie.com';
+const wcFrame = WC ? `frame-src ${ytFrame} https://verify.walletconnect.com https://verify.walletconnect.org https://secure.walletconnect.com https://secure.walletconnect.org` : `frame-src ${ytFrame}`;
 const csp = [
   "default-src 'self'",
   `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ''}`,

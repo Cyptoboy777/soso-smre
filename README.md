@@ -8,8 +8,9 @@ Non-custodial trading interface on the **SoDEX mainnet spot order book** with **
 | **Live app** | https://soswap-sodex.vercel.app |
 | **Repo** | https://github.com/Cyptoboy777/soso-smre |
 | **Builder Race** | https://www.buildsoso.xyz (builder ID `2674`) |
+| **Guide demo** | https://youtu.be/uuOAIz47hjU |
 
-Open the live app for current screens of Swap, Markets, Skills and the AI assistant.
+Watch the guide demo at https://youtu.be/uuOAIz47hjU, or open the live app for current screens of Swap, Markets, Skills and the AI assistant.
 
 - **Swap** with live Route Preview (walks the real SoDEX order book), limit orders, chart, order book, a safety strip, and a cost receipt before you confirm
 - **Markets**: every SoDEX spot pair, SoSoValue news, ETF flows, sector moves, and a local watchlist

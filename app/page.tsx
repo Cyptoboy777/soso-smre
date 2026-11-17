@@ -3573,9 +3573,31 @@ const GUIDE: { id: string; icon: React.ReactNode; title: string; sub: string; bo
   { id: 'safety', icon: <ShieldCheck className="h-4 w-4" />, title: 'Safety & FAQs', sub: 'How SoSwapDEX handles your keys and funds.', body: <><ul className="list-disc space-y-1.5 pl-5"><li>SoSwapDEX never holds your funds and never asks for a seed phrase.</li><li>The session API key is a hot key kept in this tab (sessionStorage). Its permissions are set by SoDEX; fund only what you intend to trade and revoke keys on sodex.com/apikeys.</li><li>{DISCLAIMER}</li></ul></> },
 ];
 
+const GUIDE_VIDEO = 'https://www.youtube-nocookie.com/embed/uuOAIz47hjU';
+
+function GuideVideoModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+  return (
+    <Modal open={open} onClose={onClose} title="Watch the guide" maxW="sm:max-w-3xl">
+      <div className="relative aspect-video w-full overflow-hidden rounded-xl bg-black">
+        {open && (
+          <iframe
+            src={GUIDE_VIDEO}
+            title="SoSwapDEX guide demo"
+            className="absolute inset-0 h-full w-full border-0"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+            allowFullScreen
+            referrerPolicy="strict-origin-when-cross-origin"
+          />
+        )}
+      </div>
+    </Modal>
+  );
+}
+
 function GuideView() {
   const [sec, setSec] = useState('overview');
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [watch, setWatch] = useState(false);
   const cur = GUIDE.find((g) => g.id === sec)!;
   const flow = [{ i: <Wallet className="h-5 w-5" />, a: 'Connect', b: 'Wallet' }, { i: <ArrowDownUp className="h-5 w-5" />, a: 'Swap', b: '(Preview & Sign)' }, { i: <BarChart3 className="h-5 w-5" />, a: 'Markets', b: '(News & ETF Flows)' }, { i: <Link2 className="h-5 w-5" />, a: 'Cross-Chain', b: '(Mirror)' }, { i: <Bot className="h-5 w-5" />, a: 'Bots', b: '(Drafts)' }];
   const checks = ['Uses real SoDEX mainnet markets and routes', 'Shows a clear preview before you sign', 'Integrates SoSoValue news, ETF flows, and sector data', 'Cross-chain Mirror is a staged path (not an atomic swap)', 'Bots are draft only (no unattended trading), and the AI Setup Builder never places an order', 'If a feed is down, you see an empty state (not sample prices)'];
@@ -3592,7 +3614,8 @@ function GuideView() {
 
   return (
     <div className="mx-auto max-w-[980px]">
-      <PageTitle icon={<BookOpen className="h-8 w-8" />} title="Guide" sub="Learn how to use SoSwapDEX safely on SoDEX mainnet." />
+      <PageTitle icon={<BookOpen className="h-8 w-8" />} title="Guide" sub="Learn how to use SoSwapDEX safely on SoDEX mainnet." right={<Button variant="primary" onClick={() => setWatch(true)} className="shrink-0"><Play className="h-3.5 w-3.5 fill-current" />Watch the guide</Button>} />
+      <GuideVideoModal open={watch} onClose={() => setWatch(false)} />
       {/* mobile: numbered step cards (tap to open) */}
       <div className="md:hidden">
         {!mobileOpen ? (
