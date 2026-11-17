@@ -4,7 +4,7 @@ import SoSwapAI from '@/components/SoSwapAI';
 import { PwaBoot } from '@/components/Pwa';
 
 export const metadata: Metadata = {
-  metadataBase: new URL('https://soswap-sodex.vercel.app'),
+  metadataBase: new URL('https://soswapdex.xyz'),
   title: 'SoSwapDEX — Swap on SoDEX mainnet',
   description: 'Live SoDEX markets, route preview before you sign, SoSoValue news and ETF flows. Non-custodial: you sign every order in your own wallet.',
   applicationName: 'SoSwapDEX',
