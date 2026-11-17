@@ -35,6 +35,15 @@ import { WalletGlyph, OfficialMark, resolveWalletKind } from '@/components/Walle
 import { SkillsMark, TradeCheckIcon, PositionIcon, PortfolioIcon, BriefIcon, NewsIcon, PlanIcon, JournalIcon, AlertIcon, SkillTile } from '@/components/SkillIcons';
 import { scanTrade, sizePosition, portfolioHealth, journalStats, type Grade, type Flag, type ScanOut } from '@/lib/risk';
 import { computeSetup, pickBest, assetAliases, etfAssetFor, MAX_SPREAD_PCT, MAX_IMPACT_PCT, type SetupOut, type SetupGrade } from '@/lib/setup';
+import TradeGuardCard from '@/components/TradeGuardCard';
+import SmartExitCard from '@/components/SmartExitCard';
+import MoveNewsLine from '@/components/MoveNewsLine';
+import AskSoSwap from '@/components/AskSoSwap';
+import {
+  bookMetrics, computeGuard, computeSafeSize, pickMoveNews, suggestExit,
+  type ExitSuggestion, type GuardInput, type NewsHeadline,
+} from '@/lib/trade-guard';
+
 import {
   buildUserSignedAddApiKey, friendlySodexError, isKeyGone, isUnrecognizedChain, isUserRejected,
   keyListed, keySlots, KEYS_AT_CAP, looksLikeRawSodex, REGISTER_KEY_FAILED, userFacingError, walletActionError,
@@ -1970,8 +1979,8 @@ function CostReceipt({ pay, get, lines, total, totalPct, notes }: {
   );
 }
 
-function ReviewModal({ open, onClose, title, rows, warn, confirmLabel, run, receipt, doneExtra, check, ack, preflight, onRefreshQuote, blocked }: {
-  receipt?: React.ReactNode; doneExtra?: React.ReactNode;
+function ReviewModal({ open, onClose, title, rows, warn, confirmLabel, run, receipt, doneExtra, aside, check, ack, preflight, onRefreshQuote, blocked }: {
+  receipt?: React.ReactNode; doneExtra?: React.ReactNode; aside?: React.ReactNode;
   /** Pre-trade check shown first in the review (see lib/risk.ts). `ack` makes the user tick a box before confirming. */
   check?: { grade: Grade; flags: Flag[] }; ack?: string;
   open: boolean; onClose: () => void; title: string; rows: { k: string; v: React.ReactNode; tone?: 'good' | 'bad' | 'warn' }[];
@@ -2028,6 +2037,7 @@ function ReviewModal({ open, onClose, title, rows, warn, confirmLabel, run, rece
           </div>
         )}
         {receipt ?? <div className="space-y-2.5 rounded-2xl border border-white/[0.07] bg-black/30 p-4">{rows.map((r) => <Row key={r.k} k={r.k} v={r.v} tone={r.tone} />)}</div>}
+        {aside && (state === 'idle' || state === 'price-warn') && aside}
         {warn && (state === 'idle' || state === 'price-warn') && <Notice tone="warn">{warn}</Notice>}
         {ack && (state === 'idle' || state === 'price-warn') && (
           <label className="flex cursor-pointer items-start gap-2.5 text-[12px] text-zinc-300">
@@ -2358,6 +2368,8 @@ function SwapPanel() {
   const [pulsePreview, setPulsePreview] = useState(path.focus);
   const [leaveFees, setLeaveFeesState] = useState(true);
   const [recent, setRecent] = useState<RecentPair[]>([]);
+  const [lastFill, setLastFill] = useState<{ symbol: string; side: 'buy' | 'sell'; price: number; qty: number; tick: string; step: string } | null>(null);
+  const [exitCandles, setExitCandles] = useState<Candle[]>([]);
   useEffect(() => {
     setLeaveFeesState(lsGet<boolean>(LEAVE_FEES_KEY, true));
     setRecent(readRecentPairs(lsGet<unknown>(RECENT_PAIRS_KEY, [])));
@@ -2423,6 +2435,21 @@ function SwapPanel() {
   const amt = parseFloat(amount) || 0;
   const avail = fromA ? S.available(fromA.coin) : 0;
   const fromPrice = fromA ? (fromA.isQuote ? 1 : S.tickers[fromA.symbol!.name]?.last ?? 0) : 0;
+  const newsFeed = useFeed(fetchNews);
+  const moodBase = (!toA?.isQuote ? toA?.symbol?.base : fromA?.symbol?.base) || '';
+  const moodSide: 'buy' | 'sell' = !toA?.isQuote ? 'buy' : 'sell';
+  const etfAsset = moodBase ? etfAssetFor(moodBase) : null;
+  const etfFeed = useFeed(() => (etfAsset ? fetchEtf(etfAsset) : Promise.resolve([] as EtfDay[])), [etfAsset]);
+  const spotPortfolioUsd = useMemo(() => {
+    if (!S.wallet) return null;
+    let total = 0, known = false;
+    for (const b of S.balances) {
+      if (!(b.total > 0)) continue;
+      const px = S.priceOf(b.coin);
+      if (px > 0) { total += b.total * px; known = true; }
+    }
+    return known ? total : null;
+  }, [S.wallet, S.balances, S.priceOf]);
 
   const q = useMemo(() => (fromA && toA ? quoteSwap(fromA, toA, amt, books) : null), [books, fromA, toA, amt]);
   const chipAmt = (fraction: number) => (
@@ -2471,6 +2498,54 @@ function SwapPanel() {
     return { impactUsd, appFee, totalUsd, pct: q.notional > 0 ? (totalUsd / q.notional) * 100 : 0, notes };
   })() : null;
 
+  const guardInputFor = (amtN: number): GuardInput | null => {
+    if (!fromA || !toA || !(amtN > 0)) return null;
+    const qq = quoteSwap(fromA, toA, amtN, books);
+    if (!qq) return null;
+    const legs: { name: string; side: 'buy' | 'sell'; usd: number }[] = [];
+    if (!fromA.isQuote) legs.push({ name: fromA.symbol!.name, side: 'sell', usd: qq.notional });
+    if (!toA.isQuote) legs.push({ name: toA.symbol!.name, side: 'buy', usd: fromA.isQuote ? amtN : qq.notional * (1 - fromA.symbol!.taker) });
+    let spreadPct = 0, coveragePct = 100, bookReady = !qq.loading, rangePct = 0, volShare = 0;
+    for (const l of legs) {
+      const b = books[l.name];
+      if (!b) { bookReady = false; continue; }
+      const m = bookMetrics(b, l.side, l.usd);
+      if (!m) { bookReady = false; continue; }
+      spreadPct += m.spreadPct;
+      coveragePct = Math.min(coveragePct, m.coveragePct);
+      const tk = S.tickers[l.name];
+      if (tk) {
+        if (tk.low > 0) rangePct = Math.max(rangePct, ((tk.high - tk.low) / tk.low) * 100);
+        if (tk.quoteVol > 0) volShare = Math.max(volShare, (l.usd / tk.quoteVol) * 100);
+      }
+    }
+    const latestRow = etfFeed.data && etfAsset && etfFeed.data.length ? [...etfFeed.data].sort((a, b) => String(b.date).localeCompare(String(a.date)))[0] : null;
+    const latestEtf = latestRow && etfAsset ? { asset: etfAsset, date: latestRow.date, inflow: latestRow.inflow } : null;
+    const appFee = (qq.notional * builderBp * qq.legsN) / 100000;
+    return {
+      amount: amtN, available: avail, isFromQuote: fromA.isQuote, fromStep: fromA.symbol?.step,
+      notionalUsd: qq.notional, feeUsd: qq.feeUsd, builderFeeUsd: appFee,
+      impactPct: qq.impact, spreadPct, coveragePct, rangePct, volShare,
+      halted, bookReady, portfolioUsd: spotPortfolioUsd,
+      news: newsFeed.data, newsLoaded: !newsFeed.loading && !newsFeed.notConfigured && !newsFeed.err,
+      etf: latestEtf, etfLoaded: !!etfAsset && !etfFeed.loading && !etfFeed.notConfigured && !etfFeed.err,
+      now: Date.now(), base: moodBase || undefined, side: moodSide,
+    };
+  };
+  const guard = useMemo(() => {
+    if (!q || q.loading || !amt) return null;
+    const input = guardInputFor(amt);
+    return input ? computeGuard(input) : null;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [q, amt, books, fromA, toA, avail, spotPortfolioUsd, newsFeed.data, newsFeed.loading, newsFeed.err, etfFeed.data, etfFeed.loading, etfFeed.err, builderBp, halted, moodBase, moodSide, etfAsset]);
+  const safeSize = useMemo(() => {
+    if (!guard || guard.verdict !== 'risky' || !amt) return null;
+    const current = guardInputFor(amt);
+    if (!current) return null;
+    return computeSafeSize(current, (next) => guardInputFor(next) ?? current);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [guard, amt, books, fromA, toA, avail, spotPortfolioUsd]);
+
   let cta = 'Review swap', ctaDisabled = false, ctaAction: () => void = () => {
     if (q && amt) previewSnap.current = { rate: q.out / amt };
     setReview(true);
@@ -2490,10 +2565,29 @@ function SwapPanel() {
 
   const [exec, setExec] = useState<'idle' | 'pending' | 'success' | 'error'>('idle');
   useEffect(() => { setExec((e) => (e === 'pending' ? e : 'idle')); }, [amount, fromKey, toKey]);
+  const exitSymName = lastFill?.symbol || (symBuy || symSell)?.name;
+  useEffect(() => {
+    if (!exitSymName || (!review && exec !== 'success' && !lastFill)) return;
+    let stop = false;
+    fetchKlines(S.net, exitSymName, '1h', 80).then((c) => { if (!stop) setExitCandles(c); }).catch(() => { if (!stop) setExitCandles([]); });
+    return () => { stop = true; };
+  }, [exitSymName, review, exec, lastFill, S.net]);
+  const fillExit = lastFill ? suggestExit({ side: lastFill.side, entry: lastFill.price, qty: lastFill.qty, tick: lastFill.tick, step: lastFill.step, candles: exitCandles, book: books[lastFill.symbol] }) : null;
+  const previewExit = (() => {
+    const sym = symBuy || symSell;
+    if (!sym || !q || q.loading) return null;
+    const entry = symBuy ? (q.buyAvg || S.tickers[sym.name]?.last || 0) : (q.sellAvg || S.tickers[sym.name]?.last || 0);
+    const qty = symBuy ? q.out : amt;
+    return suggestExit({ side: symBuy ? 'buy' : 'sell', entry, qty, tick: sym.tick, step: sym.step, candles: exitCandles, book: books[sym.name] });
+  })();
+  const prefillExit = (kind: 'tp' | 'stop', s: ExitSuggestion, pair: string) => {
+    armLimitPrefill({ pair, side: s.side, price: kind === 'tp' ? s.takeProfit : s.stop, qty: s.qty });
+    setReview(false);
+  };
   const runSwap = async (progress: (s: string) => void): Promise<string> => {
     if (!S.wallet || !S.key || !fromA || !toA) throw new Error('Not ready');
     const addr = S.wallet.address, aid = S.key.accountID;
-    let funds = amt; let summary = '';
+    let funds = amt; let summary = ''; let captured: { symbol: string; side: 'buy' | 'sell'; price: number; qty: number; tick: string; step: string } | null = null;
     const sellBook = symSell ? books[symSell.name] : undefined, buyBook = symBuy ? books[symBuy.name] : undefined;
     // leg 1: sell the source token for USDC
     if (symSell) {
@@ -2510,6 +2604,7 @@ function SwapPanel() {
       if (!fills.length) throw new Error('Order accepted but no fill was reported (it may have been cancelled by the price limit). Check Portfolio.');
       funds = Math.max(0, f.quote - f.feeQuote);
       summary = `Sold ${num(f.base, 8)} ${symSell.base} @ ${px(f.avg)}`;
+      if (f.avg > 0 && f.base > 0) captured = { symbol: symSell.name, side: 'sell', price: f.avg, qty: f.base, tick: symSell.tick, step: symSell.step };
       if (symBuy) funds *= 0.999; // keep a small buffer for rounding
     }
     // leg 2: buy the target token with USDC
@@ -2526,11 +2621,13 @@ function SwapPanel() {
       const fills = res.orderID ? await waitForFills(S.net, addr, aid, symBuy.name, res.orderID) : [];
       const f = sumFills(fills);
       summary += `${summary ? ' → ' : ''}Bought ${fills.length ? num(f.base - f.feeBase, 8) : '?'} ${symBuy.base}${fills.length ? ` @ ${px(f.avg)}` : ' (fill pending)'}`;
+      if (fills.length && f.avg > 0) captured = { symbol: symBuy.name, side: 'buy', price: f.avg, qty: Math.max(0, f.base - f.feeBase), tick: symBuy.tick, step: symBuy.step };
     } else {
       summary += ` for ${usd(funds, 2)} USDC`;
     }
     S.refreshAccount();
     setAmount('');
+    if (captured && captured.qty > 0) setLastFill(captured);
     return summary;
   };
 
@@ -2648,12 +2745,10 @@ function SwapPanel() {
       {bookErr && <div className="mt-3"><Notice tone="error">{bookErr}</Notice></div>}
       {halted && <div className="mt-3"><Notice tone="warn">Trading is halted on {symSell?.halted ? symSell.display : symBuy?.display}.</Notice></div>}
 
-      {safety && (
-        <button onClick={() => S.setView('skills')} aria-label="Open the Skills tab for trade check details"
-          className={cx('mt-3 flex w-full items-start gap-2.5 rounded-xl border px-3 py-2.5 text-left transition hover:brightness-110', GRADE[safety.grade].cls)}>
-          <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0" />
-          <span className="min-w-0 text-[12px] leading-snug"><b>{GRADE[safety.grade].label}.</b> {safety.flags.length ? safety.flags[0].text : 'No liquidity, spread or volatility warnings at this size.'}{safety.flags.length > 1 && <span className="opacity-80"> +{safety.flags.length - 1} more</span>}</span>
-        </button>
+      {guard && (
+        <div className="mt-3">
+          <TradeGuardCard result={guard} safeSize={safeSize} onSafeSize={(v) => setAmount(v)} />
+        </div>
       )}
 
       <Button variant="primary" size="lg" className="mt-4 w-full !h-12 !rounded-lg" disabled={ctaDisabled || S.orderInFlight} onClick={ctaAction}>
@@ -2662,9 +2757,11 @@ function SwapPanel() {
       <p className="mt-3 flex items-center justify-center gap-1.5 text-[11px] text-zinc-500"><ShieldCheck className="h-3.5 w-3.5 text-orange-400" />You sign in your wallet. We never ask for a seed phrase.</p>
       <SwapFeedback status={swapStatus} />
 
-      <ReviewModal open={review} onClose={() => setReview(false)} title="Review swap" confirmLabel="Confirm swap" run={runTracked} doneExtra={shareData ? <ShareTrade data={shareData} /> : undefined}
+      <ReviewModal open={review} onClose={() => setReview(false)} title="Review swap" confirmLabel="Confirm swap" run={runTracked}
+        doneExtra={<div className="space-y-3">{fillExit && lastFill && <SmartExitCard suggestion={fillExit} onPrefill={(kind) => prefillExit(kind, fillExit, lastFill.symbol)} />}{shareData ? <ShareTrade data={shareData} /> : null}</div>}
+        aside={previewExit && (symBuy || symSell) ? <SmartExitCard optional suggestion={previewExit} onPrefill={(kind) => prefillExit(kind, previewExit, (symBuy || symSell)!.name)} /> : undefined}
         preflight={runPreflight} onRefreshQuote={onRefreshQuote} blocked={S.orderInFlight}
-        check={safety ?? undefined} ack={safety?.grade === 'avoid' ? 'I understand this trade is flagged high risk and I want to continue.' : undefined}
+        check={safety ?? undefined} ack={guard?.verdict === 'risky' || safety?.grade === 'avoid' ? 'I understand this trade is flagged Risky and I want to continue.' : undefined}
         warn={q && q.legsN > 1 ? 'This swap uses two market orders via USDC. If the second one fails, you keep the USDC from the first.' : undefined}
         receipt={q && receipt ? <CostReceipt pay={`${amount} ${fromKey}`} get={`${num(q.out, 8)} ${toKey}`} total={usd(receipt.totalUsd, 3)} totalPct={receipt.pct} notes={receipt.notes}
           lines={[
@@ -2699,6 +2796,18 @@ function LimitPanel({ sym, book, pickedPrice }: { sym?: Sym; book?: { bids: Leve
   const [review, setReview] = useState(false);
   useEffect(() => { if (pickedPrice) setPrice(roundTick(pickedPrice, sym?.tick ?? '0.01')); }, [pickedPrice]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { setPrice(''); setQty(''); }, [sym?.name]);
+  useEffect(() => {
+    const apply = () => {
+      if (!limitPrefill.price || (limitPrefill.pair && sym && limitPrefill.pair !== sym.name)) return;
+      if (limitPrefill.side) setSide(limitPrefill.side);
+      if (limitPrefill.price) setPrice(limitPrefill.price);
+      if (limitPrefill.qty) setQty(limitPrefill.qty);
+      setPost(false);
+    };
+    window.addEventListener('soswap-limit-prefill', apply);
+    apply();
+    return () => window.removeEventListener('soswap-limit-prefill', apply);
+  }, [sym?.name]);
 
   const p = parseFloat(price) || 0, qn = parseFloat(qty) || 0;
   const total = p * qn;
@@ -2761,7 +2870,7 @@ function PairHeader({ sym }: { sym?: Sym }) {
         {sym ? <TokenIcon name={sym.base} size={38} /> : <Skeleton className="h-9 w-9 rounded-full" />}
         <div><div className="flex items-center gap-1.5 text-lg font-bold leading-tight text-zinc-50">{sym?.display ?? '…'}<ChevronDown className="h-4 w-4 text-zinc-500" /></div><div className="text-[11px] text-zinc-500">SoDEX spot{sym?.halted ? ' · halted' : ''}</div></div>
       </button>
-      <div><div className="tnum text-2xl font-bold text-zinc-50">{t ? <Flash v={t.last}><Num v={'$' + px(t.last)} /></Flash> : <Skeleton className="h-7 w-28" />}</div>{t && <Chg pct={t.changePct} />}</div>
+      <div><div className="tnum text-2xl font-bold text-zinc-50">{t ? <Flash v={t.last}><Num v={'$' + px(t.last)} /></Flash> : <Skeleton className="h-7 w-28" />}</div>{t && <Chg pct={t.changePct} />}{sym && t && <PairMoveNews base={sym.base} changePct={t.changePct} />}</div>
       <div className="tnum ml-auto hidden gap-6 text-xs sm:flex">
         <div><div className="text-zinc-600">24h high</div><div className="text-zinc-200">{t ? px(t.high) : '–'}</div></div>
         <div><div className="text-zinc-600">24h low</div><div className="text-zinc-200">{t ? px(t.low) : '–'}</div></div>
@@ -2780,10 +2889,25 @@ function SwapView() {
   useEffect(() => { if (!S.symByName[S.selected] && S.syms.length) S.setSelected(S.symByName['vBTC_vUSDC'] ? 'vBTC_vUSDC' : S.syms[0].name); }, [S.syms]); // eslint-disable-line react-hooks/exhaustive-deps
   const { books } = useBooks(adv && sym ? [sym.name] : [], 1500, 20);
   const book = sym ? books[sym.name] : undefined;
+  const news = useFeed(fetchNews);
+  const t = sym ? S.tickers[sym.name] : undefined;
+  const moved = (t && news.data && sym) ? pickMoveNews(t.changePct, sym.base, news.data, Date.now()) : null;
+  useEffect(() => {
+    const on = () => {
+      if (!limitPrefill.pair) return;
+      S.setSelected(limitPrefill.pair);
+      setAdv(true);
+      requestAnimationFrame(() => document.getElementById('limit-order')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }));
+    };
+    window.addEventListener('soswap-limit-prefill', on);
+    return () => window.removeEventListener('soswap-limit-prefill', on);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <div className="mx-auto max-w-[920px]">
       <PageTitle icon={<ArrowDownUp className="h-7 w-7" />} title="Swap" sub="Trade tokens on SoDEX mainnet with your own wallet." />
+      {moved && <div className="mb-4 rounded-2xl border border-white/[0.07] bg-black/30 px-4 py-3"><MoveNewsLine item={moved} /></div>}
       <Card glow className="p-3 sm:p-4"><SwapPanel /></Card>
       <div className="mt-4"><Onboarding /></div>
       <button onClick={() => setAdv((a) => !a)} className="mx-auto mt-6 flex items-center gap-2 rounded-full border border-white/10 px-4 py-2 text-xs font-medium text-zinc-300 transition hover:border-orange-500/50 hover:text-orange-300">
@@ -2799,9 +2923,10 @@ function SwapView() {
               <Card><CardHead title="Recent trades" icon={<History className="h-4 w-4 text-orange-400" />} /><div className="p-2">{sym && <RecentTrades symbol={sym.name} />}</div></Card>
             </div>
           </div>
-          <Card><CardHead title="Limit order" icon={<Timer className="h-4 w-4 text-orange-400" />} /><div className="p-4"><LimitPanel sym={sym} book={book} pickedPrice={picked} /></div></Card>
+          <div id="limit-order"><Card><CardHead title="Limit order" icon={<Timer className="h-4 w-4 text-orange-400" />} /><div className="p-4"><LimitPanel sym={sym} book={book} pickedPrice={picked} /></div></Card></div>
         </div>
       )}
+      <div className="mt-4"><AskSoSwap address={S.wallet?.address} /></div>
     </div>
   );
 }
@@ -2847,6 +2972,8 @@ function MarketsView() {
   const [q, setQ] = useState('');
   const [tab, setTab] = useState<'all' | 'fav' | 'up' | 'down'>('all');
   const [sort, setSort] = useState<{ k: 'pair' | 'price' | 'chg' | 'vol'; dir: 1 | -1 }>({ k: 'vol', dir: -1 });
+  const news = useFeed(fetchNews);
+  const now = Date.now();
 
   const rows = useMemo(() => {
     const qq = q.trim().toLowerCase();
@@ -2896,6 +3023,7 @@ function MarketsView() {
               <div className="min-w-0 flex-1">
                 <div className="truncate text-sm font-semibold text-zinc-100">{s.display}</div>
                 {s.halted && <Badge tone="rose">Halted</Badge>}
+                {t && news.data ? (() => { const m = pickMoveNews(t.changePct, s.base, news.data, now); return m ? <MoveNewsLine item={m} compact /> : null; })() : null}
               </div>
               {!s.halted && (
                 <button type="button" onClick={(e) => { e.stopPropagation(); goToTradeCheck(S, s.name); }}
@@ -3095,7 +3223,7 @@ function PortfolioView() {
 /* ═════════════════════════ SoSoValue client (news · ETF flows · sectors) ═════════════════════════
  * Browser → /api/soso/* (this app's server) → SoSoValue. The API key exists only in the server environment. */
 
-type NewsItem = { id: string; title: string; url: string; time: number; summary: string };
+type NewsItem = { id: string; title: string; url: string; time: number; summary: string; source?: string };
 type EtfDay = { date: string; inflow: number };
 type SectorRow = { name: string; change: number; dominance: number };
 
@@ -3120,16 +3248,36 @@ async function sosoGet(path: string, params: Record<string, string | number> = {
 const asList = (d: any): any[] => (Array.isArray(d) ? d : Array.isArray(d?.list) ? d.list : Array.isArray(d?.items) ? d.items : []);
 const toMs = (v: unknown) => { const n = Number(v); return !n ? 0 : n < 1e12 ? n * 1000 : n; };
 
+let newsMemo: { at: number; p: Promise<NewsItem[]> } | null = null;
 async function fetchNews(): Promise<NewsItem[]> {
-  const d = await sosoGet('/news/hot');
-  return asList(d).map((x) => ({
-    id: String(x.id ?? x.source_link ?? Math.random()), title: String(x.title ?? '').trim(), url: String(x.source_link ?? x.url ?? ''),
-    time: toMs(x.release_time ?? x.time), summary: String(x.content ?? '').replace(/<[^>]+>/g, '').trim(),
-  })).filter((x) => x.title);
+  const now = Date.now();
+  if (newsMemo && now - newsMemo.at < 45_000) return newsMemo.p;
+  const p = (async () => {
+    const d = await sosoGet('/news/hot');
+    return asList(d).map((x) => {
+      const source = String(x.source_name ?? x.source ?? x.publisher ?? '').trim();
+      return {
+        id: String(x.id ?? x.source_link ?? `${x.title}-${x.release_time ?? x.time ?? ''}`),
+        title: String(x.title ?? '').trim(), url: String(x.source_link ?? x.url ?? ''),
+        time: toMs(x.release_time ?? x.time), summary: String(x.content ?? '').replace(/<[^>]+>/g, '').trim(),
+        ...(source ? { source } : {}),
+      };
+    }).filter((x) => x.title);
+  })();
+  newsMemo = { at: now, p };
+  try { return await p; } catch (e) { if (newsMemo?.p === p) newsMemo = null; throw e; }
 }
+const etfMemo: Record<string, { at: number; p: Promise<EtfDay[]> }> = {};
 async function fetchEtf(symbol: 'BTC' | 'ETH'): Promise<EtfDay[]> {
-  const d = await sosoGet('/etfs/summary-history', { symbol, country_code: 'US', limit: 7 });
-  return asList(d).map((x) => ({ date: String(x.date ?? x.timestamp ?? ''), inflow: asNum(x.total_net_inflow) })).filter((x) => x.date);
+  const now = Date.now();
+  const hit = etfMemo[symbol];
+  if (hit && now - hit.at < 45_000) return hit.p;
+  const p = (async () => {
+    const d = await sosoGet('/etfs/summary-history', { symbol, country_code: 'US', limit: 7 });
+    return asList(d).map((x) => ({ date: String(x.date ?? x.timestamp ?? ''), inflow: asNum(x.total_net_inflow) })).filter((x) => x.date);
+  })();
+  etfMemo[symbol] = { at: now, p };
+  try { return await p; } catch (e) { if (etfMemo[symbol]?.p === p) delete etfMemo[symbol]; throw e; }
 }
 async function fetchSectors(): Promise<{ sectors: SectorRow[]; spotlight: { name: string; change: number }[] }> {
   const d = await sosoGet('/currencies/sector-spotlight');
@@ -3310,6 +3458,13 @@ function pairFromText(text: string, syms: Sym[]): string | null {
   if (!hits.length) return null;
   hits.sort((a, b) => a.index - b.index || b.len - a.len);
   return hits[0].name;
+}
+
+function PairMoveNews({ base, changePct }: { base: string; changePct: number }) {
+  const news = useFeed(fetchNews);
+  const item = news.data ? pickMoveNews(changePct, base, news.data, Date.now()) : null;
+  if (!item) return null;
+  return <MoveNewsLine item={item} />;
 }
 
 function NewsRow({ n, big }: { n: NewsItem; big?: boolean }) {
@@ -5192,6 +5347,11 @@ function PlanReview() {
 const skillIntent: { tab: SkillTab | null; pair?: string } = { tab: null };
 /** One-shot handoff from Trade Check to Swap so Route Preview opens on the same pair and size. */
 const swapIntent: { pair?: string; side?: 'buy' | 'sell'; usd?: string; focus?: boolean } = {};
+const limitPrefill: { pair?: string; side?: 'buy' | 'sell'; price?: string; qty?: string } = {};
+function armLimitPrefill(p: { pair: string; side: 'buy' | 'sell'; price: string; qty: string }) {
+  limitPrefill.pair = p.pair; limitPrefill.side = p.side; limitPrefill.price = p.price; limitPrefill.qty = p.qty;
+  if (typeof window !== 'undefined') window.dispatchEvent(new Event('soswap-limit-prefill'));
+}
 type SkillTab = 'trade' | 'size' | 'portfolio' | 'journal' | 'alerts' | 'brief' | 'news' | 'plan' | 'fund' | 'withdraw' | 'routecheck';
 
 function goToTradeCheck(S: Store, pair: string) {

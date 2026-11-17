@@ -2,6 +2,7 @@
 @import "../components/motion/polish.css";
 @import "../components/motion/motion2.css";
 @import "../components/motion/ux5.css";
+@import "../components/motion/killer.css";
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
