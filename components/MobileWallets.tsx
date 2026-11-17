@@ -27,8 +27,8 @@ export default function MobileWallets({ detected }: { detected: boolean }) {
   if (!url || detected || !mobile) return null;
   return (
     <div className="rounded-2xl border border-orange-500/25 bg-orange-500/[0.05] p-3.5">
-      <div className="text-sm font-semibold text-zinc-50">On a phone? Open SoSwap in your wallet app</div>
-      <p className="mt-1 text-[12px] leading-relaxed text-zinc-400">Mobile browsers can't talk to wallets directly. Tap your wallet below: it opens SoSwap inside the wallet's own browser, then press <b className="text-zinc-200">Connect Wallet</b> there.</p>
+      <div className="text-sm font-semibold text-zinc-50">On a phone? Open SoSwapDEX in your wallet app</div>
+      <p className="mt-1 text-[12px] leading-relaxed text-zinc-400">Mobile browsers can't talk to wallets directly. Tap your wallet below: it opens SoSwapDEX inside the wallet's own browser, then press <b className="text-zinc-200">Connect Wallet</b> there.</p>
       <div className="mt-3 grid grid-cols-2 gap-2">
         {targets(url).map((t) => (
           <a key={t.name} href={t.href} target="_blank" rel="noreferrer noopener" className="flex h-11 items-center gap-2 rounded-xl border border-white/10 bg-black/40 px-3 text-[13px] font-semibold text-zinc-100 transition hover:border-orange-500/50">

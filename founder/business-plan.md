@@ -1,4 +1,4 @@
-# SoSwap · Business plan
+# SoSwapDEX · Business plan
 
 **Verdict: Profitable**
 
@@ -27,11 +27,11 @@
 
 **Verdict caveat:** compile.py says "Profitable", but it only checks my ESTIMATED inputs (volume, costs) and no buyer panel or competitor research was run. Treat it as "cheap to run", not "proven".
 
-SoSwap is a free non-custodial SoDEX spot front end with pre-trade safety checks, earning a 3 bp builder fee. Costs are about $20 a month, so break-even is tiny; revenue is the limit (about $450 a month at an assumed $50,000 a day).
+SoSwapDEX is a free non-custodial SoDEX spot front end with pre-trade safety checks, earning a 3 bp builder fee. Costs are about $20 a month, so break-even is tiny; revenue is the limit (about $450 a month at an assumed $50,000 a day).
 
 Board: 2 fund if, 1 pass, average 4.0. All three flagged: nothing verified on mainnet, SoDEX's own site sells the same swap, no distribution. Offers and Product see a wedge in "check before you swap"; Monopoly says it is copyable.
 
-Biggest risk: no reason to choose SoSwap over SoDEX's own site. Fix: make the safety check the one thing and show it before every swap.
+Biggest risk: no reason to choose SoSwapDEX over SoDEX's own site. Fix: make the safety check the one thing and show it before every swap.
 
 This week: do one real small mainnet swap, one real WalletConnect session on a phone, one real Gemini call, then have 3 people try it.
 
@@ -41,14 +41,14 @@ This week: do one real small mainnet swap, one real WalletConnect session on a p
 
 ### Risks raised by more than one member (go first)
 1. **Nothing verified end to end.** No real mainnet trade, WalletConnect relay or Gemini call yet (all three).
-2. **SoDEX's own site and sodexextra.xyz sell the same swap.** Without a stated reason to choose SoSwap, the fee is a cost, not a benefit (all three).
+2. **SoDEX's own site and sodexextra.xyz sell the same swap.** Without a stated reason to choose SoSwapDEX, the fee is a cost, not a benefit (all three).
 3. **No distribution and no validated segment.** No count of reachable users, no channel for the first 100 (Offers, Monopoly, Product).
 4. **Too many things.** Terminal, research feed and six AI skills; no single "one thing" (Product, echoed by Offers' commodity point).
 
 ### Conditions (checklist)
 - [ ] Complete one real mainnet swap, one real WalletConnect session, one real Gemini call; record failures.
 - [ ] Name the exact segment and show a sourced count of reachable SoDEX/ValueChain traders (open: no number yet; `/founder-competitors`, `/founder-consumer`).
-- [ ] State a concrete reason to choose SoSwap over SoDEX's site, with a guarantee (e.g. a warning is always shown before a flagged trade).
+- [ ] State a concrete reason to choose SoSwapDEX over SoDEX's site, with a guarantee (e.g. a warning is always shown before a flagged trade).
 - [ ] Pick the one thing; demote the rest out of the main flow.
 - [ ] Show fee and safety result plainly before every swap.
 - [ ] 5 minutes of first-time use with a non-builder; report stumbles.
@@ -70,7 +70,7 @@ The Monopoly lens passes: checks are incremental, copyable in weeks, and the pla
 - **Board money conditions:** not met. Volume, native fee level and builder-term risk are open questions; no real data exists yet.
 - An accountant should check tax treatment of fee income. Not financial, legal or tax advice.
 
-## Unit economics: SoSwap (builder-fee revenue model; ALL volumes are ESTIMATES, not data)
+## Unit economics: SoSwapDEX (builder-fee revenue model; ALL volumes are ESTIMATES, not data)
 
 Every number below comes from the input file. Nothing is looked up or guessed.
 

@@ -12,7 +12,7 @@ Score: 5/10 | Vote: FUND IF
 3. The product may not feel better than the alternatives. SoDEX's own site and sodexextra.xyz bots already exist. If the swap itself feels the same, the safety layer is the only difference, and it must be felt on the first trade.
 
 ## The questions I would ask the founder
-- In one sentence, what is SoSwap?
+- In one sentence, what is SoSwapDEX?
 - Walk me through the first five minutes of a new user, tap by tap. Where is the first moment they feel the product is better?
 - Which of the six skills would you cut first, and which one survives?
 - Where does the experience pass between systems (wallet, WalletConnect, Gemini, SoDEX, SoSoValue), and what does the user see when each one fails?

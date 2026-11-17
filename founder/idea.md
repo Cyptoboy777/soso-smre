@@ -1,4 +1,4 @@
-# SoSwap
+# SoSwapDEX
 
 - What it is: A non-custodial trading interface on the SoDEX mainnet spot order book, with SoSoValue news/ETF/sector data and Gemini-powered trade-safety skills (trade check, position size, portfolio health, journal, alerts, brief).
 - Who it is for: Retail crypto traders who use or want to try SoDEX/ValueChain and want simpler onboarding, clearer costs and pre-trade safety checks. Exact segment still to be validated.

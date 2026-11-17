@@ -1,5 +1,5 @@
 {
-  "business": "SoSwap (builder-fee revenue model; ALL volumes are ESTIMATES, not data)",
+  "business": "SoSwapDEX (builder-fee revenue model; ALL volumes are ESTIMATES, not data)",
   "unit": "USD 1,000 swapped",
   "price": 0.30,
   "variable": [

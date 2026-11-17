@@ -1,4 +1,4 @@
-/* Deterministic risk maths for the SoSwap "Skills" tab. Pure functions, no network, no AI.
+/* Deterministic risk maths for the SoSwapDEX "Skills" tab. Pure functions, no network, no AI.
  * The AI only EXPLAINS these results; it never changes a grade or a number. */
 
 export type Level = { price: number; size: number };

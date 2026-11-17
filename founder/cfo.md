@@ -7,7 +7,7 @@
 - **Board money conditions:** not met. Volume, native fee level and builder-term risk are open questions; no real data exists yet.
 - An accountant should check tax treatment of fee income. Not financial, legal or tax advice.
 
-# Unit economics: SoSwap (builder-fee revenue model; ALL volumes are ESTIMATES, not data)
+# Unit economics: SoSwapDEX (builder-fee revenue model; ALL volumes are ESTIMATES, not data)
 
 Every number below comes from the input file. Nothing is looked up or guessed.
 

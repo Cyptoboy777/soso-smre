@@ -1,9 +1,10 @@
-# SoSwap
+# SoSwapDEX
 
 Non-custodial trading interface on the **SoDEX mainnet spot order book** with **SoSoValue** news / ETF flows / sectors and an animated **AI assistant** (orb + animal bot faces). Next.js 16 + React 19 (App Router, Node ≥ 20.9) · framer-motion page/card/tab transitions · Tailwind · lucide-react. Deploys to Vercel as-is. All rights reserved; see LICENSE (source shared for review and judging only).
 
 | | |
 | --- | --- |
+| **Site** | https://soswapdex.xyz (DNS pending) |
 | **Live app** | https://soswap-sodex.vercel.app |
 | **Repo** | https://github.com/Cyptoboy777/soso-smre |
 | **Builder Race** | https://www.buildsoso.xyz (builder ID `2674`) |
@@ -13,7 +14,7 @@ Open the live app for current screens of Swap, Markets, Skills and the AI assist
 - **Swap** with live Route Preview (walks the real SoDEX order book), limit orders, chart, order book, a safety strip, and a cost receipt before you confirm
 - **Markets**: every SoDEX spot pair, SoSoValue news, ETF flows, sector moves, and a local watchlist
 - **Skills**: Trade Check, Position Size and Portfolio are deterministic code in `lib/risk.ts`. Journal and Price Alerts are also in this tab. Gemini only explains those results; it cannot override a grade or place an order.
-- **SoSwap AI**: floating assistant with six animal faces (fox, bull, bear, owl, cat, panda). It reads a live SoDEX + SoSoValue snapshot server-side. If `AI_API_KEY` is unset, it uses `GEMINI_API_KEY`.
+- **SoSwapDEX AI**: floating assistant with six animal faces (fox, bull, bear, owl, cat, panda). It reads a live SoDEX + SoSoValue snapshot server-side. If `AI_API_KEY` is unset, it uses `GEMINI_API_KEY`.
 - **Cross-Chain (Mirror)**: indicative estimate only (not an atomic swap)
 - **Bots (Drafts)**: DCA / Grid / Signal dry-run previews. They never send orders.
 
@@ -56,7 +57,7 @@ git push origin main
 1. vercel.com → **Add New… → Project** → import the GitHub repo (Framework: Next.js, nothing to change).
 2. **Environment Variables** (Production + Preview):
    - `SOSOVALUE_API_KEY` (news, ETF flows, sectors)
-   - `GEMINI_API_KEY` (Skills explanations and, if `AI_API_KEY` is empty, the SoSwap AI chat). Optional: `GEMINI_MODEL` (default `gemini-2.5-flash`)
+   - `GEMINI_API_KEY` (Skills explanations and, if `AI_API_KEY` is empty, the SoSwapDEX AI chat). Optional: `GEMINI_MODEL` (default `gemini-2.5-flash`)
    - Optional: `AI_API_KEY`, `AI_MODEL`, and `AI_BASE_URL` if you want a non-Gemini provider for the assistant
    - `NEXT_PUBLIC_BUILDER_ID` and `NEXT_PUBLIC_BUILDER_FEE` (public by design; `10` = 0.01%)
    - Optional: `NEXT_PUBLIC_WC_PROJECT_ID` for WalletConnect
@@ -67,7 +68,7 @@ git push origin main
 
 - Test a **tiny** real swap on mainnet with a small balance first. The signed-order path was built from the official SoDEX docs/SDK but could not be exercised against mainnet from the build environment.
 - The trading key is a "hot key": its permissions are set by SoDEX. Users should fund only what they intend to trade and revoke keys at sodex.com/apikeys.
-- SoSwap is independent and not operated by SoDEX. Keep the footer disclaimer.
+- SoSwapDEX is independent and not operated by SoDEX. Keep the footer disclaimer.
 
 ## Security notes
 - All secrets (`SOSOVALUE_API_KEY`, `GEMINI_API_KEY`, `AI_API_KEY`, `AI_BASE_URL`, `AI_MODEL`) are **server-side env vars only** — set them in Vercel → Settings → Environment Variables. Never prefix them with `NEXT_PUBLIC_`. `.env*` is gitignored.
@@ -82,7 +83,7 @@ git push origin main
 - Nothing in Skills places an order. No tool can guarantee against losses; the UI says so.
 
 ## Builder code: earning points (buildsoso.xyz)
-The SoDEX Builder Race ranks apps by **builder fees** and **authorized users**. SoSwap tags every order with your builder code:
+The SoDEX Builder Race ranks apps by **builder fees** and **authorized users**. SoSwapDEX tags every order with your builder code:
 1. Create/fund your builder account on SoDEX: it needs **≥ 100 vUSDC in both Spot and Perps**. Its account ID is your *builder ID*.
 2. Set `NEXT_PUBLIC_BUILDER_ID=<your account id>` and `NEXT_PUBLIC_BUILDER_FEE` (tenths of a bp; `10` = 1 bp = 0.01%) in Vercel and redeploy. These values are public by design.
 3. Users approve the fee once (wallet signature `ApproveBuilderFeeAction`, no gas) from *Get started* or the wallet menu, and can revoke it. Only approved users' orders carry `builder: {id, fee}` (last field of the signed batch, `id` before `fee`).
@@ -90,15 +91,15 @@ The SoDEX Builder Race ranks apps by **builder fees** and **authorized users**. 
 
 ## Mobile
 - **Installable app (PWA):** manifest, icons and a service worker (`public/sw.js`, never caches `/api`). Android/desktop Chrome show *Install app*; iOS shows the Share → Add to Home Screen steps.
-- **Wallets on phones:** *Connect wallet* offers MetaMask / Trust / Coinbase / OKX deep links that reopen SoSwap inside the wallet's browser, plus a copy-link button.
+- **Wallets on phones:** *Connect wallet* offers MetaMask / Trust / Coinbase / OKX deep links that reopen SoSwapDEX inside the wallet's browser, plus a copy-link button.
 
 ## Journal skill
 *Skills → Journal* reads your latest 100 SoDEX fills and shows volume, fees, maker share and realised P&L (FIFO, over that window only; unmatched sells are excluded and unrealised gains are not counted). `journalStats` in `lib/risk.ts` is pure and unit-tested; Gemini can optionally coach on the numbers.
 
 ## Safer swaps
 - **Safety strip** under the Swap button runs the same code checks as *Skills → Trade Check* on the live books (worst leg wins). A "High risk" grade adds a warning to the confirm step; it never blocks you.
-- **Cost receipt** in the confirm step itemises price impact, SoDEX fee and the SoSwap fee in dollars, plus the total cost as a % of the order.
-- **Price alerts** (*Skills → Price Alerts*) are stored on the device and checked while SoSwap is open; browser notifications are optional.
+- **Cost receipt** in the confirm step itemises price impact, SoDEX fee and the SoSwapDEX fee in dollars, plus the total cost as a % of the order.
+- **Price alerts** (*Skills → Price Alerts*) are stored on the device and checked while SoSwapDEX is open; browser notifications are optional.
 
 ## Growth features
 - **Share card:** after a confirmed swap, the confirm dialog offers *Share* / *Download image*. The PNG is drawn in the browser (`components/shareCard.ts`), contains no address or balances, and is never uploaded.
@@ -116,7 +117,7 @@ Known advisory: `npm audit` reports a `zod` memory-exhaustion DoS (<4.6.6) insid
 
 ## How signing works (any wallet from the picker)
 1. **Connect:** shares only your address.
-2. **Enable trading (one wallet signature):** an EIP-712 `AddAPIKey` message registers a fresh trade key. SoDEX verifies it on ValueChain (chain id 286623). If your wallet insists the typed-data chain equals its active network, SoSwap asks it to add/switch to ValueChain (RPC `https://mainnet.valuechain.xyz`, symbol SOSO, as published in SoDEX's support docs), as sodex.com does. Works with MetaMask-style wallets and WalletConnect.
+2. **Enable trading (one wallet signature):** an EIP-712 `AddAPIKey` message registers a fresh trade key. SoDEX verifies it on ValueChain (chain id 286623). If your wallet insists the typed-data chain equals its active network, SoSwapDEX asks it to add/switch to ValueChain (RPC `https://mainnet.valuechain.xyz`, symbol SOSO, as published in SoDEX's support docs), as sodex.com does. Works with MetaMask-style wallets and WalletConnect.
 3. **Orders:** signed locally by the trade key, so there are no wallet pop-ups per trade. The key lives in `sessionStorage` for this tab only.
-4. **SoSwap fee (optional, one signature):** `ApproveBuilderFeeAction`, same network handling.
-Testnet's RPC isn't published, so on testnet SoSwap can't auto-add the network: add it manually or import a key from sodex.com/apikeys.
+4. **SoSwapDEX fee (optional, one signature):** `ApproveBuilderFeeAction`, same network handling.
+Testnet's RPC isn't published, so on testnet SoSwapDEX can't auto-add the network: add it manually or import a key from sodex.com/apikeys.

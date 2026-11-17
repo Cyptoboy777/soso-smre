@@ -58,15 +58,15 @@ export function InstallButton({ className = '' }: { className?: string }) {
         Install app
       </button>
       {help && (
-        <div role="dialog" aria-modal="true" aria-label="Install SoSwap" className="fixed inset-0 z-[80] grid place-items-end bg-black/70 p-3 sm:place-items-center" onClick={() => setHelp(false)}>
+        <div role="dialog" aria-modal="true" aria-label="Install SoSwapDEX" className="fixed inset-0 z-[80] grid place-items-end bg-black/70 p-3 sm:place-items-center" onClick={() => setHelp(false)}>
           <div onClick={(e) => e.stopPropagation()} className="ss-fade w-full max-w-sm rounded-2xl border border-white/10 bg-[#0a0a0c] p-5">
-            <div className="text-base font-bold text-zinc-50">Add SoSwap to your Home Screen</div>
+            <div className="text-base font-bold text-zinc-50">Add SoSwapDEX to your Home Screen</div>
             <ol className="mt-3 list-decimal space-y-2 pl-5 text-sm text-zinc-300">
               <li>Open this page in <b>Safari</b>.</li>
               <li>Tap the <b>Share</b> button (square with an arrow).</li>
               <li>Choose <b>Add to Home Screen</b>, then <b>Add</b>.</li>
             </ol>
-            <p className="mt-3 text-[11px] text-zinc-500">It then opens full-screen like a normal app. To trade on a phone, open SoSwap inside your wallet app's browser (Connect wallet shows the shortcuts).</p>
+            <p className="mt-3 text-[11px] text-zinc-500">It then opens full-screen like a normal app. To trade on a phone, open SoSwapDEX inside your wallet app's browser (Connect wallet shows the shortcuts).</p>
             <button onClick={() => setHelp(false)} className="mt-4 h-10 w-full rounded-xl border border-white/10 bg-white/[0.05] text-sm font-semibold text-zinc-100">Got it</button>
           </div>
         </div>

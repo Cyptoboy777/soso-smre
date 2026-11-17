@@ -1,4 +1,4 @@
-/* SoSwap AI — orange / black / white theme */
+/* SoSwapDEX AI — orange / black / white theme */
 .ss-launcher, .ss-panel, .ss-panel * { box-sizing: border-box; }
 .ss-launcher {
   position: fixed; right: 28px; bottom: 28px; z-index: 9998;
@@ -85,7 +85,7 @@
   .ss-orb, .ss-typing i, .ss-voice, .ss-panel { animation:none !important; transition:none !important; }
 }
 
-/* ───── SoSwap AI helmet-orb (SVG) ───── */
+/* ───── SoSwapDEX AI helmet-orb (SVG) ───── */
 .ss-orb--v2 { animation: none; }
 .ss-orb--v2 svg { display: block; overflow: visible; }
 .ss-orb--stage { width: 100%; height: auto; aspect-ratio: 200 / 230; }

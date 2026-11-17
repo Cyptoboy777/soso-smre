@@ -22,7 +22,7 @@ async function init() {
         optionalMethods: ['eth_signTypedData_v4', 'wallet_switchEthereumChain', 'wallet_addEthereumChain', 'personal_sign'],
         showQrModal: true,
         qrModalOptions: { themeMode: 'dark', themeVariables: { '--wcm-accent-color': '#f97316', '--wcm-background-color': '#0a0a0c' } as any },
-        metadata: { name: 'SoSwap', description: 'Swap on the SoDEX order book. Non-custodial.', url: origin, icons: [origin + '/icons/icon-192.png'] },
+        metadata: { name: 'SoSwapDEX', description: 'Swap on the SoDEX order book. Non-custodial.', url: origin, icons: [origin + '/icons/icon-192.png'] },
       });
     })().catch((e) => { cached = null; throw e; });
   }

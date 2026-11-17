@@ -1,7 +1,7 @@
 'use client';
 import React, { useId } from 'react';
 
-/* Custom duotone icon set for the SoSwap Skills tab (orange gradient + white accent, 32x32 grid). */
+/* Custom duotone icon set for the SoSwapDEX Skills tab (orange gradient + white accent, 32x32 grid). */
 
 type IconProps = { size?: number; className?: string };
 

@@ -1,4 +1,4 @@
-/* SoSwap service worker: makes the app installable and keeps the shell available offline.
+/* SoSwapDEX service worker: makes the app installable and keeps the shell available offline.
  * It never caches /api/* (market data, account data and signed requests always hit the network). */
 const VERSION = 'soswap-v1';
 const SHELL = ['/', '/icons/icon-192.png', '/icons/icon-512.png'];

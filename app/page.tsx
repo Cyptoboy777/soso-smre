@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * SoSwap — a non-custodial trading interface for the public SoDEX spot CLOB (ValueChain).
+ * SoSwapDEX — a non-custodial trading interface for the public SoDEX spot CLOB (ValueChain).
  *
  * Stack: Next.js (app router) · React 18/19 · TypeScript · Tailwind CSS · lucide-react. No other dependencies
  * (keccak256 + secp256k1 signing are implemented in this file and verified against viem).
@@ -75,7 +75,7 @@ const DEADMAN_MS = 60_000; // schedule-cancel horizon, re-armed every 10s
 const QUOTE = 'vUSDC';
 
 const DISCLAIMER =
-  'SoSwap is an independent service built on the public SoDEX API and is not operated by SoDEX. Trading carries risk, including loss of the capital you commit. Trading volume has a cost; points, Treasure Boxes and fee tiers are set by SoDEX and can change. Nothing here is investment advice.';
+  'SoSwapDEX is an independent service built on the public SoDEX API and is not operated by SoDEX. Trading carries risk, including loss of the capital you commit. Trading volume has a cost; points, Treasure Boxes and fee tiers are set by SoDEX and can change. Nothing here is investment advice.';
 
 /* ═════════════════════════ types ═════════════════════════ */
 
@@ -1028,9 +1028,9 @@ function useSoSwapStore(): Store {
 
 /* ═════════════════════════ UI primitives ═════════════════════════ */
 
-/** SoSwap mark: an "S" drawn as two swap arrows (orange up-right, white down-left). */
+/** SoSwapDEX mark: an "S" drawn as two swap arrows (orange up-right, white down-left). */
 const Logo = ({ size = 36, glow = true }: { size?: number; glow?: boolean }) => (
-  <svg width={size} height={size} viewBox="0 0 64 64" fill="none" role="img" aria-label="SoSwap" style={glow ? { filter: 'drop-shadow(0 4px 14px rgba(249,115,22,0.55))' } : undefined}>
+  <svg width={size} height={size} viewBox="0 0 64 64" fill="none" role="img" aria-label="SoSwapDEX" style={glow ? { filter: 'drop-shadow(0 4px 14px rgba(249,115,22,0.55))' } : undefined}>
     <defs>
       <linearGradient id="ssO" x1="12" y1="6" x2="52" y2="34" gradientUnits="userSpaceOnUse"><stop stopColor="#fdba74" /><stop offset=".5" stopColor="#fb923c" /><stop offset="1" stopColor="#ea580c" /></linearGradient>
       <linearGradient id="ssW" x1="52" y1="30" x2="12" y2="60" gradientUnits="userSpaceOnUse"><stop stopColor="#ffffff" /><stop offset="1" stopColor="#a1a1aa" /></linearGradient>
@@ -1043,7 +1043,7 @@ const Logo = ({ size = 36, glow = true }: { size?: number; glow?: boolean }) => 
 );
 const Wordmark = () => (
   <span className="text-[17px] font-extrabold tracking-tight text-zinc-50">
-    So<span className="bg-gradient-to-r from-orange-300 to-orange-500 bg-clip-text text-transparent">Swap</span>
+    So<span className="bg-gradient-to-r from-orange-300 to-orange-500 bg-clip-text text-transparent">SwapDEX</span>
   </span>
 );
 
@@ -1239,13 +1239,13 @@ function BuilderBlock() {
   return (
     <div className="rounded-2xl border border-white/[0.07] bg-black/30 p-3">
       <div className="mb-1.5 flex items-center justify-between">
-        <span className="flex items-center gap-2 text-sm font-semibold text-zinc-100"><Coins className="h-4 w-4 text-orange-400" />SoSwap fee</span>
+        <span className="flex items-center gap-2 text-sm font-semibold text-zinc-100"><Coins className="h-4 w-4 text-orange-400" />SoSwapDEX fee</span>
         <Badge tone={b.active ? 'emerald' : 'zinc'}>{b.active ? 'Approved' : b.approvedFee === undefined ? 'Checking…' : 'Not approved'}</Badge>
       </div>
-      <p className="mb-2 text-[11px] leading-relaxed text-zinc-500">SoSwap earns at most <b className="text-zinc-300">{bpText(b.fee)}</b> of each filled order, on top of SoDEX's own fees. You approve this once with a wallet signature (no gas, no funds move) and can revoke it any time.</p>
+      <p className="mb-2 text-[11px] leading-relaxed text-zinc-500">SoSwapDEX earns at most <b className="text-zinc-300">{bpText(b.fee)}</b> of each filled order, on top of SoDEX's own fees. You approve this once with a wallet signature (no gas, no funds move) and can revoke it any time.</p>
       {b.active
-        ? <Button size="sm" variant="danger" loading={busy} onClick={() => run(b.revoke, 'SoSwap fee approval revoked.')}>Revoke approval</Button>
-        : <Button size="sm" variant="primary" loading={busy} disabled={!S.accountID} onClick={() => run(b.approve, 'SoSwap fee approved.')}>Approve SoSwap fee</Button>}
+        ? <Button size="sm" variant="danger" loading={busy} onClick={() => run(b.revoke, 'SoSwapDEX fee approval revoked.')}>Revoke approval</Button>
+        : <Button size="sm" variant="primary" loading={busy} disabled={!S.accountID} onClick={() => run(b.approve, 'SoSwapDEX fee approved.')}>Approve SoSwapDEX fee</Button>}
     </div>
   );
 }
@@ -1371,7 +1371,7 @@ function ConnectPicker({ wallets, wcEnabled, busy, err, onPick, onWC }: {
               {busy === w.id ? <Spinner /> : <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-300">Detected</span>}
             </button>
           ))}</>)}
-        {group(wallets.length ? 'Popular' : mobile ? 'Open SoSwap in your wallet' : 'Popular')}
+        {group(wallets.length ? 'Popular' : mobile ? 'Open SoSwapDEX in your wallet' : 'Popular')}
         {popular.map((p) => {
           const href = mobile && p.mobile && url ? p.mobile(url) : p.install;
           return (
@@ -1394,13 +1394,13 @@ function ConnectPicker({ wallets, wcEnabled, busy, err, onPick, onWC }: {
             className="mt-3 h-10 w-full rounded-xl border border-white/10 bg-white/[0.04] text-[12px] font-semibold text-zinc-300">{copied ? 'Link copied' : 'Copy link to open in a wallet browser'}</button>
         )}
         {err && <div className="mt-3"><Notice tone="error">{err}</Notice></div>}
-        {mobile && wallets.length === 0 && <p className="mt-3 px-1 text-[11px] leading-relaxed text-zinc-500">Phone browsers cannot reach wallets directly. Tapping a wallet reopens SoSwap inside that wallet's own browser. Press Connect there.</p>}
+        {mobile && wallets.length === 0 && <p className="mt-3 px-1 text-[11px] leading-relaxed text-zinc-500">Phone browsers cannot reach wallets directly. Tapping a wallet reopens SoSwapDEX inside that wallet's own browser. Press Connect there.</p>}
       </div>
       <aside className={cx('rounded-2xl border border-white/[0.06] bg-white/[0.02] p-5', 'hidden sm:block')}>
         <div className="text-center text-[15px] font-semibold text-zinc-50">What is a wallet?</div>
         <div className="mt-5 space-y-5">
           <div className="flex gap-3.5"><span className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl border border-orange-500/30 bg-orange-500/10 text-orange-300"><Wallet className="h-6 w-6" /></span>
-            <div><div className="text-sm font-semibold text-zinc-100">Your keys, your funds</div><p className="mt-0.5 text-[13px] leading-relaxed text-zinc-400">A wallet holds the keys to your assets. SoSwap never holds them, and you approve every order yourself.</p></div></div>
+            <div><div className="text-sm font-semibold text-zinc-100">Your keys, your funds</div><p className="mt-0.5 text-[13px] leading-relaxed text-zinc-400">A wallet holds the keys to your assets. SoSwapDEX never holds them, and you approve every order yourself.</p></div></div>
           <div className="flex gap-3.5"><span className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl border border-orange-500/30 bg-orange-500/10 text-orange-300"><Plug className="h-6 w-6" /></span>
             <div><div className="text-sm font-semibold text-zinc-100">A new way to log in</div><p className="mt-0.5 text-[13px] leading-relaxed text-zinc-400">No email or password. Connecting shares only your public address. Nothing is sent or approved until you sign.</p></div></div>
         </div>
@@ -1453,7 +1453,7 @@ function KeyModal() {
           </div>
         )}
         <Notice tone="warn">
-          Treat this as a hot key. SoSwap could not confirm from the public docs that a standard API key is blocked from SoDEX's transfer endpoints, so: fund only what you intend to trade, let it expire, and revoke keys you no longer use at <a className="underline" href={`${SODEX_SITE}/apikeys`} target="_blank" rel="noreferrer">sodex.com/apikeys</a>.
+          Treat this as a hot key. SoSwapDEX could not confirm from the public docs that a standard API key is blocked from SoDEX's transfer endpoints, so: fund only what you intend to trade, let it expire, and revoke keys you no longer use at <a className="underline" href={`${SODEX_SITE}/apikeys`} target="_blank" rel="noreferrer">sodex.com/apikeys</a>.
         </Notice>
         {err && <Notice tone="error">{err}</Notice>}
         <Button variant="primary" size="lg" className="w-full" loading={busy} onClick={go} disabled={mode === 'import' && (!name || !pk)}>
@@ -1545,7 +1545,7 @@ function ShareTrade({ data }: { data: ShareData }) {
   const ref = useRef<HTMLCanvasElement>(null);
   const [note, setNote] = useState('');
   const url = typeof window !== 'undefined' ? window.location.origin + '/' : '';
-  const text = `Just swapped ${data.pay} for about ${data.get} on SoDEX with SoSwap. The total cost was shown before I signed. ${url}`;
+  const text = `Just swapped ${data.pay} for about ${data.get} on SoDEX with SoSwapDEX. The total cost was shown before I signed. ${url}`;
   useEffect(() => { if (ref.current) drawShareCard(ref.current, data); }, [data]);
   const share = async () => {
     try {
@@ -2148,7 +2148,7 @@ function SwapPanel() {
           lines={[
             { k: 'Price impact', sub: 'vs best price', v: usd(receipt.impactUsd, 3) },
             { k: 'SoDEX trading fee', v: usd(q.feeUsd, 3) },
-            ...(builderBp ? [{ k: 'SoSwap fee', sub: bpText(builderBp), v: usd(receipt.appFee, 3) }] : []),
+            ...(builderBp ? [{ k: 'SoSwapDEX fee', sub: bpText(builderBp), v: usd(receipt.appFee, 3) }] : []),
             { k: 'Lowest you should get', sub: `at ${slip}% slippage`, v: `${num(minOut, 8)} ${toKey}` },
             { k: 'Route', v: q.route.join(' → ') },
             { k: 'Network', v: NETS[S.net].label },
@@ -2157,7 +2157,7 @@ function SwapPanel() {
           { k: 'You pay', v: `${amount} ${fromKey}` }, { k: 'You receive (est.)', v: `${num(q.out, 8)} ${toKey}` },
           { k: 'Minimum received', v: `${num(minOut, 8)} ${toKey}` }, { k: 'Route', v: q.route.join(' → ') },
           { k: 'Price impact', v: `${q.impact.toFixed(2)}%`, tone: q.impact > slip / 2 ? 'warn' : 'good' }, { k: 'Fee (est.)', v: usd(q.feeUsd, 4) },
-          ...(S.builder.active ? [{ k: 'SoSwap fee (max)', v: `${bpText(Math.min(S.builder.fee, S.builder.approvedFee ?? 0))} of each fill` }] : []),
+          ...(S.builder.active ? [{ k: 'SoSwapDEX fee (max)', v: `${bpText(Math.min(S.builder.fee, S.builder.approvedFee ?? 0))} of each fill` }] : []),
           { k: 'Network', v: NETS[S.net].label, tone: S.net === 'mainnet' ? 'warn' : undefined },
         ] : []} />
       <AssetPicker open={picker === 'from'} onClose={() => setPicker(null)} onPick={chooseFrom} current={fromKey} />
@@ -2221,7 +2221,7 @@ function LimitPanel({ sym, book, pickedPrice }: { sym?: Sym; book?: { bids: Leve
       </div>
       <Button variant="primary" size="lg" className="w-full" disabled={dis} onClick={act}>{cta}</Button>
       <ReviewModal open={review} onClose={() => setReview(false)} title={`Review limit ${side}`} confirmLabel="Place order" run={run}
-        rows={[{ k: 'Pair', v: sym?.display ?? '' }, { k: 'Side', v: side.toUpperCase(), tone: side === 'buy' ? 'good' : 'bad' }, { k: 'Price', v: `${price} USDC` }, { k: 'Size', v: `${qty} ${sym?.base ?? ''}` }, { k: 'Total', v: usd(total) }, { k: 'Type', v: post ? 'Post-only (GTX)' : 'Good till cancelled (GTC)' }, ...(S.builder.active ? [{ k: 'SoSwap fee (max)', v: `${bpText(Math.min(S.builder.fee, S.builder.approvedFee ?? 0))} of each fill` }] : []), { k: 'Network', v: NETS[S.net].label, tone: S.net === 'mainnet' ? 'warn' : undefined }]} />
+        rows={[{ k: 'Pair', v: sym?.display ?? '' }, { k: 'Side', v: side.toUpperCase(), tone: side === 'buy' ? 'good' : 'bad' }, { k: 'Price', v: `${price} USDC` }, { k: 'Size', v: `${qty} ${sym?.base ?? ''}` }, { k: 'Total', v: usd(total) }, { k: 'Type', v: post ? 'Post-only (GTX)' : 'Good till cancelled (GTC)' }, ...(S.builder.active ? [{ k: 'SoSwapDEX fee (max)', v: `${bpText(Math.min(S.builder.fee, S.builder.approvedFee ?? 0))} of each fill` }] : []), { k: 'Network', v: NETS[S.net].label, tone: S.net === 'mainnet' ? 'warn' : undefined }]} />
     </div>
   );
 }
@@ -2291,7 +2291,7 @@ function Onboarding() {
     { done: !!S.wallet, label: 'Connect your wallet', sub: 'Shares your address only', act: () => S.setUi('connect', true) },
     { done: !!S.accountID, label: 'Fund your SoDEX account', sub: 'Deposit on sodex.com (BTC, ETH, SOL, USDC…)', act: () => window.open(SODEX_SITE, '_blank') },
     { done: S.keyValid, label: 'Enable trading', sub: 'One signature, key stays in this tab', act: () => S.setUi('key', true) },
-    ...(S.builder.enabled ? [{ done: S.builder.active, label: 'Approve the SoSwap fee', sub: `One signature, max ${bpText(S.builder.fee)} per fill. Optional, revocable`, act: () => { if (!S.accountID) { S.toast('err', 'Fund your SoDEX account first.'); return; } S.builder.approve().then(() => S.toast('ok', 'SoSwap fee approved.')).catch((e: any) => S.toast('err', e?.code === 4001 ? 'Signature rejected in the wallet.' : e?.message ?? 'Could not approve.')); } }] : []),
+    ...(S.builder.enabled ? [{ done: S.builder.active, label: 'Approve the SoSwapDEX fee', sub: `One signature, max ${bpText(S.builder.fee)} per fill. Optional, revocable`, act: () => { if (!S.accountID) { S.toast('err', 'Fund your SoDEX account first.'); return; } S.builder.approve().then(() => S.toast('ok', 'SoSwapDEX fee approved.')).catch((e: any) => S.toast('err', e?.code === 4001 ? 'Signature rejected in the wallet.' : e?.message ?? 'Could not approve.')); } }] : []),
     { done: swapped, label: 'Make your first swap', sub: 'Pick a pair, preview the route, sign in your wallet', act: () => S.setView('swap') },
   ];
   if (steps.every((s) => s.done)) return null;
@@ -2668,7 +2668,7 @@ function HomeView() {
       <div className="grid items-center gap-6 md:grid-cols-[1.1fr_1fr]">
         <Reveal>
           <span className="inline-flex items-center gap-2 rounded-lg border border-orange-500/30 bg-orange-500/[0.07] px-3 py-1.5 text-xs font-medium text-zinc-200"><Logo size={16} glow={false} />Powered by SoDEX Mainnet</span>
-          <h1 className="mt-5 text-6xl font-extrabold leading-none tracking-tight text-zinc-50 sm:text-7xl">So<span className="bg-gradient-to-b from-orange-300 to-orange-600 bg-clip-text text-transparent">Swap</span></h1>
+          <h1 className="mt-5 text-6xl font-extrabold leading-none tracking-tight text-zinc-50 sm:text-7xl">So<span className="bg-gradient-to-b from-orange-300 to-orange-600 bg-clip-text text-transparent">SwapDEX</span></h1>
           <p className="mt-4 text-2xl font-bold text-zinc-50">Swap on SoDEX mainnet.</p>
           <p className="mt-2 max-w-md text-lg leading-snug text-zinc-300">Live routes, a preview before you sign, your wallet.</p>
           <div className="mt-6 flex flex-wrap gap-3">
@@ -2686,7 +2686,7 @@ function HomeView() {
       <Reveal><div className="mt-6 grid gap-3 md:grid-cols-[1fr_1.2fr]">
         <Card className="p-4">
           <div className="text-sm font-semibold text-zinc-100">Check before you swap</div>
-          <p className="mt-2 text-sm leading-relaxed text-zinc-400">SoSwap checks the live SoDEX order book before every spot trade and shows the real cost, slippage and risk. Then you sign each order yourself. Funds stay in your SoDEX account; we never hold them or ask for a seed phrase.</p>
+          <p className="mt-2 text-sm leading-relaxed text-zinc-400">SoSwapDEX checks the live SoDEX order book before every spot trade and shows the real cost, slippage and risk. Then you sign each order yourself. Funds stay in your SoDEX account; we never hold them or ask for a seed phrase.</p>
           <p className="mt-2 text-xs text-zinc-500">You need a wallet and a funded SoDEX account. Trading runs on <b className="text-orange-300">Mainnet</b> with real funds, so start small.</p>
         </Card>
         <Onboarding />
@@ -3081,14 +3081,14 @@ function BotsView() {
 /* ───────── guide ───────── */
 
 const GUIDE: { id: string; icon: React.ReactNode; title: string; sub: string; body: React.ReactNode }[] = [
-  { id: 'overview', icon: <Home className="h-4 w-4" />, title: 'Overview', sub: 'A quick guide to SoSwap and what it can do.', body: null },
+  { id: 'overview', icon: <Home className="h-4 w-4" />, title: 'Overview', sub: 'A quick guide to SoSwapDEX and what it can do.', body: null },
   { id: 'connect', icon: <Wallet className="h-4 w-4" />, title: 'Connect Wallet', sub: 'Use your own Web3 wallet (e.g., MetaMask, Rabby, OKX).', body: <>Press <b>Connect Wallet</b> and pick a browser wallet. Connecting shares only your address. To trade, you need a SoDEX account (deposit on sodex.com). Then choose <b>Enable trading</b>: one wallet signature registers a session API key that lives only in this browser tab and signs your orders.</> },
   { id: 'swap', icon: <ArrowDownUp className="h-4 w-4" />, title: 'How to Swap', sub: 'Choose a pair, review the route, and sign the transaction.', body: <>Pick the <b>From</b> and <b>To</b> tokens and an amount. Every pair on SoDEX is quoted in USDC, so a swap between two other tokens is two market orders routed through USDC. Review the summary, confirm, and watch the fills.</> },
   { id: 'route', icon: <Star className="h-4 w-4" />, title: 'Route Preview', sub: 'See the live route and estimate before you sign.', body: <>The Route Preview walks the live SoDEX order book to estimate what you receive, the price impact and the taker fee. It is an estimate: the book can move before your order fills, so a minimum-received limit based on your slippage setting protects each order.</> },
   { id: 'markets', icon: <BarChart3 className="h-4 w-4" />, title: 'Markets & Insights', sub: 'Get SoSoValue news, ETF flows, and sector moves.', body: <>Markets lists every SoDEX spot pair with live price, 24h change and volume. News, ETF flows and sectors come from SoSoValue and need a free API key (paste it in the panel). If a feed is down or no key is set you see an empty state, never sample numbers.</> },
   { id: 'cross', icon: <Link2 className="h-4 w-4" />, title: 'Cross-Chain (Mirror)', sub: 'View a staged cross-chain route and an indicative estimate.', body: <>Mirror shows an indicative estimate of what a source-chain asset is worth in a SoDEX token at the current price. It is a staged path, not an atomic swap: you deposit on SoDEX, swap here, then withdraw on SoDEX. Fees, spread, slippage and gas are not included.</> },
   { id: 'bots', icon: <Bot className="h-4 w-4" />, title: 'Bots (Drafts)', sub: 'Create trading strategies. Draft only. Nothing runs unattended.', body: <>DCA, Grid and Signal bots are drafts: they compute a dry-run preview from live prices and never send orders. Nothing runs in the background, and a closed tab means nothing happens.</> },
-  { id: 'safety', icon: <ShieldCheck className="h-4 w-4" />, title: 'Safety & FAQs', sub: 'How SoSwap handles your keys and funds.', body: <><ul className="list-disc space-y-1.5 pl-5"><li>SoSwap never holds your funds and never asks for a seed phrase.</li><li>The session API key is a hot key kept in this tab (sessionStorage). Its permissions are set by SoDEX; fund only what you intend to trade and revoke keys on sodex.com/apikeys.</li><li>{DISCLAIMER}</li></ul></> },
+  { id: 'safety', icon: <ShieldCheck className="h-4 w-4" />, title: 'Safety & FAQs', sub: 'How SoSwapDEX handles your keys and funds.', body: <><ul className="list-disc space-y-1.5 pl-5"><li>SoSwapDEX never holds your funds and never asks for a seed phrase.</li><li>The session API key is a hot key kept in this tab (sessionStorage). Its permissions are set by SoDEX; fund only what you intend to trade and revoke keys on sodex.com/apikeys.</li><li>{DISCLAIMER}</li></ul></> },
 ];
 
 function GuideView() {
@@ -3102,7 +3102,7 @@ function GuideView() {
       <div className="my-4 flex flex-wrap items-start justify-between gap-2">
         {flow.map((f, i) => <React.Fragment key={f.a}><div className="w-[88px] text-center"><div className="mx-auto mb-1 grid h-10 w-10 place-items-center text-orange-400">{f.i}</div><div className="text-[11px] font-semibold text-zinc-200">{f.a}</div><div className="text-[10px] leading-tight text-zinc-500">{f.b}</div></div>{i < flow.length - 1 && <ChevronRight className="mt-3 h-4 w-4 text-orange-500" />}</React.Fragment>)}
       </div>
-      <div className="mb-3 flex items-start gap-2.5 rounded-xl border border-orange-500/30 bg-orange-500/[0.06] p-3 text-[13px] text-zinc-200"><Info className="mt-0.5 h-4 w-4 shrink-0 text-orange-400" />SoSwap is a SoDEX mainnet swap. You connect your own wallet, see live markets and a route preview, and sign every order yourself.</div>
+      <div className="mb-3 flex items-start gap-2.5 rounded-xl border border-orange-500/30 bg-orange-500/[0.06] p-3 text-[13px] text-zinc-200"><Info className="mt-0.5 h-4 w-4 shrink-0 text-orange-400" />SoSwapDEX is a SoDEX mainnet swap. You connect your own wallet, see live markets and a route preview, and sign every order yourself.</div>
       <ul className="space-y-2.5">{checks.map((c) => <li key={c} className="flex items-start gap-2.5 text-[13px] text-zinc-200"><span className="mt-0.5 grid h-4 w-4 shrink-0 place-items-center rounded-full bg-emerald-500 text-black"><Check className="h-3 w-3" strokeWidth={3} /></span>{c}</li>)}</ul>
     </>
   ) : <div className="mt-3 text-[13px] leading-relaxed text-zinc-300">{cur.body}</div>;
@@ -3110,7 +3110,7 @@ function GuideView() {
 
   return (
     <div className="mx-auto max-w-[980px]">
-      <PageTitle icon={<BookOpen className="h-8 w-8" />} title="Guide" sub="Learn how to use SoSwap safely on SoDEX mainnet." />
+      <PageTitle icon={<BookOpen className="h-8 w-8" />} title="Guide" sub="Learn how to use SoSwapDEX safely on SoDEX mainnet." />
       {/* mobile: numbered step cards (tap to open) */}
       <div className="md:hidden">
         {!mobileOpen ? (
@@ -3296,7 +3296,7 @@ function SizeCheck() {
             <Row k="Position value" v={`${usd(res.notional)} (${res.notionalPctOfEquity.toFixed(0)}% of account)`} tone={res.notionalPctOfEquity > 100 ? 'bad' : undefined} /><Row k="Stop distance" v={`${res.stopDistPct.toFixed(2)}%`} />
           </div>
           {res.flags.length > 0 && <FlagList flags={res.flags} />}
-          <p className="mt-3 text-[11px] text-zinc-500">A stop does not guarantee your exit price: in a fast market a market order can fill beyond it. SoSwap does not place stop orders for you.</p>
+          <p className="mt-3 text-[11px] text-zinc-500">A stop does not guarantee your exit price: in a fast market a market order can fill beyond it. SoSwapDEX does not place stop orders for you.</p>
           <div className="mt-3"><AiButton ai={ai} onClick={() => ai.run('size-check', { pair: sym?.display, accountUsdc: eqN, riskPct: riskN, entry: entryN, stop: stopN, maxLossUsdc: +res.maxLoss.toFixed(2), positionValueUsdc: +res.notional.toFixed(2), positionPctOfAccount: +res.notionalPctOfEquity.toFixed(1), warnings: res.flags.map((f) => f.text) })} /></div>
         </div>
       ) : <div className="mt-4"><Notice tone="info">Enter an account size, a risk %, an entry and a different stop price to see your position size.</Notice></div>}
@@ -3338,7 +3338,7 @@ function JournalCard() {
     } catch (e: any) { setSt({ loading: false, err: String(e?.message || 'Could not load your fills.') }); }
   }, [S.wallet, S.net, S.accountID]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { load(); }, [load]);
-  if (!S.wallet) return <Card><Empty icon={<Wallet className="h-6 w-6" />} title="Connect a wallet to see your journal" body="Your fills are read from SoDEX for your address. Nothing is stored by SoSwap." action={<Button variant="primary" onClick={() => S.setUi('connect', true)}>Connect wallet</Button>} /></Card>;
+  if (!S.wallet) return <Card><Empty icon={<Wallet className="h-6 w-6" />} title="Connect a wallet to see your journal" body="Your fills are read from SoDEX for your address. Nothing is stored by SoSwapDEX." action={<Button variant="primary" onClick={() => S.setUi('connect', true)}>Connect wallet</Button>} /></Card>;
   const r = st.res;
   return (
     <Card className="p-4">
@@ -3369,7 +3369,7 @@ function JournalCard() {
 type PriceAlert = { id: string; symbol: string; dir: 'above' | 'below'; price: number; created: number; firedAt?: number };
 const ALERTS_KEY = 'soswap.alerts.v1';
 
-/** Watches the tickers the app already polls and notifies when a pair crosses a price. Only runs while SoSwap is open. */
+/** Watches the tickers the app already polls and notifies when a pair crosses a price. Only runs while SoSwapDEX is open. */
 function useAlerts() {
   const S = useS();
   const [list, setList] = useState<PriceAlert[]>([]);
@@ -3385,7 +3385,7 @@ function useAlerts() {
       const d = S.symByName[a.symbol]?.display ?? a.symbol;
       const text = `${d} is ${a.dir === 'above' ? 'at or above' : 'at or below'} ${a.price}`;
       S.toast('info', text);
-      try { if (typeof Notification !== 'undefined' && Notification.permission === 'granted') new Notification('SoSwap price alert', { body: text, icon: '/icons/icon-192.png' }); } catch { /* ignore */ }
+      try { if (typeof Notification !== 'undefined' && Notification.permission === 'granted') new Notification('SoSwapDEX price alert', { body: text, icon: '/icons/icon-192.png' }); } catch { /* ignore */ }
     }
   }, [S.tickers]); // eslint-disable-line react-hooks/exhaustive-deps
   return { list, add: (a: Omit<PriceAlert, 'id' | 'created'>) => setList((l) => [{ ...a, id: Math.random().toString(36).slice(2, 10), created: Date.now() }, ...l]), remove: (id: string) => setList((l) => l.filter((x) => x.id !== id)) };
@@ -3421,8 +3421,8 @@ function AlertsCard() {
         <Button variant="primary" disabled={!(p > 0)} onClick={() => { add({ symbol: pair, dir, price: p }); setPrice(''); S.toast('ok', 'Alert added.'); }}>Add alert</Button>
         {perm === 'default' && <Button onClick={ask}>Allow notifications</Button>}
       </div>
-      {perm === 'denied' && <div className="mt-3"><Notice tone="warn">Notifications are blocked in this browser. You will still see an alert inside SoSwap while it is open.</Notice></div>}
-      <p className="mt-3 text-[11px] text-zinc-500">Alerts are saved on this device and only checked while SoSwap is open in a tab or the installed app. They do not run in the background.</p>
+      {perm === 'denied' && <div className="mt-3"><Notice tone="warn">Notifications are blocked in this browser. You will still see an alert inside SoSwapDEX while it is open.</Notice></div>}
+      <p className="mt-3 text-[11px] text-zinc-500">Alerts are saved on this device and only checked while SoSwapDEX is open in a tab or the installed app. They do not run in the background.</p>
       {list.length === 0 ? <div className="mt-3"><Notice tone="info">No alerts yet. Pick a pair and a price above.</Notice></div> : (
         <ul className="mt-3 divide-y divide-white/[0.05]">
           {list.map((a) => (
@@ -3593,7 +3593,7 @@ function Shell() {
 
       <header className="sticky top-0 z-40 border-b border-white/[0.06] bg-black/80 backdrop-blur-xl">
         <div className="mx-auto flex max-w-[1180px] items-center gap-4 px-4 py-2.5">
-          <button onClick={() => S.setView('home')} className="flex items-center gap-2" aria-label="SoSwap home"><Logo size={32} /><Wordmark /></button>
+          <button onClick={() => S.setView('home')} className="flex items-center gap-2" aria-label="SoSwapDEX home"><Logo size={32} /><Wordmark /></button>
           <nav aria-label="Primary" className="ml-4 hidden items-center gap-1 md:flex">
             {NAV.filter((n) => n.id !== 'home').map((n) => (
               <button key={n.id} onClick={() => S.setView(n.id)} aria-current={view === n.id ? 'page' : undefined}

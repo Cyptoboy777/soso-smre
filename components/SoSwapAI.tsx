@@ -32,7 +32,7 @@ const SCRIPT: Beat[] = [
 const MENU = [
   { icon: BarChart3, label: "Check market", ask: "What are the top movers on SoDEX right now?" },
   { icon: Search, label: "Analyze token", ask: "What should I check before trading a token I don't know well?" },
-  { icon: Repeat, label: "Find best route", ask: "How does SoSwap find the best route for a swap on SoDEX?" },
+  { icon: Repeat, label: "Find best route", ask: "How does SoSwapDEX find the best route for a swap on SoDEX?" },
   { icon: Newspaper, label: "Check news", ask: "What are the latest SoSoValue headlines?" },
 ];
 
@@ -50,7 +50,7 @@ function Hero({ kind, busy, onAsk }: { kind: AnimalKind; busy: boolean; onAsk: (
     <div className="ss-hero">
       <AnimalOrb kind={kind} talking={busy} expression={beat.expr} stage />
       <div className="ss-hero__stage" onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}>
-        {beat.bubble === "hello" && <div className="ss-bubble" key="hello">Hello! I&apos;m SoSwap AI<div className="ss-wave">{Array.from({ length: 11 }).map((_, k) => <i key={k} />)}</div></div>}
+        {beat.bubble === "hello" && <div className="ss-bubble" key="hello">Hello! I&apos;m SoSwapDEX AI<div className="ss-wave">{Array.from({ length: 11 }).map((_, k) => <i key={k} />)}</div></div>}
         {beat.bubble === "swap" && <div className="ss-bubble" key="swap">Let&apos;s swap together!<div className="ss-wave">{Array.from({ length: 11 }).map((_, k) => <i key={k} />)}</div></div>}
         {beat.bubble === "menu" && (
           <div className="ss-bubble ss-bubble--menu" key="menu">
@@ -79,7 +79,7 @@ export default function SoSwapAI() {
     {
       role: "assistant",
       content:
-        "Hey, I'm SoSwap AI. I can explain swaps, routes and wallet safety, and I can read live SoDEX market data and SoSoValue headlines. I never ask for your seed phrase and I can't sign or send anything for you. What are we looking at?",
+        "Hey, I'm SoSwapDEX AI. I can explain swaps, routes and wallet safety, and I can read live SoDEX market data and SoSoValue headlines. I never ask for your seed phrase and I can't sign or send anything for you. What are we looking at?",
     },
   ]);
   const endRef = useRef<HTMLDivElement>(null);
@@ -153,7 +153,7 @@ export default function SoSwapAI() {
       <button
         className="ss-launcher"
         type="button"
-        aria-label={open ? "Close SoSwap AI" : "Open SoSwap AI"}
+        aria-label={open ? "Close SoSwapDEX AI" : "Open SoSwapDEX AI"}
         onClick={() => setOpen((value) => !value)}
       >
         {open ? <span className="ss-launcher__close">×</span> : <Orb compact kind={kind} talking={busy} />}
@@ -161,12 +161,12 @@ export default function SoSwapAI() {
       </button>
 
       {open && (
-        <section className="ss-panel" aria-label="SoSwap AI assistant">
+        <section className="ss-panel" aria-label="SoSwapDEX AI assistant">
           <header className="ss-panel__header">
             <div className="ss-panel__identity">
               <button type="button" className="ss-panel__orbbtn" onClick={() => setShowPick((v) => !v)} aria-expanded={showPick} aria-label="Change bot face" title="Change bot face"><Orb compact kind={kind} talking={busy} /></button>
               <div>
-                <div className="ss-panel__name">SoSwap AI <span className="ss-beta">BETA</span></div>
+                <div className="ss-panel__name">SoSwapDEX AI <span className="ss-beta">BETA</span></div>
                 <div className="ss-panel__status"><i /> Your Web3 co-pilot</div>
               </div>
             </div>
@@ -226,10 +226,10 @@ export default function SoSwapAI() {
                   void sendMessage();
                 }
               }}
-              placeholder="Ask SoSwap AI anything..."
+              placeholder="Ask SoSwapDEX AI anything..."
               rows={1}
               maxLength={2000}
-              aria-label="Message SoSwap AI"
+              aria-label="Message SoSwapDEX AI"
             />
             <button
               className={`ss-voice ${listening ? "is-listening" : ""}`}

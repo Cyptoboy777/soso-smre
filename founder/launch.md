@@ -1,4 +1,4 @@
-# Launch plan: SoSwap (no dates invented; start from today, 2026-11-15)
+# Launch plan: SoSwapDEX (no dates invented; start from today, 2026-11-15)
 
 ## Step 1: real test before more building
 Success line (set before running): 10 real non-builder users each complete one mainnet swap within 14 days, with the fee approved. Compare with the board's condition list. If fewer than 5 finish, fix onboarding before adding features.

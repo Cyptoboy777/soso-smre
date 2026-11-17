@@ -2,8 +2,8 @@ import type { MetadataRoute } from 'next';
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: 'SoSwap — Swap on SoDEX',
-    short_name: 'SoSwap',
+    name: 'SoSwapDEX — Swap on SoDEX',
+    short_name: 'SoSwapDEX',
     description: 'Non-custodial trading interface on the SoDEX spot order book with risk-check skills.',
     start_url: '/?source=pwa',
     scope: '/',

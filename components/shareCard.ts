@@ -1,5 +1,5 @@
 /* Renders the shareable trade card on a canvas. Contains NO wallet address, balances or account data:
- * only the pair, the amounts the user chose, the estimated cost and the SoSwap name. */
+ * only the pair, the amounts the user chose, the estimated cost and the SoSwapDEX name. */
 
 export type ShareData = { pay: string; get: string; costPct: number; netLabel: string };
 
@@ -30,7 +30,7 @@ export async function drawShareCard(canvas: HTMLCanvasElement, d: ShareData) {
   if (logo) ctx.drawImage(logo, 64, 56, 72, 72);
   ctx.fillStyle = '#fafafa'; ctx.font = `800 40px ${sans}`; ctx.textBaseline = 'middle';
   ctx.fillText('So', 156, 94);
-  const w = ctx.measureText('So').width; ctx.fillStyle = '#fb923c'; ctx.fillText('Swap', 156 + w, 94);
+  const w = ctx.measureText('So').width; ctx.fillStyle = '#fb923c'; ctx.fillText('SwapDEX', 156 + w, 94);
 
   // the trade, set large; this is the one thing the card is about
   ctx.textBaseline = 'alphabetic';

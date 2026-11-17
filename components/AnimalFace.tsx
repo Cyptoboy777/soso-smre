@@ -1,10 +1,10 @@
 'use client';
 import React, { useId } from 'react';
 
-/** 'orb' is the plain SoSwap AI helmet-orb; the others add an animal's ears / horns and a little nose + mouth to it. */
+/** 'orb' is the plain SoSwapDEX AI helmet-orb; the others add an animal's ears / horns and a little nose + mouth to it. */
 export type AnimalKind = 'orb' | 'dog' | 'fox' | 'cat' | 'bear' | 'bull' | 'owl';
 export const ANIMALS: { kind: AnimalKind; label: string; vibe: string }[] = [
-  { kind: 'orb', label: 'SoSwap orb', vibe: 'Classic' },
+  { kind: 'orb', label: 'SoSwapDEX orb', vibe: 'Classic' },
   { kind: 'dog', label: 'Dog', vibe: 'Loyal' },
   { kind: 'fox', label: 'Fox', vibe: 'Quick & clever' },
   { kind: 'cat', label: 'Cat', vibe: 'Curious' },
@@ -86,7 +86,7 @@ function Features({ kind }: { kind: AnimalKind }) {
 }
 
 /**
- * Animated SoSwap AI orb: silver helmet, black glass visor with glowing eyes, orbiting light rings, sparkles and,
+ * Animated SoSwapDEX AI orb: silver helmet, black glass visor with glowing eyes, orbiting light rings, sparkles and,
  * with `stage`, a glowing platform + name plate. Eyes blink and drift; `talking` bounces the eyes, speeds the rings
  * and moves the mouth. Everything stops under prefers-reduced-motion.
  */
@@ -100,7 +100,7 @@ export default function AnimalOrb({ kind, talking = false, compact = false, size
   const viewBox = stage ? '0 0 200 230' : '14 14 172 172';
 
   return (
-    <div className={`ss-orb ss-orb--v2 ${compact ? 'ss-orb--compact' : ''} ${still ? 'ss-orb--still' : ''} ${talking ? 'ss-orb--talk' : ''} ${stage ? 'ss-orb--stage' : ''}`} style={size ? { width: size, height: size } : undefined} role="img" aria-label={`${kind === 'orb' ? 'SoSwap AI' : kind} bot`}>
+    <div className={`ss-orb ss-orb--v2 ${compact ? 'ss-orb--compact' : ''} ${still ? 'ss-orb--still' : ''} ${talking ? 'ss-orb--talk' : ''} ${stage ? 'ss-orb--stage' : ''}`} style={size ? { width: size, height: size } : undefined} role="img" aria-label={`${kind === 'orb' ? 'SoSwapDEX AI' : kind} bot`}>
       <svg viewBox={viewBox} width="100%" height="100%" style={{ overflow: 'visible' }}>
         <defs>
           <radialGradient id={id('shell')} cx=".34" cy=".24" r=".95"><stop offset="0" stopColor="#ffffff" /><stop offset=".38" stopColor="#d9d9de" /><stop offset=".78" stopColor="#8b8b93" /><stop offset="1" stopColor="#4b4b52" /></radialGradient>
@@ -156,7 +156,7 @@ export default function AnimalOrb({ kind, talking = false, compact = false, size
             <path d="M32 31C42 33 46 36 45 42 44 52 28 53 21 47" stroke={url('sw')} strokeWidth="8" strokeLinecap="round" fill="none" />
             <path d="M9 46 21 55.500v-19z" fill={url('sw')} stroke={url('sw')} strokeWidth="3" strokeLinejoin="round" />
           </g>
-          {detail && <text x="83" y="150" fontSize="9.500" fontWeight="800" fill="#fff" fontFamily="Inter, system-ui, sans-serif" letterSpacing="-.2">SoSwap <tspan fill={OR}>AI</tspan></text>}
+          {detail && <text x="80" y="150" fontSize="8" fontWeight="800" fill="#fff" fontFamily="Inter, system-ui, sans-serif" letterSpacing="-.3">SoSwapDEX <tspan fill={OR}>AI</tspan></text>}
           </g>
 
           {/* front half of the orbit rings + second ring */}
