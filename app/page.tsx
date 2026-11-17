@@ -511,7 +511,23 @@ const OTYPE = { LIMIT: 1, MARKET: 2 } as const;
 type OrderIn = { symbolID: number; clOrdID: string; side: Side; type: 1 | 2; tif: 1 | 2 | 3 | 4; price?: string; quantity?: string; funds?: string };
 type OrderResult = { code: number; clOrdID: string; error?: string; orderID?: number };
 
+/** SoDEX answers "API key not found" when the tab's trade key is unknown to it (expired, revoked, or not yet active right after registration). */
+const isKeyGone = (e: unknown) => /api key/i.test(String((e as any)?.message ?? '')) && /not found|invalid|expired|revoked|disabled/i.test(String((e as any)?.message ?? ''));
+let onKeyGone: (() => void) | null = null;
 async function signedCall<T>(net: Net, key: TradeKey, method: 'POST' | 'DELETE', path: string, type: string, params: object): Promise<T> {
+  // A freshly registered key can take a moment to activate on SoDEX; a rejected request placed nothing, so retrying it is safe.
+  const fresh = Date.now() - (key.expiresAt - KEY_TTL_MS) < 60_000;
+  for (let a = 0; ; a++) {
+    try { return await signedCallOnce<T>(net, key, method, path, type, params); }
+    catch (e) {
+      if (!isKeyGone(e)) throw e;
+      if (fresh && a < 3) { await sleep(1500); continue; }
+      onKeyGone?.();
+      throw new ApiError('Your trading session has ended. Tap Enable trading to start a new one, then try again.', -2);
+    }
+  }
+}
+async function signedCallOnce<T>(net: Net, key: TradeKey, method: 'POST' | 'DELETE', path: string, type: string, params: object): Promise<T> {
   const body = JSON.stringify(params);
   const payloadJson = `{"type":${JSON.stringify(type)},"params":${body}}`; // key order = Go struct order, compact
   const nonce = nextNonce();
@@ -915,6 +931,7 @@ function useSoSwapStore(): Store {
   );
   const persistKey = (k: TradeKey | null) => { setKey(k); ssSet(KEY_STORE, k); };
   const forgetKey = useCallback(() => persistKey(null), []);
+  useEffect(() => { onKeyGone = () => persistKey(null); return () => { onKeyGone = null; }; }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   /** Signs EIP-712 typed data with the connected wallet (any wallet from the picker, incl. WalletConnect).
    *  SoDEX signs on ValueChain (chain id 286623), so wallets that insist the typed-data chain equals the active
