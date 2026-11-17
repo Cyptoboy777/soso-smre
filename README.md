@@ -1,6 +1,6 @@
 # SoSwap
 
-Non-custodial trading interface on the **SoDEX mainnet spot order book** with **SoSoValue** news / ETF flows / sectors and an animated **AI assistant** (orb + animal bot faces). Next.js 16 + React 19 (App Router, Node ≥ 20.9) · framer-motion page/card/tab transitions · Tailwind · lucide-react. Deploys to Vercel as-is. Licensed under MIT.
+Non-custodial trading interface on the **SoDEX mainnet spot order book** with **SoSoValue** news / ETF flows / sectors and an animated **AI assistant** (orb + animal bot faces). Next.js 16 + React 19 (App Router, Node ≥ 20.9) · framer-motion page/card/tab transitions · Tailwind · lucide-react. Deploys to Vercel as-is. All rights reserved; see LICENSE (source shared for review and judging only).
 
 | | |
 | --- | --- |
