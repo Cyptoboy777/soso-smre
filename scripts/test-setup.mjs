@@ -13,4 +13,5 @@ writeFileSync(join(d, 'setup.ts'), readFileSync('lib/setup.ts', 'utf8').replace(
 copyFileSync('tests/setup.test.ts', join(d, 'setup.test.ts'));
 const setup = nodeTest(join(d, 'setup.test.ts'));
 const keys = nodeTest('tests/api-key.test.ts');
-process.exit((setup.status ?? 1) || (keys.status ?? 1));
+const balances = nodeTest('tests/sodex-balances.test.ts');
+process.exit((setup.status ?? 1) || (keys.status ?? 1) || (balances.status ?? 1));
