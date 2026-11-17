@@ -2939,11 +2939,46 @@ function MarketsHub() {
 /* ───────── cross-chain (Mirror, indicative) ───────── */
 
 const CHAINS = [
-  { id: 'eth', name: 'Ethereum', native: 'ETH', short: 'ETH' },
+  { id: 'eth', name: 'Ethereum', native: 'ETH', short: 'ETH', evm: 1, usdc: { addr: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', dec: 6 }, gas: 0.003 },
   { id: 'sol', name: 'Solana', native: 'SOL', short: 'SOL' },
   { id: 'btc', name: 'Bitcoin', native: 'BTC', short: 'BTC' },
-  { id: 'bnb', name: 'BNB Chain', native: 'BNB', short: 'BNB' },
-];
+  { id: 'bnb', name: 'BNB Chain', native: 'BNB', short: 'BNB', evm: 56, usdc: { addr: '0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d', dec: 18 }, gas: 0.002 },
+] as { id: string; name: string; native: string; short: string; evm?: number; usdc?: { addr: string; dec: number }; gas?: number }[];
+
+/** Reads the connected wallet's balance of the chosen source token on its own chain. Only works while the wallet is on that chain. */
+function useSourceBalance(chain: (typeof CHAINS)[number], token: 'native' | 'usdc') {
+  const S = useS();
+  const [bal, setBal] = useState<number | null>(null);
+  const [state, setState] = useState<'idle' | 'loading' | 'ok' | 'switch' | 'na' | 'err'>('idle');
+  const provider = S.wallet?.info.provider;
+  const owner = S.wallet?.address;
+  const walletChain = S.wallet?.chainId;
+  useEffect(() => {
+    setBal(null);
+    if (!provider || !owner) { setState('idle'); return; }
+    if (!chain.evm) { setState('na'); return; }
+    if (walletChain !== chain.evm) { setState('switch'); return; }
+    let stop = false; setState('loading');
+    const load = async () => {
+      try {
+        let v: number;
+        if (token === 'native') {
+          const hex: string = await provider.request({ method: 'eth_getBalance', params: [owner, 'latest'] });
+          v = Number(BigInt(hex)) / 1e18;
+        } else {
+          const data = '0x70a08231' + owner.toLowerCase().replace('0x', '').padStart(64, '0');
+          const hex: string = await provider.request({ method: 'eth_call', params: [{ to: chain.usdc!.addr, data }, 'latest'] });
+          v = Number(BigInt(hex)) / 10 ** chain.usdc!.dec;
+        }
+        if (!stop) { setBal(v); setState('ok'); }
+      } catch { if (!stop) setState('err'); }
+    };
+    load();
+    const t = setInterval(load, 15000);
+    return () => { stop = true; clearInterval(t); };
+  }, [provider, owner, walletChain, chain, token]);
+  return { bal, state };
+}
 const selectCls = 'h-11 w-full appearance-none rounded-lg border border-white/10 bg-black/50 pl-11 pr-9 text-sm font-medium text-zinc-100 outline-none focus:border-orange-500/60';
 
 /** SoDEX spot balances for the connected wallet. One source (S.balances), cleared the moment the wallet disconnects. */
@@ -2987,6 +3022,11 @@ function CrossChainView() {
   const pFrom = priceUsd(srcAsset), pTo = priceUsd(toAsset);
   const est = amt && pFrom && pTo ? (amt * pFrom) / pTo : 0;
   const icon = (n: string) => <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2"><TokenIcon name={n} size={22} /></span>;
+  const { bal, state: balState } = useSourceBalance(chain, tokenKey === 'native' ? 'native' : 'usdc');
+  const reserve = tokenKey === 'native' ? chain.gas ?? 0 : 0;
+  const usable = bal == null ? 0 : Math.max(0, bal - reserve);
+  const pick = (f: number) => setAmount(String(Math.floor(usable * f * 1e6) / 1e6)) as unknown as void;
+  const over = bal != null && amt > bal;
 
   return (
     <div className="mx-auto max-w-[960px]">
@@ -3010,13 +3050,27 @@ function CrossChainView() {
                 <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" /></div>
               <AmountInput value={amount} onChange={(v) => { setAmount(v); setGo(false); }} className="flex-1 !h-11 [&_input]:text-right [&_input]:text-base [&_input]:font-semibold" label="Amount" />
             </div>
+            <div className="mt-2 flex items-center justify-between gap-2 text-[11px]" aria-live="polite">
+              <span className="tnum text-zinc-500">
+                {balState === 'ok' && bal != null ? <>Your {srcKey} on {chain.name}: <span className="text-zinc-200">{num(bal, 6)}</span></>
+                  : balState === 'loading' ? 'Reading your balance…'
+                  : balState === 'switch' ? `Switch your wallet to ${chain.name} to see this balance.`
+                  : balState === 'na' ? `${chain.name} balance can't be read from an Ethereum wallet here. Type the amount.`
+                  : balState === 'err' ? 'Could not read your balance. Type the amount.'
+                  : 'Connect a wallet to see your balance.'}
+              </span>
+              <div className="flex gap-1">{[0.1, 0.25, 0.5, 1].map((f) => (
+                <button key={f} type="button" disabled={balState !== 'ok' || !usable} onClick={() => { pick(f); setGo(false); }}
+                  className="ss-btn rounded-md border border-white/10 px-1.5 py-0.5 text-[10px] text-zinc-400 hover:border-orange-500 hover:text-orange-400 disabled:opacity-40">{f === 1 ? 'MAX' : `${f * 100}%`}</button>))}</div>
+            </div>
+            {over && <p role="alert" className="mt-1.5 text-[11px] text-rose-400">That is more than your {srcKey} balance on {chain.name}.</p>}
           </Field>
           <Field label="Receive on SoDEX">
             <div className="relative">{icon(toAsset?.key ?? 'SOSO')}
               <select aria-label="Receive token" value={toAsset?.key ?? ''} onChange={(e) => { setToKey(e.target.value); setGo(false); }} className={selectCls}>{toList.map((a) => <option key={a.key} value={a.key}>{a.key}</option>)}</select>
               <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" /></div>
           </Field>
-          <Button variant="primary" size="lg" className="w-full !rounded-lg" onClick={() => setGo(true)} disabled={!amt}>Get Mirror Route</Button>
+          <Button variant="primary" size="lg" className="w-full !rounded-lg" onClick={() => setGo(true)} disabled={!amt || over}>Get Mirror Route</Button>
         </div>
 
         <div className="space-y-3 rounded-2xl border border-orange-500/20 bg-black/40 p-4">
