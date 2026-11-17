@@ -29,12 +29,13 @@ import { InstallButton } from '@/components/Pwa';
 import { WalletGlyph, OfficialMark, resolveWalletKind } from '@/components/WalletLogos';
 import { SkillsMark, TradeCheckIcon, PositionIcon, PortfolioIcon, BriefIcon, NewsIcon, PlanIcon, JournalIcon, AlertIcon, SkillTile } from '@/components/SkillIcons';
 import { scanTrade, sizePosition, portfolioHealth, journalStats, type Grade, type Flag, type ScanOut } from '@/lib/risk';
+import { computeSetup, pickBest, assetAliases, etfAssetFor, type SetupOut, type SetupGrade } from '@/lib/setup';
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertTriangle, ArrowDownUp, ArrowUpRight, Bot, CalendarClock, Check, ChevronDown, Copy, ExternalLink,
   Grid3x3, History, Info, KeyRound, Layers, LineChart, Loader2, LogOut, Plug, Plus, RefreshCw, Search,
   Settings, ShieldCheck, Star, Timer, Trash2, TrendingDown, TrendingUp, Wallet, X, Square, Play, Repeat,
-  Home, BarChart3, Link2, BookOpen, Newspaper, Pencil, Zap, ChevronRight, Coins, Menu, Sparkles,
+  Home, BarChart3, Link2, BookOpen, Newspaper, Pencil, Zap, ChevronRight, Coins, Menu, Sparkles, Target,
 } from 'lucide-react';
 
 declare global {
@@ -2956,23 +2957,47 @@ function CrossChainView() {
 
 /* ───────── bots (drafts only: dry-run previews, nothing is ever sent) ───────── */
 
-type BotKind = 'dca' | 'grid' | 'signal';
+type BotKind = 'dca' | 'grid' | 'signal' | 'setup';
+type SetupDraft = {
+  on: boolean; pair: string; entry: string; stop: string; tp1: string; tp2: string;
+  qty: string; notional: string; riskPct: string; equity: string;
+  grade: SetupGrade | ''; rr: string; trend: string; at: number;
+};
 type BotCfg = {
   dca: { on: boolean; pair: string; amount: string; every: 'hourly' | 'daily' | 'weekly' };
   grid: { on: boolean; pair: string; lower: string; upper: string; levels: string; budget: string };
   signal: { on: boolean; pair: string; asset: 'BTC' | 'ETH'; threshold: string };
+  setup: SetupDraft;
 };
 const BOT_DEFAULT: BotCfg = {
   dca: { on: false, pair: '', amount: '25', every: 'daily' },
   grid: { on: false, pair: '', lower: '', upper: '', levels: '8', budget: '200' },
   signal: { on: false, pair: '', asset: 'BTC', threshold: '100000000' },
+  setup: { on: false, pair: '', entry: '', stop: '', tp1: '', tp2: '', qty: '', notional: '', riskPct: '1', equity: '', grade: '', rr: '', trend: '', at: 0 },
 };
 const BOT_LS = 'soswap.bots.v1';
 const EVERY_MS = { hourly: 3_600_000, daily: 86_400_000, weekly: 604_800_000 };
 
 function BotPreview({ kind, cfg, sym, price }: { kind: BotKind; cfg: BotCfg; sym?: Sym; price: number }) {
+  const S = useS();
   const sig = useFeed(() => fetchEtf(cfg.signal.asset), [cfg.signal.asset, kind]);
   const wrap = 'ss-fade mt-2 rounded-xl border border-white/[0.07] bg-black/30 p-3 text-xs';
+  if (kind === 'setup') {
+    const c = cfg.setup;
+    if (!c.at) return <div className={wrap}><span className="text-zinc-500">Build a setup above and save it to see a draft preview here.</span></div>;
+    return (
+      <div className={wrap}>
+        <div className="mb-2 font-semibold text-zinc-200">Saved setup for {sym?.display ?? c.pair} (draft)</div>
+        <Row k="Grade" v={c.grade === 'no-trade' ? 'No trade' : (c.grade || '–')} />
+        <Row k="Trend" v={c.trend || '–'} />
+        <Row k="Entry / Stop" v={`${px(parseFloat(c.entry))} / ${px(parseFloat(c.stop))}`} />
+        <Row k="TP1 / TP2" v={`${px(parseFloat(c.tp1))} / ${px(parseFloat(c.tp2))}`} />
+        <Row k="Size" v={`${c.qty} ${sym?.base ?? ''} · ${usd(parseFloat(c.notional) || 0)}`} />
+        <Row k="R:R to TP1" v={c.rr ? `1:${c.rr}` : '–'} />
+        <div className="mt-3"><Button size="sm" onClick={() => goToRoutePreview(S, c.pair, 'buy', c.notional)}>Preview route<ArrowUpRight className="h-3.5 w-3.5" /></Button></div>
+      </div>
+    );
+  }
   if (!sym || !price) return <div className={wrap}><span className="text-zinc-500">Waiting for the live price of the selected pair…</span></div>;
   if (kind === 'dca') {
     const c = cfg.dca, amt = parseFloat(c.amount) || 0;
@@ -3013,9 +3038,20 @@ function BotEditor({ kind, cfg, setCfg, onClose }: { kind: BotKind; cfg: BotCfg;
   const c: any = cfg[kind];
   const inp = 'h-10 w-full rounded-xl border border-white/10 bg-black/30 px-3 text-sm text-zinc-100 outline-none focus:border-orange-500/60';
   return (
-    <Modal open onClose={onClose} title={`Edit ${kind === 'dca' ? 'DCA' : kind === 'grid' ? 'Grid' : 'Signal'} bot (draft)`}>
+    <Modal open onClose={onClose} title={`Edit ${kind === 'dca' ? 'DCA' : kind === 'grid' ? 'Grid' : kind === 'setup' ? 'AI Setup' : 'Signal'} bot (draft)`}>
       <div className="space-y-3">
-        <Field label="Pair"><select value={c.pair || S.selected} onChange={(e) => upd({ pair: e.target.value })} className={inp}>{S.syms.map((s) => <option key={s.name} value={s.name}>{s.display}</option>)}</select></Field>
+        {kind !== 'setup' && <Field label="Pair"><select value={c.pair || S.selected} onChange={(e) => upd({ pair: e.target.value })} className={inp}>{S.syms.map((s) => <option key={s.name} value={s.name}>{s.display}</option>)}</select></Field>}
+        {kind === 'setup' && <>
+          <p className="text-[13px] text-zinc-400">This draft was saved from the AI Setup Builder. The levels stay as computed; rebuilding a setup overwrites them. Nothing is sent automatically.</p>
+          {c.at ? <div className="space-y-1 rounded-xl border border-white/[0.07] bg-black/30 p-3 text-xs">
+            <Row k="Pair" v={S.symByName[c.pair]?.display ?? c.pair} />
+            <Row k="Grade" v={c.grade === 'no-trade' ? 'No trade' : (c.grade || '–')} />
+            <Row k="Entry / Stop" v={`${px(parseFloat(c.entry))} / ${px(parseFloat(c.stop))}`} />
+            <Row k="TP1 / TP2" v={`${px(parseFloat(c.tp1))} / ${px(parseFloat(c.tp2))}`} />
+            <Row k="Size" v={`${usd(parseFloat(c.notional) || 0)} at ${c.riskPct || '1'}% risk`} />
+          </div> : <Notice tone="info">No setup has been saved yet.</Notice>}
+          <Button className="w-full" onClick={() => { setCfg({ ...cfg, setup: BOT_DEFAULT.setup }); onClose(); }}>Clear draft</Button>
+        </>}
         {kind === 'dca' && <>
           <Field label="Amount per run (USDC)"><AmountInput value={c.amount} onChange={(v) => upd({ amount: v })} suffix="USDC" label="Amount per run" /></Field>
           <Field label="Interval"><Segmented value={c.every} onChange={(v) => upd({ every: v })} options={[{ value: 'hourly', label: 'Hourly' }, { value: 'daily', label: 'Daily' }, { value: 'weekly', label: 'Weekly' }]} /></Field>
@@ -3035,22 +3071,287 @@ function BotEditor({ kind, cfg, setCfg, onClose }: { kind: BotKind; cfg: BotCfg;
   );
 }
 
+const SETUP_GRADE: Record<SetupGrade, { label: string; cls: string }> = {
+  A: { label: 'Grade A', cls: 'border-emerald-500/40 bg-emerald-500/15 text-emerald-300' },
+  B: { label: 'Grade B', cls: 'border-sky-500/40 bg-sky-500/15 text-sky-300' },
+  C: { label: 'Grade C', cls: 'border-orange-500/40 bg-orange-500/15 text-orange-300' },
+  'no-trade': { label: 'No trade', cls: 'border-rose-500/40 bg-rose-500/15 text-rose-300' },
+};
+const TREND_LABEL: Record<string, string> = { up: 'Up', down: 'Down', sideways: 'Sideways', unknown: 'Unknown' };
+
+type SetupCtx = NonNullable<Parameters<typeof computeSetup>[0]['context']>;
+
+async function loadSetupContext(): Promise<SetupCtx & { etfBtc?: { date: string; inflow: number } | null; etfEth?: { date: string; inflow: number } | null }> {
+  const ctx: SetupCtx & { etfBtc?: { date: string; inflow: number } | null; etfEth?: { date: string; inflow: number } | null } = {
+    headlines: [], newsStatus: 'ok', etf: null, etfStatus: 'n/a', etfBtc: null, etfEth: null,
+  };
+  try {
+    ctx.headlines = (await fetchNews()).map((n) => n.title).filter(Boolean);
+  } catch (e: any) {
+    ctx.headlines = [];
+    ctx.newsStatus = e?.code === NOT_CONFIGURED ? 'unconfigured' : 'missing';
+  }
+  const one = async (asset: 'BTC' | 'ETH') => {
+    try {
+      const days = await fetchEtf(asset);
+      const last = [...days].sort((a, b) => String(b.date).localeCompare(String(a.date)))[0];
+      return last ? { date: last.date, inflow: last.inflow } : null;
+    } catch (e: any) {
+      return e?.code === NOT_CONFIGURED ? ('unconfigured' as const) : ('missing' as const);
+    }
+  };
+  const [btc, eth] = await Promise.all([one('BTC'), one('ETH')]);
+  if (btc === 'unconfigured' || eth === 'unconfigured') ctx.etfStatus = 'unconfigured';
+  else if (btc === 'missing' && eth === 'missing') ctx.etfStatus = 'missing';
+  else {
+    ctx.etfBtc = typeof btc === 'object' ? btc : null;
+    ctx.etfEth = typeof eth === 'object' ? eth : null;
+  }
+  return ctx;
+}
+
+function contextFor(base: string, shared: Awaited<ReturnType<typeof loadSetupContext>>): SetupCtx {
+  const aliases = assetAliases(base);
+  const headlines = (shared.headlines ?? []).filter((t) => {
+    const low = t.toLowerCase();
+    return aliases.some((a) => {
+      const i = low.indexOf(a);
+      if (i < 0) return false;
+      const left = i === 0 || (low.charCodeAt(i - 1) < 97 || low.charCodeAt(i - 1) > 122);
+      const right = i + a.length === low.length || (low.charCodeAt(i + a.length) < 97 || low.charCodeAt(i + a.length) > 122);
+      return left && right;
+    });
+  }).slice(0, 3);
+  const asset = etfAssetFor(base);
+  const flow = asset === 'BTC' ? shared.etfBtc : asset === 'ETH' ? shared.etfEth : null;
+  return {
+    headlines,
+    newsStatus: shared.newsStatus,
+    etf: asset && flow ? { asset, date: flow.date, inflow: flow.inflow } : null,
+    etfStatus: asset ? (shared.etfStatus === 'unconfigured' || shared.etfStatus === 'missing' ? shared.etfStatus : (flow ? 'ok' : 'missing')) : 'n/a',
+  };
+}
+
+function setupExplain(res: SetupOut) {
+  const n = (v: number | null, d = 6) => (v != null && Number.isFinite(v) ? +v.toPrecision(d) : null);
+  return {
+    pair: res.display,
+    timeframe: '1 hour',
+    grade: res.grade,
+    trend: res.trend,
+    ema20: n(res.ema20),
+    ema50: n(res.ema50),
+    atr: n(res.atr),
+    support: n(res.support),
+    resistance: n(res.resistance),
+    resistance2: n(res.resistance2),
+    entry: n(res.entry),
+    stop: n(res.stop),
+    takeProfit1: n(res.tp1),
+    takeProfit2: n(res.tp2),
+    rewardToRiskTp1: n(res.rr1, 4),
+    rewardToRiskTp2: n(res.rr2, 4),
+    positionQty: n(res.qty),
+    positionUsdc: n(res.notional, 6),
+    maxLossUsdc: n(res.maxLoss, 6),
+    stopDistancePct: n(res.stopDistPct, 4),
+    spreadPct: n(res.spreadPct, 4),
+    priceImpactPct: n(res.impactPct, 4),
+    bookCoveragePct: n(res.coveragePct, 4),
+    candlesUsed: res.candlesUsed,
+    reasons: res.reasons,
+    warnings: res.flags.map((f) => f.text),
+    news: res.newsNote,
+    etf: res.etfNote || undefined,
+  };
+}
+
+function SetupBuilder({ cfg, setCfg }: { cfg: BotCfg; setCfg: (c: BotCfg) => void }) {
+  const S = useS();
+  const ai = useAi();
+  const [pair, setPair] = useState(S.selected);
+  const eq0 = S.available(QUOTE);
+  const [equity, setEquity] = useState('');
+  const [risk, setRisk] = useState('1');
+  const [state, setState] = useState<{ loading: boolean; mode?: 'one' | 'best'; err?: string; res?: SetupOut; scanned?: number; failures?: { display: string; reason: string }[]; saved?: boolean }>({ loading: false });
+  const gen = useRef(0);
+  const eqN = parseFloat(equity || (eq0 ? String(eq0) : '')) || 0;
+  const riskN = parseFloat(risk) || 0;
+  const r = state.res;
+
+  const buildPair = async (sym: Sym, shared: Awaited<ReturnType<typeof loadSetupContext>>): Promise<SetupOut> => {
+    const [klines, book] = await Promise.all([fetchKlines(S.net, sym.name, '1h', 80), fetchBook(S.net, sym.name, 50)]);
+    const t = S.tickers[sym.name];
+    return computeSetup({
+      pair: sym.name, display: sym.display, base: sym.base, candles: klines, bids: book.bids, asks: book.asks,
+      last: t?.last ?? 0, quoteVol: t?.quoteVol ?? 0, takerFee: sym.taker, halted: sym.halted,
+      minNotional: parseFloat(sym.minNotional) || 0, equity: eqN, riskPct: riskN, interval: '1h',
+      context: contextFor(sym.base, shared),
+    });
+  };
+
+  const finish = (id: number, next: typeof state) => {
+    if (id !== gen.current) return;
+    setState(next);
+    if (next.res) ai.run('setup-builder', setupExplain(next.res));
+  };
+
+  const run = async (mode: 'one' | 'best') => {
+    ai.reset();
+    if (!S.syms.length) { setState({ loading: false, err: 'Markets are still loading. Please try again in a moment.' }); return; }
+    if (!(eqN > 0)) { setState({ loading: false, err: 'Enter an account size in USDC.' }); return; }
+    if (!(riskN > 0)) { setState({ loading: false, err: 'Enter a risk percent. 1% is the usual starting point.' }); return; }
+    const id = ++gen.current;
+    setState({ loading: true, mode, saved: false });
+    try {
+      const shared = await loadSetupContext();
+      if (mode === 'one') {
+        const sym = S.symByName[pair] ?? S.syms.find((s) => s.name === pair);
+        if (!sym) { finish(id, { loading: false, err: 'That pair is not on the live market list right now.' }); return; }
+        const res = await buildPair(sym, shared);
+        finish(id, { loading: false, mode, res });
+        return;
+      }
+      const top = [...S.syms].filter((s) => !s.halted)
+        .map((s) => ({ s, vol: S.tickers[s.name]?.quoteVol ?? 0 }))
+        .sort((a, b) => b.vol - a.vol)
+        .slice(0, 8)
+        .map((x) => x.s);
+      if (!top.length) { finish(id, { loading: false, err: 'No live pairs are available to scan right now.' }); return; }
+      const results: SetupOut[] = [];
+      const failures: { display: string; reason: string }[] = [];
+      for (let i = 0; i < top.length; i += 4) {
+        if (id !== gen.current) return;
+        const batch = top.slice(i, i + 4);
+        const part = await Promise.all(batch.map(async (s) => {
+          try { return await buildPair(s, shared); }
+          catch { failures.push({ display: s.display, reason: 'Live market data for this pair could not be read.' }); return null; }
+        }));
+        for (const out of part) {
+          if (!out) continue;
+          results.push(out);
+          if (out.grade === 'no-trade') failures.push({ display: out.display, reason: out.reasons[0] || 'Did not meet the setup rules.' });
+        }
+      }
+      const best = pickBest(results);
+      if (!best) {
+        finish(id, {
+          loading: false, mode, scanned: top.length,
+          failures: failures.slice(0, 8),
+          err: 'No pair currently meets the rules (reward-to-risk of at least 1:2, enough book depth, a tight spread, and an up or sideways 1-hour trend).',
+        });
+        return;
+      }
+      setPair(best.pair);
+      finish(id, { loading: false, mode, res: best, scanned: top.length, failures: failures.slice(0, 8) });
+    } catch (e: any) {
+      const raw = typeof e?.message === 'string' ? e.message : '';
+      const msg = raw && !/\/api\/|ECONN|ENOENT|TypeError|stack/i.test(raw)
+        ? raw
+        : 'Could not read live market data right now. Please try again.';
+      finish(id, { loading: false, mode, err: msg });
+    }
+  };
+
+  const save = () => {
+    if (!r || r.grade === 'no-trade') return;
+    setCfg({
+      ...cfg,
+      setup: {
+        on: true, pair: r.pair, entry: String(r.entry), stop: String(r.stop), tp1: String(r.tp1), tp2: String(r.tp2),
+        qty: String(Number(r.qty.toPrecision(6))), notional: String(Math.round(r.notional * 100) / 100),
+        riskPct: String(riskN), equity: String(eqN), grade: r.grade, rr: r.rr1.toFixed(2), trend: r.trend, at: Date.now(),
+      },
+    });
+    setState((s) => ({ ...s, saved: true }));
+  };
+
+  return (
+    <Card className="p-4 sm:p-5">
+      <div className="mb-3 flex items-start gap-3">
+        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-orange-500/30 bg-orange-500/10 text-orange-300"><Target className="h-5 w-5" /></span>
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2"><h2 className="text-base font-bold text-zinc-50">AI Setup Builder</h2><span className="rounded-md bg-orange-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-orange-300">Code first</span></div>
+          <p className="mt-0.5 text-[13px] leading-relaxed text-zinc-400">Picks a spot-buy plan from live 1-hour candles and the SoDEX order book. Gemini only explains the numbers and cannot change them. Suggestions are not financial advice, nothing runs on its own, and you sign every order.</p>
+        </div>
+      </div>
+      <div className="grid gap-3 sm:grid-cols-3">
+        <Field label="Pair"><PairSelect value={pair || S.selected} onChange={(v) => { setPair(v); setState((s) => ({ ...s, res: undefined, err: undefined, saved: false })); ai.reset(); }} /></Field>
+        <Field label="Account size" hint={eq0 ? 'your free USDC' : 'enter manually'}><AmountInput value={equity} onChange={(v) => { setEquity(v); setState((s) => ({ ...s, res: undefined, err: undefined, saved: false })); ai.reset(); }} placeholder={eq0 ? eq0.toFixed(2) : '1000'} suffix="USDC" label="Account size in USDC" /></Field>
+        <Field label="Risk per trade" hint="1% is the default"><AmountInput value={risk} onChange={(v) => { setRisk(v); setState((s) => ({ ...s, res: undefined, err: undefined, saved: false })); ai.reset(); }} suffix="%" label="Risk percent" /></Field>
+      </div>
+      <div className="mt-3 flex flex-wrap gap-2">
+        <Button variant="primary" onClick={() => run('one')} loading={state.loading && state.mode === 'one'} disabled={state.loading}><Target className="h-4 w-4" />Build setup</Button>
+        <Button onClick={() => run('best')} loading={state.loading && state.mode === 'best'} disabled={state.loading}><Sparkles className="h-4 w-4 text-orange-400" />Best now</Button>
+      </div>
+      {state.loading && <div className="mt-3 flex items-center gap-2 text-sm text-zinc-400"><Spinner />{state.mode === 'best' ? 'Scanning the most active live pairs…' : 'Reading the live book and 1-hour candles…'}</div>}
+      {state.err && !r && (
+        <div className="mt-3">
+          <Notice tone="info">{state.err}</Notice>
+          {!!state.failures?.length && (
+            <ul className="mt-2 space-y-1 text-[12px] text-zinc-500">
+              {state.failures.map((f, i) => <li key={i}><span className="text-zinc-300">{f.display}:</span> {f.reason}</li>)}
+            </ul>
+          )}
+        </div>
+      )}
+      {r && (
+        <div className="ss-fade mt-4 rounded-xl border border-white/[0.07] bg-black/25 p-3.5">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <div className="text-sm font-bold text-zinc-50">{r.display}</div>
+              <div className="text-[11px] text-zinc-500">1-hour candles · {r.candlesUsed} bars{state.scanned ? ` · scanned ${state.scanned} pairs` : ''}</div>
+            </div>
+            <span className={cx('rounded-lg border px-2.5 py-1 text-xs font-bold', SETUP_GRADE[r.grade].cls)}>{SETUP_GRADE[r.grade].label}</span>
+          </div>
+          <div className="mt-3 grid gap-x-8 gap-y-1.5 sm:grid-cols-2">
+            <Row k="Trend" v={`${TREND_LABEL[r.trend] ?? r.trend}${r.ema20 && r.ema50 ? ` · EMA20 ${px(r.ema20)} / EMA50 ${px(r.ema50)}` : ''}`} />
+            <Row k="Support / Resistance" v={`${r.support ? px(r.support) : '–'} / ${r.resistance ? px(r.resistance) : '–'}`} />
+            <Row k="Entry" v={px(r.entry)} />
+            <Row k="Stop" v={px(r.stop)} tone="bad" />
+            <Row k="TP1 / TP2" v={`${px(r.tp1)} / ${px(r.tp2)}`} tone="good" />
+            <Row k="R:R" v={r.rr1 ? `1:${r.rr1.toFixed(2)} · 1:${r.rr2.toFixed(2)}` : '–'} />
+            {r.grade !== 'no-trade' && <>
+              <Row k="Position size" v={`${Number(r.qty.toPrecision(5))} ${r.base} · ${usd(r.notional)}`} />
+              <Row k="Max loss if stop hits" v={usd(r.maxLoss)} tone="bad" />
+            </>}
+            <Row k="Spread / impact" v={`${r.spreadPct.toFixed(2)}% / ${r.impactPct.toFixed(2)}%`} tone={r.spreadPct > 1 || r.impactPct > 2 ? 'bad' : r.spreadPct > 0.3 || r.impactPct > 0.5 ? 'warn' : undefined} />
+            <Row k="Book coverage" v={`${r.coveragePct.toFixed(0)}%`} tone={r.coveragePct < 99.9 && r.notional > 0 ? 'bad' : undefined} />
+          </div>
+          {r.reasons.length > 0 && <ul className="mt-3 space-y-1 text-[13px] text-zinc-400">{r.reasons.map((x, i) => <li key={i} className="flex gap-2"><Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-orange-300" /><span>{x}</span></li>)}</ul>}
+          {r.flags.length > 0 && <FlagList flags={r.flags} />}
+          {(r.newsNote || r.etfNote) && <div className="mt-3 space-y-1 rounded-lg bg-black/30 p-2.5 text-[12px] leading-relaxed text-zinc-400">{r.etfNote && <div>{r.etfNote}</div>}<div>{r.newsNote}</div></div>}
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Button size="md" onClick={() => goToRoutePreview(S, r.pair, 'buy', r.notional > 0 ? String(Math.round(r.notional * 100) / 100) : undefined)} disabled={!(r.entry > 0)}>Preview route<ArrowUpRight className="h-3.5 w-3.5" /></Button>
+            <Button size="md" variant="primary" onClick={save} disabled={r.grade === 'no-trade'}>{state.saved ? 'Saved as draft bot' : 'Save as draft bot'}</Button>
+          </div>
+          {state.saved && <p className="mt-2 text-[12px] text-emerald-300">Saved as a draft bot below. It will not place any order.</p>}
+          <p className="mt-3 text-[11px] leading-relaxed text-zinc-500">Suggestions are not financial advice. SoSwapDEX does not place this order or a stop for you. Preview the route and sign in your own wallet if you decide to trade.</p>
+        </div>
+      )}
+      <AiBox ai={ai} />
+    </Card>
+  );
+}
+
 function BotsView() {
   const S = useS();
   const [cfg, setCfgState] = useState<BotCfg>(BOT_DEFAULT);
   const [edit, setEdit] = useState<BotKind | null>(null);
-  useEffect(() => { const v = lsGet<Partial<BotCfg>>(BOT_LS, {}); setCfgState({ dca: { ...BOT_DEFAULT.dca, ...v.dca }, grid: { ...BOT_DEFAULT.grid, ...v.grid }, signal: { ...BOT_DEFAULT.signal, ...v.signal } }); }, []);
+  useEffect(() => { const v = lsGet<Partial<BotCfg>>(BOT_LS, {}); setCfgState({ dca: { ...BOT_DEFAULT.dca, ...v.dca }, grid: { ...BOT_DEFAULT.grid, ...v.grid }, signal: { ...BOT_DEFAULT.signal, ...v.signal }, setup: { ...BOT_DEFAULT.setup, ...v.setup } }); }, []);
   const setCfg = (c: BotCfg) => { setCfgState(c); lsSet(BOT_LS, c); };
   const bots: { kind: BotKind; name: string; desc: string; icon: React.ReactNode }[] = [
+    ...(cfg.setup.at ? [{ kind: 'setup' as const, name: 'AI Setup Bot', desc: 'Saved spot-buy levels from the builder above. Draft only.', icon: <span className="grid h-14 w-14 place-items-center rounded-full border border-orange-500/30 bg-orange-500/10 text-orange-300"><Target className="h-6 w-6" /></span> }] : []),
     { kind: 'dca', name: 'DCA Bot', desc: 'Buy at intervals (e.g., daily/weekly).', icon: <AnimalOrb kind="dog" size={54} compact still /> },
     { kind: 'grid', name: 'Grid Bot', desc: 'Trade in a price range.', icon: <AnimalOrb kind="owl" size={54} compact still /> },
     { kind: 'signal', name: 'Signal Bot', desc: 'Act on market signals (e.g., ETF/news).', icon: <AnimalOrb kind="bull" size={54} compact still /> },
   ];
   return (
     <div className="mx-auto max-w-[900px]">
-      <PageTitle icon={<Bot className="h-8 w-8" />} title="Bots (Drafts)" sub="Create and test trading strategies. Draft only. Nothing runs unattended."
+      <PageTitle icon={<Bot className="h-8 w-8" />} title="Bots (Drafts)" sub="Build a code-checked spot-buy setup, or draft a DCA, grid or signal plan. Nothing runs unattended."
         right={<span className="rounded-lg border border-indigo-400/30 bg-indigo-500/20 px-3 py-2 text-xs font-semibold text-indigo-200">Draft Mode</span>} />
-      <div className="space-y-3">
+      <SetupBuilder cfg={cfg} setCfg={setCfg} />
+      <div className="mt-4 space-y-3">
         {bots.map((b, bi) => {
           const c = cfg[b.kind];
           const sym = S.symByName[c.pair || S.selected] ?? S.syms[0];
@@ -3087,7 +3388,7 @@ const GUIDE: { id: string; icon: React.ReactNode; title: string; sub: string; bo
   { id: 'route', icon: <Star className="h-4 w-4" />, title: 'Route Preview', sub: 'See the live route and estimate before you sign.', body: <>The Route Preview walks the live SoDEX order book to estimate what you receive, the price impact and the taker fee. It is an estimate: the book can move before your order fills, so a minimum-received limit based on your slippage setting protects each order.</> },
   { id: 'markets', icon: <BarChart3 className="h-4 w-4" />, title: 'Markets & Insights', sub: 'Get SoSoValue news, ETF flows, and sector moves.', body: <>Markets lists every SoDEX spot pair with live price, 24h change and volume. News, ETF flows and sectors come from SoSoValue and need a free API key (paste it in the panel). If a feed is down or no key is set you see an empty state, never sample numbers.</> },
   { id: 'cross', icon: <Link2 className="h-4 w-4" />, title: 'Cross-Chain (Mirror)', sub: 'View a staged cross-chain route and an indicative estimate.', body: <>Mirror shows an indicative estimate of what a source-chain asset is worth in a SoDEX token at the current price. It is a staged path, not an atomic swap: you deposit on SoDEX, swap here, then withdraw on SoDEX. Fees, spread, slippage and gas are not included.</> },
-  { id: 'bots', icon: <Bot className="h-4 w-4" />, title: 'Bots (Drafts)', sub: 'Create trading strategies. Draft only. Nothing runs unattended.', body: <>DCA, Grid and Signal bots are drafts: they compute a dry-run preview from live prices and never send orders. Nothing runs in the background, and a closed tab means nothing happens.</> },
+  { id: 'bots', icon: <Bot className="h-4 w-4" />, title: 'Bots (Drafts)', sub: 'Create trading strategies. Draft only. Nothing runs unattended.', body: <>The AI Setup Builder computes a spot-buy plan from live 1-hour candles and the order book (trend, stop, targets and size). Gemini only explains those numbers and cannot change them. DCA, Grid and Signal bots are also drafts: they compute a dry-run preview from live prices and never send orders. Nothing runs in the background, and a closed tab means nothing happens.</> },
   { id: 'safety', icon: <ShieldCheck className="h-4 w-4" />, title: 'Safety & FAQs', sub: 'How SoSwapDEX handles your keys and funds.', body: <><ul className="list-disc space-y-1.5 pl-5"><li>SoSwapDEX never holds your funds and never asks for a seed phrase.</li><li>The session API key is a hot key kept in this tab (sessionStorage). Its permissions are set by SoDEX; fund only what you intend to trade and revoke keys on sodex.com/apikeys.</li><li>{DISCLAIMER}</li></ul></> },
 ];
 
@@ -3096,7 +3397,7 @@ function GuideView() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const cur = GUIDE.find((g) => g.id === sec)!;
   const flow = [{ i: <Wallet className="h-5 w-5" />, a: 'Connect', b: 'Wallet' }, { i: <ArrowDownUp className="h-5 w-5" />, a: 'Swap', b: '(Preview & Sign)' }, { i: <BarChart3 className="h-5 w-5" />, a: 'Markets', b: '(News & ETF Flows)' }, { i: <Link2 className="h-5 w-5" />, a: 'Cross-Chain', b: '(Mirror)' }, { i: <Bot className="h-5 w-5" />, a: 'Bots', b: '(Drafts)' }];
-  const checks = ['Uses real SoDEX mainnet markets and routes', 'Shows a clear preview before you sign', 'Integrates SoSoValue news, ETF flows, and sector data', 'Cross-chain Mirror is a staged path (not an atomic swap)', 'Bots are draft only (no unattended trading)', 'If a feed is down, you see an empty state (not sample prices)'];
+  const checks = ['Uses real SoDEX mainnet markets and routes', 'Shows a clear preview before you sign', 'Integrates SoSoValue news, ETF flows, and sector data', 'Cross-chain Mirror is a staged path (not an atomic swap)', 'Bots are draft only (no unattended trading), and the AI Setup Builder never places an order', 'If a feed is down, you see an empty state (not sample prices)'];
   const detail = sec === 'overview' ? (
     <>
       <div className="my-4 flex flex-wrap items-start justify-between gap-2">
