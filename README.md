@@ -16,7 +16,7 @@ Watch the guide demo at https://youtu.be/uuOAIz47hjU, or open the live app for c
 - **Markets**: every SoDEX spot pair, SoSoValue news, ETF flows, sector moves, and a local watchlist
 - **Skills**: Trade Check, Position Size and Portfolio are deterministic code in `lib/risk.ts`. Journal and Price Alerts are also in this tab. Gemini only explains those results; it cannot override a grade or place an order.
 - **SoSwapDEX AI**: floating assistant with six animal faces (fox, bull, bear, owl, cat, panda). It reads a live SoDEX + SoSoValue snapshot server-side. If `AI_API_KEY` is unset, it uses `GEMINI_API_KEY`.
-- **Cross-Chain (Mirror)**: indicative estimate only (not an atomic swap)
+- **Cross-Chain**: add funds from another chain or withdraw to one. You sign every route transaction. Deposits and withdrawals stay on sodex.com. Quotes are estimates.
 - **Bots (Drafts)**: DCA / Grid / Signal dry-run previews. They never send orders.
 
 ## How secrets are kept safe

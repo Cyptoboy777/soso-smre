@@ -1,0 +1,20 @@
+{
+  "_comment": "SIMULATED test fixture. Shape follows LI.FI GET /v1/quote (transactionRequest + estimate). Not a live quote.",
+  "id": "lifi-sim-001",
+  "transactionRequest": {
+    "from": "0x1111111111111111111111111111111111111111",
+    "to": "0x3333333333333333333333333333333333333333",
+    "data": "0xabcd",
+    "value": "0x2386c02600000",
+    "chainId": 1,
+    "gasLimit": "250000"
+  },
+  "action": { "toToken": { "symbol": "USDC", "decimals": 6 } },
+  "estimate": {
+    "toAmount": "9910000",
+    "toAmountMin": "9810000",
+    "executionDuration": 90,
+    "feeCosts": [{ "amountUSD": "0.15" }],
+    "gasCosts": [{ "amountUSD": "0.20" }]
+  }
+}

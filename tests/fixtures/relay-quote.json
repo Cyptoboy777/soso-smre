@@ -1,0 +1,34 @@
+{
+  "_comment": "SIMULATED test fixture. Shape follows Relay quote/v2 fields (steps, fees, details.currencyOut). Not a live quote.",
+  "steps": [
+    {
+      "id": "deposit",
+      "action": "Confirm transaction in your wallet",
+      "description": "Depositing funds to the relayer to execute the swap",
+      "kind": "transaction",
+      "items": [
+        {
+          "status": "incomplete",
+          "data": {
+            "from": "0x1111111111111111111111111111111111111111",
+            "to": "0x2222222222222222222222222222222222222222",
+            "data": "0x1234",
+            "value": "10000000000000000",
+            "chainId": 1
+          },
+          "check": { "endpoint": "/intents/status/v3?requestId=req_sim_001", "method": "GET" }
+        }
+      ]
+    }
+  ],
+  "fees": { "relayer": { "amountUsd": "0.42" } },
+  "details": {
+    "requestId": "req_sim_001",
+    "timeEstimate": 60,
+    "currencyOut": {
+      "amount": "9900000",
+      "minimumAmount": "9800000",
+      "currency": { "decimals": 6, "symbol": "USDC" }
+    }
+  }
+}

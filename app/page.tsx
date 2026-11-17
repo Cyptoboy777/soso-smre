@@ -13,7 +13,7 @@
  * API key used for trading. That key's private key lives in this browser tab (sessionStorage) and signs orders locally.
  * Treat it as a hot key (its permissions are set by SoDEX, not by this app). You can also import a key created at sodex.com/apikeys.
  *
- * Server routes (app/api): /api/sodex (gateway pass-through), /api/soso (SoSoValue, key stays server-side), /api/assistant.
+ * Server routes (app/api): /api/sodex (gateway pass-through), /api/soso (SoSoValue, key stays server-side), /api/assistant, /api/route (cross-chain quotes; Relay key stays server-side, LI.FI is the no-key fallback).
  */
 
 import AnimalOrb from '@/components/AnimalFace';
@@ -36,6 +36,21 @@ import {
   wrapUniversalSignature,
 } from '@/lib/sodex-keys';
 import { parsePerpsBalances, marginUsd, type MarginBalance } from '@/lib/sodex-balances';
+import {
+  assetsForToken, bestDestination, cheapestWithdraw, evmDestinationsFor, findAsset,
+  minDepositGate, tokensWithWithdrawOptions, totalWithdrawFee, CHAIN_LABEL, STABLECOINS, type SodexAsset,
+} from '@/lib/sodexConfig';
+import { toSmallest } from '@/lib/routes/amount';
+import { CHAIN_META, QUOTE_CHAIN_IDS, explorerTx, findRouteToken } from '@/lib/routes/tokens';
+import {
+  ESTIMATE_NOTE, FRIENDLY_BAD_RECIPIENT, FRIENDLY_NO_ROUTE,
+  type NormalizedQuote, type NormalizedStatus, type RouteProvider, type RouteStatusValue, type RouteStep,
+} from '@/lib/routes/types';
+import { loadSavedRoute, savedFromQuote, storeSavedRoute, type SavedRoute } from '@/lib/routes/persist';
+import {
+  UNKNOWN_SIG_MSG, allowanceCalldata, approvalStep, friendlyExecError, needsApproval,
+  nextPollMs, statusLabel, txParams,
+} from '@/lib/routes/execute';
 import React, { createContext, useCallback, useContext, useEffect, useId, useMemo, useRef, useState } from 'react';
 import {
   AlertTriangle, ArrowDownUp, ArrowUpRight, Bot, CalendarClock, Check, ChevronDown, Copy, ExternalLink,
@@ -3054,27 +3069,34 @@ function MarketsHub() {
   );
 }
 
-/* ───────── cross-chain (Mirror, indicative) ───────── */
+/* ───────── cross-chain (add funds / withdraw) ───────── */
 
 const CHAINS = [
-  { id: 'eth', name: 'Ethereum', native: 'ETH', short: 'ETH', evm: 1, usdc: { addr: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', dec: 6 }, gas: 0.003 },
-  { id: 'sol', name: 'Solana', native: 'SOL', short: 'SOL' },
-  { id: 'btc', name: 'Bitcoin', native: 'BTC', short: 'BTC' },
-  { id: 'bnb', name: 'BNB Chain', native: 'BNB', short: 'BNB', evm: 56, usdc: { addr: '0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d', dec: 18 }, gas: 0.002 },
-] as { id: string; name: string; native: string; short: string; evm?: number; usdc?: { addr: string; dec: number }; gas?: number }[];
+  { id: 'eth', name: 'Ethereum', native: 'ETH', short: 'ETH', evm: 1, sodex: 'ETH', usdc: { addr: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', dec: 6 }, usdt: { addr: '0xdAC17F958D2ee523a2206206994597C13D831ec7', dec: 6 }, gas: 0.003 },
+  { id: 'base', name: 'Base', native: 'ETH', short: 'BASE', evm: 8453, sodex: 'BASE', usdc: { addr: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913', dec: 6 }, gas: 0.0002 },
+  { id: 'arb', name: 'Arbitrum', native: 'ETH', short: 'ARB', evm: 42161, sodex: 'ARBITRUM', usdc: { addr: '0xaf88d065e77c8cC2239327C5EDb3A432268e5831', dec: 6 }, usdt: { addr: '0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9', dec: 6 }, gas: 0.0002 },
+  { id: 'bnb', name: 'BNB Chain', native: 'BNB', short: 'BNB', evm: 56, sodex: 'BSC_BNB', usdc: { addr: '0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d', dec: 18 }, usdt: { addr: '0x55d398326f99059fF775485246999027B3197955', dec: 18 }, gas: 0.002 },
+  { id: 'matic', name: 'Polygon', native: 'POL', short: 'POL', evm: 137, sodex: 'MATIC', usdc: { addr: '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359', dec: 6 }, gas: 0.05 },
+  { id: 'sol', name: 'Solana', native: 'SOL', short: 'SOL', sodex: 'SOL' },
+  { id: 'btc', name: 'Bitcoin', native: 'BTC', short: 'BTC', sodex: 'BTC' },
+] as { id: string; name: string; native: string; short: string; evm?: number; sodex: string; usdc?: { addr: string; dec: number }; usdt?: { addr: string; dec: number }; gas?: number }[];
+
+type SourceTok = 'native' | 'usdc' | 'usdt';
 
 /** Reads the connected wallet's balance of the chosen source token on its own chain. Only works while the wallet is on that chain. */
-function useSourceBalance(chain: (typeof CHAINS)[number], token: 'native' | 'usdc') {
+function useSourceBalance(chain: (typeof CHAINS)[number], token: SourceTok) {
   const S = useS();
   const [bal, setBal] = useState<number | null>(null);
   const [state, setState] = useState<'idle' | 'loading' | 'ok' | 'switch' | 'na' | 'err'>('idle');
   const provider = S.wallet?.info.provider;
   const owner = S.wallet?.address;
   const walletChain = S.wallet?.chainId;
+  const erc20 = token === 'usdc' ? chain.usdc : token === 'usdt' ? chain.usdt : undefined;
   useEffect(() => {
     setBal(null);
     if (!provider || !owner) { setState('idle'); return; }
     if (!chain.evm) { setState('na'); return; }
+    if (token !== 'native' && !erc20) { setState('na'); return; }
     if (walletChain !== chain.evm) { setState('switch'); return; }
     let stop = false; setState('loading');
     const load = async () => {
@@ -3085,8 +3107,8 @@ function useSourceBalance(chain: (typeof CHAINS)[number], token: 'native' | 'usd
           v = Number(BigInt(hex)) / 1e18;
         } else {
           const data = '0x70a08231' + owner.toLowerCase().replace('0x', '').padStart(64, '0');
-          const hex: string = await provider.request({ method: 'eth_call', params: [{ to: chain.usdc!.addr, data }, 'latest'] });
-          v = Number(BigInt(hex)) / 10 ** chain.usdc!.dec;
+          const hex: string = await provider.request({ method: 'eth_call', params: [{ to: erc20!.addr, data }, 'latest'] });
+          v = Number(BigInt(hex)) / 10 ** erc20!.dec;
         }
         if (!stop) { setBal(v); setState('ok'); }
       } catch { if (!stop) setState('err'); }
@@ -3094,10 +3116,79 @@ function useSourceBalance(chain: (typeof CHAINS)[number], token: 'native' | 'usd
     load();
     const t = setInterval(load, 15000);
     return () => { stop = true; clearInterval(t); };
-  }, [provider, owner, walletChain, chain, token]);
+  }, [provider, owner, walletChain, chain, token, erc20]);
   return { bal, state };
 }
 const selectCls = 'h-11 w-full appearance-none rounded-lg border border-white/10 bg-black/50 pl-11 pr-9 text-sm font-medium text-zinc-100 outline-none focus:border-orange-500/60';
+
+const ROUTE_FEE_BPS = Number(process.env.NEXT_PUBLIC_ROUTE_FEE_BPS || '0') > 0 ? Number(process.env.NEXT_PUBLIC_ROUTE_FEE_BPS) : 0;
+
+function sourceTokenKey(chain: (typeof CHAINS)[number], token: SourceTok) {
+  return token === 'native' ? chain.native : token === 'usdc' ? 'USDC' : 'USDT';
+}
+
+function sourceTokens(chain: (typeof CHAINS)[number]): { id: SourceTok; label: string }[] {
+  const out: { id: SourceTok; label: string }[] = [{ id: 'native', label: chain.native }];
+  if (chain.usdc) out.push({ id: 'usdc', label: 'USDC' });
+  if (chain.usdt) out.push({ id: 'usdt', label: 'USDT' });
+  return out;
+}
+
+function destKeyOf(token: string, chain: string) { return `${token}:${chain}`; }
+function parseDestKey(k: string): { token: string; chain: string } | null {
+  const i = k.lastIndexOf(':');
+  if (i <= 0) return null;
+  return { token: k.slice(0, i), chain: k.slice(i + 1) };
+}
+
+async function fetchRouteQuote(body: Record<string, unknown>): Promise<NormalizedQuote> {
+  const r = await fetch('/api/route/quote', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok || j?.error || !j?.steps) throw new Error(typeof j?.error === 'string' ? j.error : FRIENDLY_NO_ROUTE);
+  return j as NormalizedQuote;
+}
+
+async function fetchRouteStatus(q: { provider: RouteProvider; requestId?: string; txHash?: string; fromChain?: number; toChain?: number }): Promise<NormalizedStatus> {
+  const u = new URL('/api/route/status', window.location.origin);
+  u.searchParams.set('provider', q.provider);
+  if (q.provider === 'relay' && q.requestId) u.searchParams.set('requestId', q.requestId);
+  if (q.provider === 'lifi' && q.txHash) u.searchParams.set('txHash', q.txHash);
+  if (q.fromChain) u.searchParams.set('fromChain', String(q.fromChain));
+  if (q.toChain) u.searchParams.set('toChain', String(q.toChain));
+  const r = await fetch(u.pathname + u.search);
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok || j?.error) throw new Error(typeof j?.error === 'string' ? j.error : 'Could not check that route right now.');
+  return j as NormalizedStatus;
+}
+
+async function switchWalletChain(provider: any, chainId: number) {
+  const hex = '0x' + chainId.toString(16);
+  try {
+    await provider.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: hex }] });
+    return;
+  } catch (e: any) {
+    if (isUserRejected(e)) throw e;
+    const add = CHAIN_META[chainId]?.add;
+    if (!add) throw e;
+    await provider.request({ method: 'wallet_addEthereumChain', params: [{ chainId: hex, ...add }] });
+  }
+}
+
+function providerLabel(p: RouteProvider) {
+  return p === 'relay' ? 'Quoted by Relay' : 'Quoted by LI.FI';
+}
+
+function formatEta(sec: number | null) {
+  if (sec == null) return 'Depends on network confirmations';
+  if (sec < 60) return `About ${Math.max(1, Math.round(sec))} seconds`;
+  const m = Math.max(1, Math.round(sec / 60));
+  return m === 1 ? 'About 1 minute' : `About ${m} minutes`;
+}
+
+function RoutableDestinations() {
+  return evmDestinationsFor().filter((a) => findRouteToken(a.token, a.chain));
+}
+
 
 /** SoDEX balances for the connected wallet. Spot (S.balances) and Margin & Futures (S.marginBalances) clear the moment the wallet disconnects. */
 function SodexBalances({ compact = false }: { compact?: boolean }) {
@@ -3146,94 +3237,454 @@ function SodexBalances({ compact = false }: { compact?: boolean }) {
 
 function CrossChainView() {
   const S = useS();
-  const [chainId, setChainId] = useState('eth');
-  const chain = CHAINS.find((c) => c.id === chainId)!;
-  const [tokenKey, setTokenKey] = useState('native');
-  const [amount, setAmount] = useState('0.5');
-  const [toKey, setToKey] = useState('');
-  const [go, setGo] = useState(false);
-  const srcKey = tokenKey === 'native' ? chain.native : 'USDC';
-  const toList = S.assets;
-  const toAsset = S.assetByKey[toKey || (S.assetByKey['SOSO'] ? 'SOSO' : 'USDC')];
-  const srcAsset = S.assetByKey[srcKey];
-  const priceUsd = (a?: Asset) => (!a ? 0 : a.isQuote ? 1 : S.tickers[a.symbol!.name]?.last ?? 0);
-  const amt = parseFloat(amount) || 0;
-  const pFrom = priceUsd(srcAsset), pTo = priceUsd(toAsset);
-  const est = amt && pFrom && pTo ? (amt * pFrom) / pTo : 0;
-  const icon = (n: string) => <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2"><TokenIcon name={n} size={22} /></span>;
-  const { bal, state: balState } = useSourceBalance(chain, tokenKey === 'native' ? 'native' : 'usdc');
-  const reserve = tokenKey === 'native' ? chain.gas ?? 0 : 0;
-  const usable = bal == null ? 0 : Math.max(0, bal - reserve);
-  const pick = (f: number) => setAmount(String(Math.floor(usable * f * 1e6) / 1e6)) as unknown as void;
-  const over = bal != null && amt > bal;
-
+  const [tab, setTab] = useState<'add' | 'withdraw'>('add');
   return (
     <div className="mx-auto max-w-[960px]">
-      <PageTitle icon={<Link2 className="h-8 w-8" />} title="Cross-Chain (Mirror)" sub="Find a cross-chain route via SoDEX Mirror."
-        right={<span className="inline-flex items-center gap-2 rounded-lg border border-orange-500/40 bg-orange-500/[0.06] px-3 py-2 text-xs font-medium text-zinc-100"><AlertTriangle className="h-4 w-4 text-orange-400" />Indicative Estimate Only</span>} />
-      <div className="grid gap-4 md:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
-        <div className="space-y-3 rounded-2xl border border-orange-500/20 bg-black/40 p-4">
-          <Field label="From Chain">
-            <div className="relative">{icon(chain.native)}
-              <select aria-label="From chain" value={chainId} onChange={(e) => { setChainId(e.target.value); setTokenKey('native'); setGo(false); }} className={selectCls}>{CHAINS.map((c) => <option key={c.id} value={c.id}>{c.name} ({c.short})</option>)}</select>
-              <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" /></div>
-          </Field>
-          <Field label="To Chain">
-            <div className="relative"><span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2"><Logo size={22} glow={false} /></span>
-              <select aria-label="To chain" disabled className={cx(selectCls, 'opacity-90')}><option>SoDEX ({NETS[S.net].label})</option></select></div>
-          </Field>
-          <Field label="Token">
-            <div className="flex gap-2">
-              <div className="relative w-[44%]">{icon(srcKey)}
-                <select aria-label="Source token" value={tokenKey} onChange={(e) => { setTokenKey(e.target.value); setGo(false); }} className={selectCls}><option value="native">{chain.native}</option><option value="usdc">USDC</option></select>
-                <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" /></div>
-              <AmountInput value={amount} onChange={(v) => { setAmount(v); setGo(false); }} className="flex-1 !h-11 [&_input]:text-right [&_input]:text-base [&_input]:font-semibold" label="Amount" />
-            </div>
-            <div className="mt-2 flex items-center justify-between gap-2 text-[11px]" aria-live="polite">
-              <span className="tnum text-zinc-500">
-                {balState === 'ok' && bal != null ? <>Your {srcKey} on {chain.name}: <span className="text-zinc-200">{num(bal, 6)}</span></>
-                  : balState === 'loading' ? 'Reading your balance…'
-                  : balState === 'switch' ? `Switch your wallet to ${chain.name} to see this balance.`
-                  : balState === 'na' ? `${chain.name} balance can't be read from an Ethereum wallet here. Type the amount.`
-                  : balState === 'err' ? 'Could not read your balance. Type the amount.'
-                  : 'Connect a wallet to see your balance.'}
-              </span>
-              <div className="flex gap-1">{[0.1, 0.25, 0.5, 1].map((f) => (
-                <button key={f} type="button" disabled={balState !== 'ok' || !usable} onClick={() => { pick(f); setGo(false); }}
-                  className="ss-btn rounded-md border border-white/10 px-1.5 py-0.5 text-[10px] text-zinc-400 hover:border-orange-500 hover:text-orange-400 disabled:opacity-40">{f === 1 ? 'MAX' : `${f * 100}%`}</button>))}</div>
-            </div>
-            {over && <p role="alert" className="mt-1.5 text-[11px] text-rose-400">That is more than your {srcKey} balance on {chain.name}.</p>}
-          </Field>
-          <Field label="Receive on SoDEX">
-            <div className="relative">{icon(toAsset?.key ?? 'SOSO')}
-              <select aria-label="Receive token" value={toAsset?.key ?? ''} onChange={(e) => { setToKey(e.target.value); setGo(false); }} className={selectCls}>{toList.map((a) => <option key={a.key} value={a.key}>{a.key}</option>)}</select>
-              <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" /></div>
-          </Field>
-          <Button variant="primary" size="lg" className="w-full !rounded-lg" onClick={() => setGo(true)} disabled={!amt || over}>Get Mirror Route</Button>
-        </div>
+      <PageTitle icon={<Link2 className="h-8 w-8" />} title="Cross-Chain" sub="Add funds from another chain, or withdraw to one. You sign every transaction. SoSwapDEX never holds your funds."
+        right={<span className="inline-flex items-center gap-2 rounded-lg border border-orange-500/40 bg-orange-500/[0.06] px-3 py-2 text-xs font-medium text-zinc-100"><AlertTriangle className="h-4 w-4 text-orange-400" />Estimate only</span>} />
+      <div className="mb-4"><Segmented value={tab} onChange={setTab} options={[{ value: 'add', label: 'Add funds' }, { value: 'withdraw', label: 'Withdraw' }]} /></div>
+      {tab === 'add' ? <AddFundsPanel /> : <WithdrawPanel />}
+      <div className="mt-4"><SodexBalances /></div>
+    </div>
+  );
+}
 
-        <div className="space-y-3 rounded-2xl border border-orange-500/20 bg-black/40 p-4">
-          <h3 className="flex items-center gap-2 text-sm font-semibold text-orange-300"><Info className="h-4 w-4" />Mirror Route (Indicative)</h3>
-          <div className="space-y-2.5 text-[13px]">
-            <div className="flex justify-between"><span className="text-zinc-400">Route</span><span className="text-zinc-100">{chain.native} → SoDEX (Mirror)</span></div>
-            <div className="flex justify-between"><span className="text-zinc-400">Est. Receive</span><span className="tnum text-zinc-100">{est ? `≈ ${num(est, 4)} ${toAsset?.key}` : '–'}</span></div>
-            <div className="flex justify-between"><span className="text-zinc-400">Est. Time</span><span className="text-zinc-100">Depends on {chain.name} confirmations</span></div>
+function AddFundsPanel() {
+  const S = useS();
+  const [chainId, setChainId] = useState('eth');
+  const chain = CHAINS.find((c) => c.id === chainId)!;
+  const [tokenKey, setTokenKey] = useState<SourceTok>('native');
+  const tokens = sourceTokens(chain);
+  const srcKey = sourceTokenKey(chain, tokenKey);
+  const [amount, setAmount] = useState('');
+  const advice = useMemo(() => bestDestination(srcKey, chain.sodex, true), [srcKey, chain.sodex]);
+  const defaultDest = advice.kind === 'unsupported' ? destKeyOf('USDC', 'BASE') : destKeyOf(advice.asset.token, advice.asset.chain);
+  const [destSel, setDestSel] = useState(defaultDest);
+  useEffect(() => { setDestSel(defaultDest); setQuote(null); setQuoteErr(''); }, [defaultDest]);
+  const dest = parseDestKey(destSel);
+  const destAsset = dest ? findAsset(dest.token, dest.chain) : undefined;
+  const destTokenRef = dest ? findRouteToken(dest.token, dest.chain) : undefined;
+  const srcTokenRef = chain.evm ? findRouteToken(srcKey, chain.sodex) : undefined;
+  const amt = parseFloat(amount) || 0;
+  const usdApprox = STABLECOINS.has(srcKey) ? amt : (S.priceOf(srcKey) > 0 ? amt * S.priceOf(srcKey) : null);
+  const destUsd = destAsset && STABLECOINS.has(destAsset.token) ? (S.priceOf(destAsset.token) > 0 ? amt * (S.priceOf(srcKey) || 0) : amt) : null;
+  const gate = destAsset ? minDepositGate({ token: destAsset.token, chain: destAsset.chain, amount: destAsset.token === srcKey ? amt : (destUsd ?? amt), usdApprox: destUsd }) : { ok: false as const, reason: 'unsupported' as const, message: 'SoDEX will not credit this. Choose a supported token and chain instead.' };
+  // For routed swaps, out amount is unknown until quoted; still enforce the dest min on a same-token route using the source amount as a conservative check only when tokens match.
+  const sameToken = destAsset?.token === srcKey;
+  const preGate = destAsset
+    ? (sameToken ? minDepositGate({ token: destAsset.token, chain: destAsset.chain, amount: amt, usdApprox: STABLECOINS.has(destAsset.token) ? (usdApprox ?? amt) : null }) : { ok: amt > 0 } as const)
+    : gate;
+  const { bal, state: balState } = useSourceBalance(chain, tokenKey);
+  const reserve = tokenKey === 'native' ? chain.gas ?? 0 : 0;
+  const usable = bal == null ? 0 : Math.max(0, bal - reserve);
+  const pick = (f: number) => setAmount(String(Math.floor(usable * f * 1e6) / 1e6));
+  const over = bal != null && amt > bal;
+  const evmOk = !!chain.evm;
+  const direct = destAsset && chain.sodex === destAsset.chain && srcKey === destAsset.token;
+  const [quote, setQuote] = useState<NormalizedQuote | null>(null);
+  const [quoteErr, setQuoteErr] = useState('');
+  const [quoting, setQuoting] = useState(false);
+  const icon = (n: string) => <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2"><TokenIcon name={n} size={22} /></span>;
+
+  const destChoices = RoutableDestinations();
+  const unsupportedPick = dest && !destAsset;
+
+  return (
+    <div className="grid gap-4 md:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
+      <div className="space-y-3 rounded-2xl border border-orange-500/20 bg-black/40 p-4">
+        <Field label="From chain">
+          <div className="relative">{icon(chain.native)}
+            <select aria-label="From chain" value={chainId} onChange={(e) => { setChainId(e.target.value); setTokenKey('native'); setAmount(''); setQuote(null); setQuoteErr(''); }} className={selectCls}>
+              {CHAINS.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+            <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
           </div>
-          <Notice tone="warn">Indicative estimate only. Uses live SoDEX prices and excludes fees, spread, slippage, and gas. This is not an atomic swap. Trading and withdrawal still finish in SoDEX.</Notice>
-          {go && (
-            <ol className="ss-fade space-y-2 rounded-xl border border-white/[0.07] bg-black/30 p-3 text-xs text-zinc-300">
-              <li><b className="text-orange-300">1.</b> Deposit {srcKey} from {chain.name} to your SoDEX account on <a className="underline" href={SODEX_SITE} target="_blank" rel="noreferrer">sodex.com</a>.</li>
-              <li><b className="text-orange-300">2.</b> Come back to <button className="underline" onClick={() => S.setView('swap')}>Swap</button> and trade {srcKey} → {toAsset?.key} at the live SoDEX price.</li>
-              <li><b className="text-orange-300">3.</b> Withdraw on sodex.com when you are done.</li>
+        </Field>
+        <Field label="Token">
+          <div className="flex gap-2">
+            <div className="relative w-[44%]">{icon(srcKey)}
+              <select aria-label="Source token" value={tokenKey} onChange={(e) => { setTokenKey(e.target.value as SourceTok); setQuote(null); setQuoteErr(''); }} className={selectCls}>
+                {tokens.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}
+              </select>
+              <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
+            </div>
+            <AmountInput value={amount} onChange={(v) => { setAmount(v); setQuote(null); setQuoteErr(''); }} className="flex-1 !h-11 [&_input]:text-right [&_input]:text-base [&_input]:font-semibold" label="Amount" />
+          </div>
+          <div className="mt-2 flex items-center justify-between gap-2 text-[11px]" aria-live="polite">
+            <span className="tnum text-zinc-500">
+              {balState === 'ok' && bal != null ? <>Your {srcKey} on {chain.name}: <span className="text-zinc-200">{num(bal, 6)}</span></>
+                : balState === 'loading' ? 'Reading your balance…'
+                : balState === 'switch' ? `Switch your wallet to ${chain.name} to see this balance.`
+                : balState === 'na' ? `${chain.name} balance can't be read from an Ethereum wallet here. Type the amount.`
+                : balState === 'err' ? 'Could not read your balance. Type the amount.'
+                : 'Connect a wallet to see your balance.'}
+            </span>
+            <div className="flex gap-1">{[0.1, 0.25, 0.5, 1].map((f) => (
+              <button key={f} type="button" disabled={balState !== 'ok' || !usable} onClick={() => { pick(f); setQuote(null); setQuoteErr(''); }}
+                className="ss-btn rounded-md border border-white/10 px-1.5 py-0.5 text-[10px] text-zinc-400 hover:border-orange-500 hover:text-orange-400 disabled:opacity-40">{f === 1 ? 'MAX' : `${f * 100}%`}</button>))}</div>
+          </div>
+          {over && <p role="alert" className="mt-1.5 text-[11px] text-rose-400">That is more than your {srcKey} balance on {chain.name}.</p>}
+        </Field>
+        <Field label="Lands in your wallet as" hint="Then you deposit it on SoDEX.">
+          <div className="relative">{icon(dest?.token ?? 'USDC')}
+            <select aria-label="Destination token and chain" value={destSel} onChange={(e) => { setDestSel(e.target.value); setQuote(null); setQuoteErr(''); }} className={selectCls}>
+              {destChoices.map((a) => <option key={destKeyOf(a.token, a.chain)} value={destKeyOf(a.token, a.chain)}>{a.token} on {CHAIN_LABEL[a.chain] ?? a.chain}</option>)}
+            </select>
+            <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
+          </div>
+        </Field>
+        {destAsset && (
+          <ul className="space-y-1 rounded-xl border border-white/[0.07] bg-black/30 p-3 text-[12px] text-zinc-300">
+            <li>Minimum deposit on SoDEX: <span className="tnum text-zinc-100">{destAsset.minDeposit} {destAsset.token}</span> <span className="text-zinc-500">(per SoDEX docs)</span></li>
+            <li>SoDEX withdrawal fee from this chain: <span className="tnum text-zinc-100">{totalWithdrawFee(destAsset)} {destAsset.token}</span> <span className="text-zinc-500">(per SoDEX docs)</span></li>
+          </ul>
+        )}
+        {unsupportedPick && <Notice tone="error">SoDEX will not credit this. Choose a listed token and chain instead.</Notice>}
+        {amount && preGate && 'ok' in preGate && !preGate.ok && <Notice tone="error">{'message' in preGate ? preGate.message : 'Enter a valid amount.'}</Notice>}
+        {!evmOk && (
+          <Notice tone="warn">This Ethereum wallet cannot send from {chain.name}. Send manually from a {chain.name} wallet, or pick an Ethereum-compatible source chain. If SoDEX lists {srcKey} on {chain.name}, you can deposit it directly on sodex.com.</Notice>
+        )}
+      </div>
+
+      <div className="space-y-3 rounded-2xl border border-orange-500/20 bg-black/40 p-4">
+        <h3 className="flex items-center gap-2 text-sm font-semibold text-orange-300"><Info className="h-4 w-4" />Add funds</h3>
+        <Notice tone="warn">Deposit happens on SoDEX. SoSwapDEX never deposits for you and never holds your funds. A deposit below the minimum, or on an unsupported token or chain, can be lost or not credited.</Notice>
+        {advice.kind === 'route' && <p className="text-[12px] leading-relaxed text-zinc-400">{advice.reason}</p>}
+        {direct && destAsset && (
+          <div className="space-y-3">
+            <p className="text-[13px] text-zinc-300">This token is already accepted on {CHAIN_LABEL[destAsset.chain]}. No bridge is needed — deposit it on SoDEX from this wallet.</p>
+            <DepositHandoff token={destAsset.token} chain={destAsset.chain} amount={amt > 0 ? String(amt) : null} minDeposit={destAsset.minDeposit} />
+          </div>
+        )}
+        {!direct && evmOk && (
+          <RouteExecute
+            disabled={!S.wallet || !amt || over || !destAsset || !destTokenRef || !srcTokenRef || !chain.evm || (preGate && 'ok' in preGate && !preGate.ok)}
+            needWallet={!S.wallet}
+            destAsset={destAsset}
+            pay={`${amount || '0'} ${srcKey}`}
+            onQuote={async () => {
+              if (!S.wallet || !srcTokenRef || !destTokenRef || !destAsset || !chain.evm) throw new Error('Connect a wallet first.');
+              const smallest = toSmallest(amount, srcTokenRef.decimals);
+              if (!smallest) throw new Error('Enter a valid amount.');
+              setQuoting(true); setQuoteErr(''); setQuote(null);
+              try {
+                const q = await fetchRouteQuote({
+                  user: S.wallet.address, recipient: S.wallet.address,
+                  originChainId: chain.evm, destinationChainId: destTokenRef.chainId,
+                  originCurrency: srcTokenRef.address, destinationCurrency: destTokenRef.address,
+                  amount: smallest, originToken: srcKey, destinationToken: destAsset.token,
+                  destinationSodexChain: destAsset.chain, purpose: 'fund',
+                });
+                setQuote(q);
+                return q;
+              } catch (e: any) {
+                const msg = e?.message && !looksInternal(e.message) ? e.message : FRIENDLY_NO_ROUTE;
+                setQuoteErr(msg);
+                throw new Error(msg);
+              } finally { setQuoting(false); }
+            }}
+            quote={quote}
+            quoteErr={quoteErr}
+            quoting={quoting}
+            afterSuccess
+          />
+        )}
+      </div>
+    </div>
+  );
+}
+
+function looksInternal(msg: string) {
+  return /stack|internal|exception|status code|ECONN|api key|x-api-key|li\.quest|relay\.link|INTERNAL/i.test(msg);
+}
+
+function DepositHandoff({ token, chain, amount, minDeposit, received }: { token: string; chain: string; amount: string | null; minDeposit: number; received?: string | null }) {
+  const S = useS();
+  const [baseline, setBaseline] = useState<number | null>(null);
+  const [credited, setCredited] = useState(false);
+  const coin = token;
+  const spot = S.balances.find((b) => b.coin.replace(/^v/i, '').toUpperCase() === coin.toUpperCase());
+  const current = spot?.total ?? 0;
+  useEffect(() => {
+    setBaseline(current);
+    setCredited(false);
+  }, [S.wallet?.address, coin]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (baseline != null && current > baseline + 1e-12) setCredited(true);
+  }, [current, baseline]);
+  return (
+    <div className="space-y-3">
+      <div className="space-y-1.5 rounded-xl border border-white/[0.07] bg-black/30 p-3 text-[13px] text-zinc-300">
+        {received ? <div className="flex justify-between gap-3"><span className="text-zinc-400">Arrived in your wallet, about</span><span className="tnum text-zinc-100">{received} {token}</span></div> : null}
+        {amount && !received ? <div className="flex justify-between gap-3"><span className="text-zinc-400">Amount to deposit</span><span className="tnum text-zinc-100">{amount} {token}</span></div> : null}
+        <div className="flex justify-between gap-3"><span className="text-zinc-400">Deposit on</span><span className="text-zinc-100">{CHAIN_LABEL[chain] ?? chain}</span></div>
+        <div className="flex justify-between gap-3"><span className="text-zinc-400">Minimum deposit</span><span className="tnum text-zinc-100">{minDeposit} {token} <span className="text-zinc-500">(per SoDEX docs)</span></span></div>
+      </div>
+      <Button variant="primary" className="w-full" onClick={() => window.open(SODEX_SITE, '_blank', 'noopener,noreferrer')}>Open SoDEX deposit <ExternalLink className="h-4 w-4" /></Button>
+      <p className="text-[11px] leading-relaxed text-zinc-500">Deposits credit your SoDEX Spot account after SoDEX screens the source of funds. This screen only watches your Spot balance. It does not move funds.</p>
+      {credited ? <Notice tone="ok">Credited. Your SoDEX Spot balance for {token} has increased.</Notice>
+        : S.wallet ? <p className="text-[11px] text-zinc-500">Waiting to see a Spot credit for {token}…</p> : null}
+    </div>
+  );
+}
+
+function RouteExecute({ disabled, needWallet, destAsset, onQuote, quote, quoteErr, quoting, afterSuccess, purpose = 'fund', pay }: {
+  disabled: boolean; needWallet: boolean; destAsset?: SodexAsset | { token: string; chain: string; minDeposit: number };
+  onQuote: () => Promise<NormalizedQuote>; quote: NormalizedQuote | null; quoteErr: string; quoting: boolean; afterSuccess?: boolean; purpose?: 'fund' | 'onward'; pay?: string;
+}) {
+  const S = useS();
+  const [busy, setBusy] = useState(false);
+  const [progress, setProgress] = useState('');
+  const [txHash, setTxHash] = useState<string | null>(null);
+  const [saved, setSaved] = useState<SavedRoute | null>(() => loadSavedRoute());
+  const [status, setStatus] = useState<RouteStatusValue | null>(saved?.status ?? null);
+  const [execErr, setExecErr] = useState('');
+
+  useEffect(() => {
+    if (!saved || saved.status === 'success' || saved.status === 'failure' || saved.status === 'refund') return;
+    let stop = false; let n = 0;
+    const tick = async () => {
+      if (stop) return;
+      try {
+        const s = await fetchRouteStatus({ provider: saved.provider, requestId: saved.requestId, txHash: saved.txHash, fromChain: saved.originChainId, toChain: saved.destinationChainId });
+        if (stop) return;
+        setStatus(s.status);
+        const next = { ...saved, status: s.status, destTxHash: s.destTxHash } as SavedRoute;
+        storeSavedRoute(next); setSaved(next);
+        if (s.status === 'success' || s.status === 'failure' || s.status === 'refund') return;
+      } catch { /* keep polling quietly */ }
+      n += 1;
+      window.setTimeout(tick, nextPollMs(n));
+    };
+    tick();
+    return () => { stop = true; };
+  }, [saved?.txHash, saved?.requestId, saved?.status]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const run = async (q: NormalizedQuote) => {
+    if (!S.wallet) throw new Error('Connect a wallet first.');
+    if (q.recipient.toLowerCase() !== S.wallet.address.toLowerCase()) throw new Error(FRIENDLY_BAD_RECIPIENT);
+    const provider = S.wallet.info.provider;
+    const steps = q.steps;
+    if (steps.some((s) => s.kind === 'signature' && (s.signature?.kind === 'unknown' || !s.signature))) {
+      throw new Error(UNKNOWN_SIG_MSG);
+    }
+    setBusy(true); setExecErr(''); setProgress('');
+    let hash: string | undefined;
+    try {
+      const execSteps = await maybeWithApproval(provider, S.wallet.address, q);
+      for (let i = 0; i < execSteps.length; i++) {
+        const step = execSteps[i];
+        setProgress(`Step ${i + 1} of ${execSteps.length}: ${step.action}`);
+        if (step.chainId && S.wallet.chainId !== step.chainId) {
+          setProgress(`Step ${i + 1} of ${execSteps.length}: switch to ${CHAIN_META[step.chainId]?.name ?? 'the required network'}`);
+          try { await switchWalletChain(provider, step.chainId); }
+          catch (e) { throw isUserRejected(e) ? e : new Error('Your wallet could not switch to the required network.'); }
+        }
+        if (step.kind === 'manual') throw new Error(step.description);
+        if (step.kind === 'signature') throw new Error(UNKNOWN_SIG_MSG);
+        const params = txParams(step);
+        if (!params) throw new Error('This route step could not be prepared. Nothing was sent.');
+        params.from = S.wallet.address;
+        const sent: string = await provider.request({ method: 'eth_sendTransaction', params: [params] });
+        hash = sent;
+        setTxHash(sent);
+      }
+      const row = savedFromQuote(q, { txHash: hash, status: 'pending' });
+      storeSavedRoute(row); setSaved(row); setStatus('pending');
+      setProgress('The route is in progress. You can leave this page and come back — the status is saved in this browser.');
+    } catch (e: any) {
+      const msg = friendlyExecError(e);
+      setExecErr(msg);
+      setStatus(isUserRejected(e) ? null : 'failure');
+    } finally { setBusy(false); }
+  };
+
+  const showHandoff = afterSuccess && destAsset && (status === 'success' || (status === 'pending' && txHash));
+  return (
+    <div className="space-y-3">
+      {needWallet && <Button variant="primary" className="w-full" onClick={() => S.setUi('connect', true)}>Connect a wallet</Button>}
+      {!needWallet && !quote && (
+        <Button variant="primary" className="w-full" loading={quoting} disabled={disabled || quoting} onClick={() => onQuote().catch(() => {})}>Get route estimate</Button>
+      )}
+      {quoteErr && <Notice tone="error">{quoteErr}</Notice>}
+      {quote && (
+        <>
+          <p className="text-[11px] font-medium uppercase tracking-wide text-zinc-500">{providerLabel(quote.provider)} · {ESTIMATE_NOTE}</p>
+          <CostReceipt
+            pay={pay || 'This route'}
+            get={`${quote.outAmount} ${quote.outToken}`}
+            lines={[
+              { k: 'You receive, about', v: `${quote.outAmount} ${quote.outToken}` },
+              { k: 'Minimum received', v: `${quote.minOut} ${quote.outToken}` },
+              { k: 'Route fee, about', v: quote.feeUsd != null ? usd(quote.feeUsd, 2) : 'Included in the estimate' },
+              { k: 'Time, about', v: formatEta(quote.etaSec) },
+              ...(ROUTE_FEE_BPS > 0 ? [{ k: 'SoSwapDEX route fee', v: `${ROUTE_FEE_BPS / 100}% of the input` }] : []),
+            ]}
+            total={quote.feeUsd != null ? usd(quote.feeUsd, 2) : 'See estimate'}
+            totalPct={quote.feeUsd != null && Number(quote.outAmount) > 0 ? (quote.feeUsd / (Number(quote.outAmount) + quote.feeUsd)) * 100 : 0}
+            notes={[ESTIMATE_NOTE, ...(ROUTE_FEE_BPS > 0 ? ['A SoSwapDEX route fee is included in this estimate.'] : [])]}
+          />
+          <div className="rounded-xl border border-white/[0.07] bg-black/30 p-3 text-[12px] leading-relaxed text-zinc-300">
+            <div className="text-[11px] font-medium uppercase tracking-wide text-zinc-500">Recipient (your wallet)</div>
+            <div className="mt-1 break-all font-mono text-[12px] text-zinc-100">{quote.recipient}</div>
+            <p className="mt-2 text-zinc-500">Funds go only to this address, which is the wallet you connected. Check it before you sign.</p>
+          </div>
+          {quote.steps.length > 0 && (
+            <ol className="space-y-1.5 text-[12px] text-zinc-400">
+              {quote.steps.map((s, i) => <li key={i}><span className="text-orange-300">Step {i + 1} of {quote.steps.length}.</span> {s.action} {s.description && <span className="block text-zinc-500">{s.description}</span>}</li>)}
             </ol>
           )}
+          <Button variant="primary" className="w-full" loading={busy} disabled={busy || status === 'pending' || status === 'success'} onClick={() => run(quote)}>
+            {busy ? 'Waiting for your wallet…' : 'Sign and send'}
+          </Button>
+        </>
+      )}
+      {progress && <p className="text-[12px] text-zinc-400">{progress}</p>}
+      {execErr && <Notice tone="error">{execErr}</Notice>}
+      {txHash && quote && <p className="text-[12px]"><a className="text-orange-300 hover:text-orange-200" href={explorerTx(quote.originChainId, txHash)} target="_blank" rel="noreferrer">View transaction <ExternalLink className="inline h-3 w-3" /></a></p>}
+      {status && <Notice tone={status === 'success' ? 'ok' : status === 'refund' ? 'warn' : status === 'failure' ? 'error' : 'info'}>{statusLabel(status)}</Notice>}
+      {showHandoff && destAsset && status === 'success' && purpose === 'fund' && (
+        <DepositHandoff token={destAsset.token} chain={'chain' in destAsset ? destAsset.chain : ''} amount={null} minDeposit={destAsset.minDeposit} received={quote?.outAmount ?? saved?.outAmount ?? null} />
+      )}
+    </div>
+  );
+}
+
+async function maybeWithApproval(provider: any, owner: string, q: NormalizedQuote): Promise<RouteStep[]> {
+  if (!needsApproval(q.originCurrency)) return q.steps;
+  const first = q.steps.find((s) => s.kind === 'transaction' && s.tx);
+  if (!first?.tx) return q.steps;
+  const spender = first.tx.to;
+  try {
+    const hex: string = await provider.request({ method: 'eth_call', params: [{ to: q.originCurrency, data: allowanceCalldata(owner, spender) }, 'latest'] });
+    if (BigInt(hex) >= BigInt(q.inAmountRaw)) return q.steps;
+  } catch {
+    // If allowance cannot be read, ask for approval as its own signed step rather than guessing.
+  }
+  return [approvalStep(q.originCurrency, spender, q.originChainId, owner), ...q.steps];
+}
+
+function WithdrawPanel() {
+  const S = useS();
+  const tokens = tokensWithWithdrawOptions();
+  const [token, setToken] = useState('USDC');
+  const rows = assetsForToken(token);
+  const best = cheapestWithdraw(token);
+  const [onwardChain, setOnwardChain] = useState('8453');
+  const [onwardToken, setOnwardToken] = useState('USDC');
+  const [onwardAmt, setOnwardAmt] = useState('');
+  const [quote, setQuote] = useState<NormalizedQuote | null>(null);
+  const [quoteErr, setQuoteErr] = useState('');
+  const [quoting, setQuoting] = useState(false);
+  const destRef = findRouteToken(onwardToken, Number(onwardChain));
+  // Origin for send-onward: the token just withdrawn, assumed in the user's wallet on a SoDEX EVM chain they pick.
+  const [fromChain, setFromChain] = useState('1');
+  const fromRef = findRouteToken(token, Number(fromChain)) || findRouteToken('USDC', Number(fromChain));
+  const evmOrigins = QUOTE_CHAIN_IDS.map((id) => ({ id, label: CHAIN_META[id]?.name ?? String(id) }));
+  const evmDests = evmOrigins;
+
+  return (
+    <div className="space-y-4">
+      <div className="rounded-2xl border border-orange-500/20 bg-black/40 p-4">
+        <Field label="Token to withdraw from SoDEX">
+          <div className="relative"><span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2"><TokenIcon name={token} size={22} /></span>
+            <select aria-label="Withdraw token" value={token} onChange={(e) => { setToken(e.target.value); setQuote(null); }} className={selectCls}>
+              {tokens.map((t) => <option key={t} value={t}>{t}</option>)}
+            </select>
+            <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
+          </div>
+        </Field>
+        <div className="mt-3 overflow-x-auto">
+          <table className="w-full min-w-[540px] text-left text-[13px]">
+            <thead className="text-[11px] uppercase tracking-wide text-zinc-500">
+              <tr><th className="py-2 pr-3 font-medium">Chain</th><th className="py-2 pr-3 font-medium">Withdrawal fee</th><th className="py-2 pr-3 font-medium">Bridge fee</th><th className="py-2 pr-3 font-medium">Min withdrawal</th><th className="py-2 font-medium"></th></tr>
+            </thead>
+            <tbody className="divide-y divide-white/[0.05]">
+              {rows.map((r) => {
+                const cheap = best && r.chain === best.chain && r.token === best.token;
+                return (
+                  <tr key={r.chain} className={cheap ? 'bg-emerald-500/[0.06]' : undefined}>
+                    <td className="py-2 pr-3 text-zinc-100">{CHAIN_LABEL[r.chain] ?? r.chain}</td>
+                    <td className="tnum py-2 pr-3 text-zinc-200">{r.withdrawFee} {r.token}</td>
+                    <td className="tnum py-2 pr-3 text-zinc-200">{r.bridgeWithdrawFee} {r.token}</td>
+                    <td className="tnum py-2 pr-3 text-zinc-200">{r.minWithdraw} {r.token}</td>
+                    <td className="py-2 text-[11px] font-semibold text-emerald-300">{cheap ? 'Cheapest' : ''}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
+        <p className="mt-2 text-[11px] text-zinc-500">Fees and minimums are per SoDEX docs. Withdrawal itself stays on sodex.com.</p>
+        <Button variant="primary" className="mt-3" onClick={() => window.open(SODEX_SITE, '_blank', 'noopener,noreferrer')}>Open SoDEX withdrawal <ExternalLink className="h-4 w-4" /></Button>
       </div>
-      <div className="mt-4"><SodexBalances /></div>
-      <div className="mt-6 flex items-center justify-center gap-4 opacity-90" aria-hidden>
-        <span className="grid h-14 w-14 place-items-center rounded-full border border-orange-500/50 shadow-[0_0_24px_rgba(249,115,22,0.35)]"><TokenIcon name={chain.native} size={34} /></span>
-        <motion.span className="h-px w-40 origin-left bg-gradient-to-r from-orange-500/60 to-orange-500" animate={{ scaleX: go && est ? 1 : 0.2, opacity: go && est ? 1 : 0.5 }} transition={{ duration: 0.6, ease: 'easeOut' }} /><ChevronRight className="-ml-5 h-5 w-5 text-orange-500" />
-        <span className="grid h-14 w-14 place-items-center rounded-full border border-orange-500/50 shadow-[0_0_24px_rgba(249,115,22,0.35)]"><Logo size={34} glow={false} /></span>
+
+      <div className="rounded-2xl border border-orange-500/20 bg-black/40 p-4">
+        <h3 className="text-sm font-semibold text-orange-300">Send onward</h3>
+        <p className="mt-1 text-[12px] leading-relaxed text-zinc-400">After the withdrawal has arrived in this wallet, you can bridge it to another chain. You sign every step. SoSwapDEX never holds the funds.</p>
+        <div className="mt-3 grid gap-3 sm:grid-cols-2">
+          <Field label="Now in your wallet on">
+            <div className="relative">{/* no icon offset issues */}
+              <select aria-label="Origin chain after withdrawal" value={fromChain} onChange={(e) => { setFromChain(e.target.value); setQuote(null); }} className={cx(selectCls, '!pl-3')}>
+                {evmOrigins.map((c) => <option key={c.id} value={String(c.id)}>{c.label}</option>)}
+              </select>
+              <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
+            </div>
+          </Field>
+          <Field label="Send to">
+            <div className="relative">
+              <select aria-label="Destination chain" value={onwardChain} onChange={(e) => { setOnwardChain(e.target.value); setQuote(null); }} className={cx(selectCls, '!pl-3')}>
+                {evmDests.map((c) => <option key={c.id} value={String(c.id)}>{c.label}</option>)}
+              </select>
+              <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
+            </div>
+          </Field>
+          <Field label="Token to receive">
+            <div className="relative"><span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2"><TokenIcon name={onwardToken} size={22} /></span>
+              <select aria-label="Onward token" value={onwardToken} onChange={(e) => { setOnwardToken(e.target.value); setQuote(null); }} className={selectCls}>
+                {['USDC', 'USDT', 'ETH', 'BNB'].filter((t) => findRouteToken(t, Number(onwardChain))).map((t) => <option key={t} value={t}>{t}</option>)}
+              </select>
+              <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
+            </div>
+          </Field>
+          <Field label="Amount to send">
+            <AmountInput value={onwardAmt} onChange={(v) => { setOnwardAmt(v); setQuote(null); }} label="Amount to send onward" />
+          </Field>
+        </div>
+        <div className="mt-3">
+          <RouteExecute
+            disabled={!S.wallet || !fromRef || !destRef || !(parseFloat(onwardAmt) > 0)}
+            needWallet={!S.wallet}
+            destAsset={{ token: onwardToken, chain: CHAIN_META[Number(onwardChain)]?.sodex ?? '', minDeposit: 0 }}
+            pay={`${onwardAmt || '0'} ${fromRef?.symbol ?? token}`}
+            quoting={quoting}
+            quote={quote}
+            quoteErr={quoteErr}
+            purpose="onward"
+            afterSuccess={false}
+            onQuote={async () => {
+              if (!S.wallet || !fromRef || !destRef) throw new Error('Connect a wallet first.');
+              const smallest = toSmallest(onwardAmt, fromRef.decimals);
+              if (!smallest) throw new Error('Enter a valid amount.');
+              setQuoting(true); setQuoteErr(''); setQuote(null);
+              try {
+                const q = await fetchRouteQuote({
+                  user: S.wallet.address, recipient: S.wallet.address,
+                  originChainId: fromRef.chainId, destinationChainId: destRef.chainId,
+                  originCurrency: fromRef.address, destinationCurrency: destRef.address,
+                  amount: smallest, originToken: fromRef.symbol, destinationToken: destRef.symbol,
+                  destinationSodexChain: CHAIN_META[destRef.chainId]?.sodex ?? '', purpose: 'onward',
+                });
+                setQuote(q);
+                return q;
+              } catch (e: any) {
+                const msg = e?.message && !looksInternal(e.message) ? e.message : FRIENDLY_NO_ROUTE;
+                setQuoteErr(msg);
+                throw new Error(msg);
+              } finally { setQuoting(false); }
+            }}
+          />
+        </div>
       </div>
     </div>
   );
@@ -3852,7 +4303,7 @@ const GUIDE: { id: string; icon: React.ReactNode; title: string; sub: string; bo
   { id: 'swap', icon: <ArrowDownUp className="h-4 w-4" />, title: 'How to Swap', sub: 'Choose a pair, review the route, and sign the transaction.', body: <>Pick the <b>From</b> and <b>To</b> tokens and an amount. Every pair on SoDEX is quoted in USDC, so a swap between two other tokens is two market orders routed through USDC. Review the summary, confirm, and watch the fills.</> },
   { id: 'route', icon: <Star className="h-4 w-4" />, title: 'Route Preview', sub: 'See the live route and estimate before you sign.', body: <>The Route Preview walks the live SoDEX order book to estimate what you receive, the price impact and the taker fee. It is an estimate: the book can move before your order fills, so a minimum-received limit based on your slippage setting protects each order.</> },
   { id: 'markets', icon: <BarChart3 className="h-4 w-4" />, title: 'Markets & Insights', sub: 'Get SoSoValue news, ETF flows, and sector moves.', body: <>Markets lists every SoDEX spot pair with live price, 24h change and volume. News, ETF flows and sectors come from SoSoValue and need a free API key (paste it in the panel). If a feed is down or no key is set you see an empty state, never sample numbers.</> },
-  { id: 'cross', icon: <Link2 className="h-4 w-4" />, title: 'Cross-Chain (Mirror)', sub: 'View a staged cross-chain route and an indicative estimate.', body: <>Mirror shows an indicative estimate of what a source-chain asset is worth in a SoDEX token at the current price. It is a staged path, not an atomic swap: you deposit on SoDEX, swap here, then withdraw on SoDEX. Fees, spread, slippage and gas are not included.</> },
+  { id: 'cross', icon: <Link2 className="h-4 w-4" />, title: 'Cross-Chain', sub: 'Add funds from another chain, or withdraw to one.', body: <>Add funds finds a route that lands a SoDEX-supported token in your own wallet. You sign every step. Deposit and withdrawal still happen on sodex.com — SoSwapDEX never holds funds or deposits for you. Route quotes are estimates: fees and time can change. A deposit below the official minimum, or on an unsupported token or chain, can be lost or not credited.</> },
   { id: 'bots', icon: <Bot className="h-4 w-4" />, title: 'Bots (Drafts)', sub: 'Create trading strategies. Draft only. Nothing runs unattended.', body: <>The AI Setup Builder computes a spot-buy plan from live 1-hour candles and the order book (trend, stop, targets and size). Gemini only explains those numbers and cannot change them. You can also arm a setup: while the tab is open it re-checks every 45 seconds and asks you to confirm when your minimum grade is met. It never places an order by itself, and no stop-loss is placed on the exchange. DCA, Grid and Signal bots are also drafts: they compute a dry-run preview from live prices and never send orders. Nothing runs in the background, and a closed tab means nothing happens.</> },
   { id: 'safety', icon: <ShieldCheck className="h-4 w-4" />, title: 'Safety & FAQs', sub: 'How SoSwapDEX handles your keys and funds.', body: <><ul className="list-disc space-y-1.5 pl-5"><li>SoSwapDEX never holds your funds and never asks for a seed phrase.</li><li>The session API key is a hot key kept in this tab (sessionStorage). Its permissions are set by SoDEX; fund only what you intend to trade and revoke keys on sodex.com/apikeys.</li><li>{DISCLAIMER}</li></ul></> },
 ];
@@ -3883,8 +4334,8 @@ function GuideView() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [watch, setWatch] = useState(false);
   const cur = GUIDE.find((g) => g.id === sec)!;
-  const flow = [{ i: <Wallet className="h-5 w-5" />, a: 'Connect', b: 'Wallet' }, { i: <ArrowDownUp className="h-5 w-5" />, a: 'Swap', b: '(Preview & Sign)' }, { i: <BarChart3 className="h-5 w-5" />, a: 'Markets', b: '(News & ETF Flows)' }, { i: <Link2 className="h-5 w-5" />, a: 'Cross-Chain', b: '(Mirror)' }, { i: <Bot className="h-5 w-5" />, a: 'Bots', b: '(Drafts)' }];
-  const checks = ['Uses real SoDEX mainnet markets and routes', 'Shows a clear preview before you sign', 'Integrates SoSoValue news, ETF flows, and sector data', 'Cross-chain Mirror is a staged path (not an atomic swap)', 'Bots are draft only (no unattended trading), and the AI Setup Builder never places an order', 'If a feed is down, you see an empty state (not sample prices)'];
+  const flow = [{ i: <Wallet className="h-5 w-5" />, a: 'Connect', b: 'Wallet' }, { i: <ArrowDownUp className="h-5 w-5" />, a: 'Swap', b: '(Preview & Sign)' }, { i: <BarChart3 className="h-5 w-5" />, a: 'Markets', b: '(News & ETF Flows)' }, { i: <Link2 className="h-5 w-5" />, a: 'Cross-Chain', b: '(Add funds)' }, { i: <Bot className="h-5 w-5" />, a: 'Bots', b: '(Drafts)' }];
+  const checks = ['Uses real SoDEX mainnet markets and routes', 'Shows a clear preview before you sign', 'Integrates SoSoValue news, ETF flows, and sector data', 'Cross-chain routes land tokens in your wallet; deposits and withdrawals stay on SoDEX', 'Bots are draft only (no unattended trading), and the AI Setup Builder never places an order', 'If a feed is down, you see an empty state (not sample prices)'];
   const detail = sec === 'overview' ? (
     <>
       <div className="my-4 flex flex-wrap items-start justify-between gap-2">
@@ -4263,7 +4714,7 @@ function PlanReview() {
 const skillIntent: { tab: SkillTab | null; pair?: string } = { tab: null };
 /** One-shot handoff from Trade Check to Swap so Route Preview opens on the same pair and size. */
 const swapIntent: { pair?: string; side?: 'buy' | 'sell'; usd?: string; focus?: boolean } = {};
-type SkillTab = 'trade' | 'size' | 'portfolio' | 'journal' | 'alerts' | 'brief' | 'news' | 'plan';
+type SkillTab = 'trade' | 'size' | 'portfolio' | 'journal' | 'alerts' | 'brief' | 'news' | 'plan' | 'fund' | 'withdraw' | 'routecheck';
 
 function goToTradeCheck(S: Store, pair: string) {
   S.setSelected(pair);
@@ -4279,12 +4730,149 @@ function goToRoutePreview(S: Store, pair: string, side: 'buy' | 'sell', usd?: st
   swapIntent.focus = true;
   S.setView('swap');
 }
+function FundSkill() {
+  const S = useS();
+  const [chainId, setChainId] = useState('eth');
+  const chain = CHAINS.find((c) => c.id === chainId)!;
+  const [tokenKey, setTokenKey] = useState<SourceTok>('native');
+  const srcKey = sourceTokenKey(chain, tokenKey);
+  const [amount, setAmount] = useState('');
+  const amt = parseFloat(amount) || 0;
+  const advice = bestDestination(srcKey, chain.sodex, true);
+  const asset = advice.kind === 'unsupported' ? findAsset('USDC', 'BASE') : advice.asset;
+  const [quote, setQuote] = useState<NormalizedQuote | null>(null);
+  const [err, setErr] = useState('');
+  const [busy, setBusy] = useState(false);
+  const srcRef = chain.evm ? findRouteToken(srcKey, chain.sodex) : undefined;
+  const destRef = asset ? findRouteToken(asset.token, asset.chain) : undefined;
+  const direct = asset && chain.sodex === asset.chain && srcKey === asset.token;
+  const run = async () => {
+    if (!S.wallet || !srcRef || !destRef || !asset || !chain.evm) return;
+    const smallest = toSmallest(amount, srcRef.decimals);
+    if (!smallest) { setErr('Enter a valid amount.'); return; }
+    setBusy(true); setErr(''); setQuote(null);
+    try {
+      setQuote(await fetchRouteQuote({
+        user: S.wallet.address, recipient: S.wallet.address,
+        originChainId: chain.evm, destinationChainId: destRef.chainId,
+        originCurrency: srcRef.address, destinationCurrency: destRef.address,
+        amount: smallest, originToken: srcKey, destinationToken: asset.token,
+        destinationSodexChain: asset.chain, purpose: 'fund',
+      }));
+    } catch (e: any) {
+      setErr(e?.message && !looksInternal(e.message) ? e.message : FRIENDLY_NO_ROUTE);
+    } finally { setBusy(false); }
+  };
+  return (
+    <div className="space-y-3">
+      <p className="text-[13px] leading-relaxed text-zinc-400">Pick the chain and token you already hold. This uses the official SoDEX deposit table, then a live route estimate if a route is needed. Nothing is sent from here.</p>
+      <div className="grid gap-3 sm:grid-cols-3">
+        <Field label="From chain"><select aria-label="Skill from chain" value={chainId} onChange={(e) => { setChainId(e.target.value); setTokenKey('native'); setQuote(null); }} className={cx(selectCls, '!pl-3')}>{CHAINS.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select></Field>
+        <Field label="Token"><select aria-label="Skill source token" value={tokenKey} onChange={(e) => { setTokenKey(e.target.value as SourceTok); setQuote(null); }} className={cx(selectCls, '!pl-3')}>{sourceTokens(chain).map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}</select></Field>
+        <Field label="Amount"><AmountInput value={amount} onChange={(v) => { setAmount(v); setQuote(null); }} label="Amount to fund" /></Field>
+      </div>
+      {asset && (
+        <ul className="list-disc space-y-1 rounded-xl border border-white/[0.07] bg-black/30 py-3 pl-8 pr-3 text-[13px] text-zinc-300">
+          <li>Best SoDEX destination: {asset.token} on {CHAIN_LABEL[asset.chain]}{direct ? ' (direct deposit, no bridge)' : ''}.</li>
+          <li>Minimum deposit: {asset.minDeposit} {asset.token} (per SoDEX docs).</li>
+          <li>SoDEX withdrawal fee from that chain: {totalWithdrawFee(asset)} {asset.token} (per SoDEX docs).</li>
+          {advice.kind === 'route' && <li>{advice.reason}</li>}
+        </ul>
+      )}
+      {direct ? <Button onClick={() => S.setView('cross')}>Continue on Cross-Chain to open the SoDEX deposit</Button>
+        : <Button variant="primary" loading={busy} disabled={!S.wallet || !amt || !srcRef || !destRef || busy} onClick={run}>{S.wallet ? 'Get a live route estimate' : 'Connect a wallet to estimate a route'}</Button>}
+      {err && <Notice tone="error">{err}</Notice>}
+      {quote && (
+        <ul className="list-disc space-y-1 rounded-xl border border-white/[0.07] bg-black/30 py-3 pl-8 pr-3 text-[13px] text-zinc-300">
+          <li>{providerLabel(quote.provider)}. {ESTIMATE_NOTE}</li>
+          <li>You receive about {quote.outAmount} {quote.outToken}; minimum {quote.minOut} {quote.outToken}.</li>
+          <li>Route fee, about {quote.feeUsd != null ? usd(quote.feeUsd, 2) : 'included in the estimate'}. Time, {formatEta(quote.etaSec)}.</li>
+          <li>Recipient (your wallet): <span className="break-all font-mono text-[12px]">{quote.recipient}</span></li>
+        </ul>
+      )}
+      <Button variant="secondary" onClick={() => S.setView('cross')}>Open Add funds</Button>
+    </div>
+  );
+}
+
+function WithdrawSkill() {
+  const [token, setToken] = useState('USDC');
+  const rows = assetsForToken(token);
+  const best = cheapestWithdraw(token);
+  return (
+    <div className="space-y-3">
+      <p className="text-[13px] leading-relaxed text-zinc-400">Compares official SoDEX withdrawal fees and minimums across chains for one token. The withdrawal itself stays on sodex.com.</p>
+      <Field label="Token">
+        <select aria-label="Skill withdraw token" value={token} onChange={(e) => setToken(e.target.value)} className={cx(selectCls, '!pl-3')}>
+          {tokensWithWithdrawOptions().map((t) => <option key={t} value={t}>{t}</option>)}
+        </select>
+      </Field>
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[480px] text-left text-[13px]">
+          <thead className="text-[11px] uppercase tracking-wide text-zinc-500"><tr><th className="py-2 pr-3 font-medium">Chain</th><th className="py-2 pr-3 font-medium">Total fee</th><th className="py-2 pr-3 font-medium">Min withdrawal</th><th className="py-2 font-medium"></th></tr></thead>
+          <tbody className="divide-y divide-white/[0.05]">
+            {rows.map((r) => {
+              const cheap = best && r.chain === best.chain;
+              return (
+                <tr key={r.chain} className={cheap ? 'bg-emerald-500/[0.06]' : undefined}>
+                  <td className="py-2 pr-3 text-zinc-100">{CHAIN_LABEL[r.chain] ?? r.chain}</td>
+                  <td className="tnum py-2 pr-3">{totalWithdrawFee(r)} {r.token}</td>
+                  <td className="tnum py-2 pr-3">{r.minWithdraw} {r.token}</td>
+                  <td className="py-2 text-[11px] font-semibold text-emerald-300">{cheap ? 'Cheapest' : ''}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+      {best && <Notice tone="ok">Cheapest listed path: {best.token} on {CHAIN_LABEL[best.chain]}, fee {totalWithdrawFee(best)} {best.token}, minimum {best.minWithdraw} {best.token} (per SoDEX docs).</Notice>}
+      <Button onClick={() => window.open(SODEX_SITE, '_blank', 'noopener,noreferrer')}>Open SoDEX withdrawal <ExternalLink className="h-4 w-4" /></Button>
+    </div>
+  );
+}
+
+function RouteCheckSkill() {
+  const S = useS();
+  const saved = useMemo(() => loadSavedRoute(), []);
+  const [quote, setQuote] = useState<NormalizedQuote | null>(null);
+  return (
+    <div className="space-y-3">
+      <p className="text-[13px] leading-relaxed text-zinc-400">Before you sign, check every step, the exact recipient address, the minimum you should receive, and what happens if the route is refunded. Numbers below come from a live quote or from a route already started in this browser — never from made-up data.</p>
+      {quote || saved ? (
+        <ul className="list-disc space-y-1 rounded-xl border border-white/[0.07] bg-black/30 py-3 pl-8 pr-3 text-[13px] text-zinc-300">
+          {quote && <>
+            <li>{providerLabel(quote.provider)}. {ESTIMATE_NOTE}</li>
+            {quote.steps.map((s, i) => <li key={i}>Step {i + 1} of {quote.steps.length}: {s.action}. {s.description}</li>)}
+            <li>Recipient (your wallet): <span className="break-all font-mono text-[12px]">{quote.recipient}</span>. Funds only go to this address.</li>
+            <li>Expected minimum received: {quote.minOut} {quote.outToken}.</li>
+            <li>If the route cannot complete, the status will say “Refunded to your wallet.” Nothing is retried automatically.</li>
+            <li>You reject a signature, and nothing is sent.</li>
+          </>}
+          {!quote && saved && <>
+            <li>A route was already started in this browser for {saved.destinationToken} to {CHAIN_LABEL[saved.destinationSodexChain] ?? saved.destinationSodexChain}.</li>
+            <li>Recipient (your wallet): <span className="break-all font-mono text-[12px]">{saved.recipient}</span>.</li>
+            <li>Expected minimum received: {saved.minOut} {saved.destinationToken}.</li>
+            <li>Current status: {statusLabel(saved.status)}</li>
+            <li>If the route cannot complete, the status will say “Refunded to your wallet.” Nothing is retried automatically.</li>
+          </>}
+        </ul>
+      ) : (
+        <Notice tone="info">No live quote is open yet. Use Add funds on Cross-Chain to get a route estimate, then come back here — or open that tab to review the steps, recipient and minimum before you sign.</Notice>
+      )}
+      <Button onClick={() => S.setView('cross')}>Open Add funds to check a route</Button>
+    </div>
+  );
+}
+
 function SkillsView() {
   const [tab, setTab] = useState<SkillTab>(() => { const t = skillIntent.tab; skillIntent.tab = null; return t ?? 'trade'; });
   const tabs: { value: SkillTab; label: string; tag: 'code' | 'AI'; icon: (s: number) => React.ReactNode; blurb: string }[] = [
     { value: 'trade', label: 'Trade Check', tag: 'code', icon: (s) => <TradeCheckIcon size={s} />, blurb: 'Scan a trade against the live order book before you sign.' },
     { value: 'size', label: 'Position Size', tag: 'code', icon: (s) => <PositionIcon size={s} />, blurb: 'Turn "how much can I afford to lose" into an exact size.' },
     { value: 'portfolio', label: 'Portfolio', tag: 'code', icon: (s) => <PortfolioIcon size={s} />, blurb: 'See concentration and your stablecoin cushion.' },
+    { value: 'fund', label: 'Fund my SoDEX', tag: 'code', icon: (s) => <Coins size={s} />, blurb: 'Move tokens from another chain into your wallet, then deposit on SoDEX.' },
+    { value: 'withdraw', label: 'Cheapest withdraw', tag: 'code', icon: (s) => <ArrowUpRight size={s} />, blurb: 'Compare official SoDEX withdrawal fees and minimums across chains.' },
+    { value: 'routecheck', label: 'Check a route', tag: 'code', icon: (s) => <ShieldCheck size={s} />, blurb: 'Read every step, the recipient address, the minimum received, and refunds before you sign.' },
     { value: 'journal', label: 'Journal', tag: 'code', icon: (s) => <JournalIcon size={s} />, blurb: 'Your real results: volume, fees and realised P&L from your fills.' },
     { value: 'alerts', label: 'Price Alerts', tag: 'code', icon: (s) => <AlertIcon size={s} />, blurb: 'Get pinged when a pair crosses your price, so you never chase.' },
     { value: 'brief', label: 'Market Brief', tag: 'AI', icon: (s) => <BriefIcon size={s} />, blurb: 'A neutral read of what moved and what the data says.' },
@@ -4312,6 +4900,9 @@ function SkillsView() {
         {tab === 'trade' && <TradeCheck />}
         {tab === 'size' && <SizeCheck />}
         {tab === 'portfolio' && <PortfolioCheck />}
+        {tab === 'fund' && <FundSkill />}
+        {tab === 'withdraw' && <WithdrawSkill />}
+        {tab === 'routecheck' && <RouteCheckSkill />}
         {tab === 'journal' && <JournalCard />}
         {tab === 'alerts' && <AlertsCard />}
         {tab === 'brief' && <BriefCard skill="market-brief" title="Market Brief" body="A neutral summary of what moved on SoDEX and what SoSoValue headlines and ETF flows say right now. No predictions." cta="Generate brief" />}
