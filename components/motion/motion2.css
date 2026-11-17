@@ -1,0 +1,57 @@
+/* Motion pass 2: count-up numbers, home hero orbit, success state, feature cards. Transform and opacity only. */
+
+/* ── Count-up numbers: a hidden copy of the final text reserves the width, so nothing jumps ── */
+.ss-count { display: inline-grid; font-variant-numeric: tabular-nums; vertical-align: baseline; }
+.ss-count > span { grid-area: 1 / 1; white-space: nowrap; }
+.ss-count-ghost { visibility: hidden; }
+
+/* ── Home hero orbit ── */
+.ss-orbit { position: relative; width: min(100%, 400px); aspect-ratio: 1; margin-inline: auto; contain: layout paint; }
+.ss-orbit-layer { position: absolute; inset: 0; }
+.ss-orbit-glow { position: absolute; inset: 16%; border-radius: 50%; background: radial-gradient(closest-side, rgba(var(--ss-orange), 0.34), rgba(var(--ss-orange), 0.08) 60%, transparent 100%); animation: ss-breathe 6s ease-in-out infinite alternate; }
+.ss-orbit-dial, .ss-orbit-arc, .ss-orbit-ring { position: absolute; inset: 0; width: 100%; height: 100%; will-change: transform; }
+.ss-orbit-dial { animation: ss-spin 140s linear infinite; }
+.ss-orbit-arc-a { animation: ss-spin 16s linear infinite; filter: drop-shadow(0 0 6px rgba(var(--ss-orange), 0.55)); }
+.ss-orbit-arc-b { animation: ss-spin 24s linear infinite reverse; }
+.ss-orbit-ring { animation: ss-spin 90s linear infinite reverse; }
+.ss-orbit-half { position: absolute; inset: 0; pointer-events: none; }
+.ss-orbit-far { clip-path: inset(0 0 50% 0); }
+.ss-orbit-near { clip-path: inset(50% 0 0 0); }
+.ss-orbit-3d { position: absolute; inset: 0; perspective: 900px; transform-style: preserve-3d; }
+.ss-orbit-plane { position: absolute; inset: 9%; transform: rotateX(74deg); transform-style: preserve-3d; }
+.ss-orbit-path { position: absolute; inset: 0; border-radius: 50%; border: 1px solid rgba(var(--ss-orange), 0.32); box-shadow: 0 0 26px -6px rgba(var(--ss-orange), 0.45), inset 0 0 26px -10px rgba(var(--ss-orange), 0.4); }
+.ss-orbit-spin { position: absolute; inset: 0; transform-style: preserve-3d; animation: ss-spin 18s linear infinite; will-change: transform; }
+.ss-orbit-token { position: absolute; left: calc(50% - 7px); width: 14px; height: 14px; border-radius: 50%; transform: rotateX(-74deg); animation: ss-billboard 18s linear infinite; }
+.ss-orbit-token-o { top: -7px; background: radial-gradient(circle at 35% 30%, #ffe1c2, #fb923c 45%, #c2410c); box-shadow: 0 0 14px rgba(var(--ss-orange), 0.85); }
+.ss-orbit-token-w { bottom: -7px; width: 10px; height: 10px; left: calc(50% - 5px); bottom: -5px; background: radial-gradient(circle at 35% 30%, #ffffff, #d4d4d8 50%, #71717a); box-shadow: 0 0 12px rgba(255, 255, 255, 0.5); }
+.ss-orbit-mark { position: absolute; inset: 0; display: grid; place-items: center; }
+.ss-orbit-mark > * { animation: ss-float 6.5s ease-in-out infinite; }
+.ss-orbit.is-paused *, .ss-orbit.is-paused *::before, .ss-orbit.is-paused *::after { animation-play-state: paused !important; }
+@keyframes ss-spin { to { transform: rotate(360deg); } }
+@keyframes ss-billboard { from { transform: rotateZ(0deg) rotateX(-74deg); } to { transform: rotateZ(-360deg) rotateX(-74deg); } }
+@keyframes ss-breathe { from { opacity: 0.6; } to { opacity: 1; } }
+@keyframes ss-float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
+
+/* Low-end phones: drop the blurred glow on the arc and the slow dial spin. */
+@media (max-width: 640px) {
+  .ss-orbit-arc-a { filter: none; }
+  .ss-orbit-dial { animation: none; }
+}
+
+/* ── Home feature cards ── */
+.ss-feature { position: relative; overflow: hidden; }
+.ss-feature::before { content: ""; position: absolute; inset: 0 0 auto 0; height: 1px; background: linear-gradient(90deg, transparent, rgba(var(--ss-orange), 0.8), transparent); opacity: 0; transition: opacity var(--ss-base) var(--ss-ease-soft); }
+.ss-feature::after { content: ""; position: absolute; inset: auto -20% -60% -20%; height: 80%; border-radius: 50%; background: radial-gradient(closest-side, rgba(var(--ss-orange), 0.16), transparent); opacity: 0; transition: opacity var(--ss-slow) var(--ss-ease-soft); pointer-events: none; }
+@media (hover: hover) { .ss-feature:hover::before, .ss-feature:hover::after { opacity: 1; } }
+.ss-feature-ico { transition: transform var(--ss-base) var(--ss-ease); }
+@media (hover: hover) { .ss-feature:hover .ss-feature-ico { transform: translateY(-2px) scale(1.06); } }
+
+/* ── Success state ── */
+.ss-success { display: flex; align-items: center; gap: 0.875rem; border-radius: 1rem; border: 1px solid rgba(52, 211, 153, 0.25); background: rgba(52, 211, 153, 0.06); padding: 0.875rem; }
+.ss-success-ring { position: relative; flex: none; display: grid; place-items: center; width: 44px; height: 44px; border-radius: 50%; background: rgba(52, 211, 153, 0.14); color: rgb(110, 231, 183); }
+.ss-success-pulse { position: absolute; inset: 0; border-radius: 50%; border: 1.5px solid rgba(52, 211, 153, 0.6); opacity: 0; animation: ss-pulse 0.9s 0.1s var(--ss-ease) both; }
+@keyframes ss-pulse { from { opacity: 0.8; transform: scale(1); } to { opacity: 0; transform: scale(1.7); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .ss-orbit *, .ss-success-pulse { animation: none !important; }
+}

@@ -23,6 +23,9 @@ import AnimatedCard from '@/components/motion/AnimatedCard';
 import AnimatedTabs from '@/components/motion/AnimatedTabs';
 import Reveal from '@/components/motion/Reveal';
 import SwapFeedback from '@/components/motion/SwapFeedback';
+import CountUp from '@/components/motion/CountUp';
+import HeroOrbit from '@/components/motion/HeroOrbit';
+import SuccessMark from '@/components/motion/SuccessMark';
 import { drawShareCard, canvasToBlob, SHARE_W, SHARE_H, type ShareData } from '@/components/shareCard';
 import { WC_PROJECT_ID, connectWalletConnect, restoreWalletConnect } from '@/components/walletconnect';
 import { InstallButton } from '@/components/Pwa';
@@ -1309,8 +1312,8 @@ function Flash({ v, children, className = '' }: { v: number | undefined; childre
   }, [v]);
   return <span className={cx('relative inline-block', className)}>{fx && <i key={fx.n} aria-hidden className={cx('ss-tick-fx', fx.dir === 'up' ? 'ss-tick-up' : 'ss-tick-down')} />}<span className="relative">{children}</span></span>;
 }
-/** A number that fades in when it changes (a keyed remount; no timers). */
-const Num = ({ v }: { v: React.ReactNode }) => <span key={String(v)} className="ss-num">{v}</span>;
+/** A number that counts from its last value to the new one (about 420ms ease-out, tabular, width reserved). */
+const Num = ({ v }: { v: React.ReactNode }) => (typeof v === 'string' || typeof v === 'number') ? <CountUp value={String(v)} /> : <span className="ss-num">{v}</span>;
 
 const Card = ({ className = '', glow, children }: { className?: string; glow?: boolean; children: React.ReactNode }) => (
   <section className={cx('ss-card', glow && 'ss-card-glow', className)}>{children}</section>
@@ -1675,14 +1678,17 @@ function KeyModal() {
   const [err, setErr] = useState<string | null>(null);
   const [name, setName] = useState('');
   const [pk, setPk] = useState('');
-  const close = () => { S.setUi('key', false); setErr(null); setPk(''); };
+  const [enabled, setEnabled] = useState(false);
+  const close = () => { S.setUi('key', false); setErr(null); setPk(''); setEnabled(false); };
+  useEffect(() => { if (S.ui.key) setEnabled(false); }, [S.ui.key]);
 
   const go = async () => {
     setBusy(true); setErr(null);
     try {
       if (mode === 'create') await S.createKey(); else await S.importKey(name, pk);
       S.toast('ok', 'Trading enabled for this tab.');
-      close();
+      setEnabled(true);
+      window.setTimeout(close, 1400);
     } catch (e: any) { setErr(userFacingError(e, 'Could not enable trading. Please try again.')); }
     finally { setBusy(false); }
   };
@@ -1711,9 +1717,10 @@ function KeyModal() {
           Treat this as a hot key. SoSwapDEX could not confirm from the public docs that a standard API key is blocked from SoDEX's transfer endpoints, so: fund only what you intend to trade, let it expire, and revoke keys you no longer use at <a className="underline" href={`${SODEX_SITE}/apikeys`} target="_blank" rel="noreferrer">sodex.com/apikeys</a>.
         </Notice>
         {err && <Notice tone="error">{err}</Notice>}
+        {enabled ? <SuccessMark title="Trading enabled" sub="Your trading key is active for this tab." /> : (
         <Button variant="primary" size="lg" className="w-full" loading={busy} onClick={go} disabled={mode === 'import' && (!name || !pk)}>
           {mode === 'create' ? 'Sign & enable trading' : 'Import key'}
-        </Button>
+        </Button>)}
       </div>
     </Modal>
   );
@@ -1892,7 +1899,7 @@ function ReviewModal({ open, onClose, title, rows, warn, confirmLabel, run, rece
           </label>
         )}
         {state === 'busy' && <Notice tone="info"><span className="inline-flex items-center gap-2"><Spinner className="h-3.5 w-3.5" />{msg}</span></Notice>}
-        {state === 'done' && <Notice tone="ok">{msg}</Notice>}
+        {state === 'done' && <SuccessMark title={msg || 'Done'} />}
         {state === 'done' && doneExtra}
         {state === 'error' && <Notice tone="error">{msg}</Notice>}
         {state === 'done' ? <Button className="w-full" size="lg" onClick={onClose}>Close</Button>
@@ -2166,7 +2173,8 @@ function SwapPanel() {
 
   const chooseFrom = (a: Asset) => { if (a.key === toKey) setToKey(fromKey); setFromKey(a.key); const r = a.isQuote ? S.assetByKey[a.key === toKey ? fromKey : toKey] : a; if (r?.symbol) S.setSelected(r.symbol.name); };
   const chooseTo = (a: Asset) => { if (a.key === fromKey) setFromKey(toKey); setToKey(a.key); const r = a.isQuote ? S.assetByKey[a.key === fromKey ? toKey : fromKey] : a; if (r?.symbol) S.setSelected(r.symbol.name); };
-  const flip = () => { setFromKey(toKey); setToKey(fromKey); setAmount(''); };
+  const [flipTurn, setFlipTurn] = useState(0);
+  const flip = () => { setFromKey(toKey); setToKey(fromKey); setAmount(''); setFlipTurn((n) => n + 1); };
 
   const legNames = [fromA && !fromA.isQuote ? fromA.symbol!.name : null, toA && !toA.isQuote ? toA.symbol!.name : null].filter(Boolean) as string[];
   const { books, err: bookErr } = useBooks(legNames, 1800, 40);
@@ -2339,7 +2347,7 @@ function SwapPanel() {
             </div>
           </div>
           <div className="relative z-10 -my-4 flex justify-center">
-            <button onClick={flip} aria-label="Swap direction" className="grid h-9 w-9 place-items-center rounded-full border-2 border-orange-500/30 bg-[#120c07] text-orange-300 transition hover:bg-orange-500 hover:text-black active:scale-90"><ArrowDownUp className="h-4 w-4" /></button>
+            <motion.button onClick={flip} aria-label="Swap direction" animate={{ rotate: flipTurn * 180 }} whileTap={{ scale: 0.88 }} transition={{ type: 'spring', stiffness: 320, damping: 20 }} className="grid h-9 w-9 place-items-center rounded-full border-2 border-orange-500/30 bg-[#120c07] text-orange-300 transition-colors hover:bg-orange-500 hover:text-black"><ArrowDownUp className="h-4 w-4" /></motion.button>
           </div>
           <div className="rounded-xl border border-white/[0.07] bg-black/40 p-3.5">
             <div className="mb-1.5 flex items-center justify-between text-xs"><span className="font-semibold text-zinc-200">To</span><span className="tnum text-zinc-400">Balance: {num(toA ? S.available(toA.coin) : 0, 6)}</span></div>
@@ -2493,7 +2501,7 @@ function PairHeader({ sym }: { sym?: Sym }) {
         {sym ? <TokenIcon name={sym.base} size={38} /> : <Skeleton className="h-9 w-9 rounded-full" />}
         <div><div className="flex items-center gap-1.5 text-lg font-bold leading-tight text-zinc-50">{sym?.display ?? '…'}<ChevronDown className="h-4 w-4 text-zinc-500" /></div><div className="text-[11px] text-zinc-500">SoDEX spot{sym?.halted ? ' · halted' : ''}</div></div>
       </button>
-      <div><div className="tnum text-2xl font-bold text-zinc-50">{t ? <Flash v={t.last}>{'$' + px(t.last)}</Flash> : <Skeleton className="h-7 w-28" />}</div>{t && <Chg pct={t.changePct} />}</div>
+      <div><div className="tnum text-2xl font-bold text-zinc-50">{t ? <Flash v={t.last}><Num v={'$' + px(t.last)} /></Flash> : <Skeleton className="h-7 w-28" />}</div>{t && <Chg pct={t.changePct} />}</div>
       <div className="tnum ml-auto hidden gap-6 text-xs sm:flex">
         <div><div className="text-zinc-600">24h high</div><div className="text-zinc-200">{t ? px(t.high) : '–'}</div></div>
         <div><div className="text-zinc-600">24h low</div><div className="text-zinc-200">{t ? px(t.low) : '–'}</div></div>
@@ -2637,7 +2645,7 @@ function MarketsView() {
               )}
             </div>
             <div className="mt-1 flex items-center justify-end gap-4 sm:mt-0 sm:contents">
-              <div className="tnum text-right text-sm text-zinc-100">{t ? <Flash v={t.last}>{px(t.last)}</Flash> : <Skeleton className="ml-auto h-4 w-16" />}</div>
+              <div className="tnum text-right text-sm text-zinc-100">{t ? <Flash v={t.last}><Num v={px(t.last)} /></Flash> : <Skeleton className="ml-auto h-4 w-16" />}</div>
               <div className="text-right">{t ? <Chg pct={t.changePct} /> : <Skeleton className="ml-auto h-4 w-12" />}</div>
               <div className="tnum hidden text-right text-sm text-zinc-300 sm:block">{t ? '$' + compact(t.quoteVol) : '–'}</div>
               <div className="hidden items-center justify-end gap-2 sm:flex">
@@ -2697,7 +2705,7 @@ function PortfolioView() {
 
   if (!S.wallet) return <Card><Empty icon={<Wallet className="h-6 w-6" />} title="Connect a wallet to see your portfolio" body="Balances, open orders and trade history come straight from your SoDEX account." action={<Button variant="primary" onClick={() => S.setUi('connect', true)}>Connect wallet</Button>} /></Card>;
 
-  const stat = (k: string, v: React.ReactNode) => <div className="rounded-2xl border border-white/[0.07] bg-[#0a0a0c]/90 p-4"><div className="text-xs text-zinc-500">{k}</div><div className="tnum mt-1 text-xl font-bold text-zinc-50">{v}</div></div>;
+  const stat = (k: string, v: React.ReactNode) => <div className="rounded-2xl border border-white/[0.07] bg-[#0a0a0c]/90 p-4"><div className="text-xs text-zinc-500">{k}</div><div className="tnum mt-1 text-xl font-bold text-zinc-50"><Num v={v} /></div></div>;
 
   const OrdersTable = ({ orders, cancellable }: { orders: OpenOrder[]; cancellable?: boolean }) => (
     <div className="overflow-x-auto">
@@ -2745,7 +2753,7 @@ function PortfolioView() {
           <div>
             <div className="flex items-baseline justify-between gap-3 px-4 pt-4">
               <h3 className="text-sm font-semibold text-zinc-100">Spot (spendable for swaps)</h3>
-              <div className="tnum text-sm font-semibold text-zinc-50">{spotRows.length ? usd(spotTotal) : ''}</div>
+              <div className="tnum text-sm font-semibold text-zinc-50">{spotRows.length ? <Num v={usd(spotTotal)} /> : ''}</div>
             </div>
             {S.accountID === undefined ? <div className="space-y-2 p-4">{Array.from({ length: 3 }).map((_, i) => <Skeleton key={'s' + i} className="h-10" />)}</div>
               : shown.length === 0 ? <Empty icon={<Wallet className="h-5 w-5" />} title={S.accountID === null ? 'No SoDEX spot account yet' : 'No spot balances yet'} body={S.accountID === null ? 'Deposit on SoDEX to create your spot account. It will appear here automatically.' : 'Deposit assets on SoDEX to start trading.'} />
@@ -2757,9 +2765,9 @@ function PortfolioView() {
                     return (
                       <tr key={b.id} className="border-t border-white/[0.04]">
                         <td className="px-4 py-3"><div className="flex items-center gap-2.5"><TokenIcon name={coinLabel(b.coin)} size={28} /><div><div className="font-semibold text-zinc-100">{coinLabel(b.coin)}</div><div className="tnum text-[11px] text-zinc-500">{price ? '$' + px(price) : ''}</div></div></div></td>
-                        <td className="tnum text-right text-zinc-100">{num(b.total, 8)}</td>
+                        <td className="tnum text-right text-zinc-100"><Num v={num(b.total, 8)} /></td>
                         <td className="tnum text-right text-zinc-500">{b.locked ? num(b.locked, 8) : '–'}</td>
-                        <td className="tnum text-right text-zinc-200">{price ? usd(value) : '–'}</td>
+                        <td className="tnum text-right text-zinc-200">{price ? <Num v={usd(value)} /> : '–'}</td>
                         <td className="px-4 text-right">{sym && <Button size="sm" onClick={() => { S.setSelected(sym.name); S.setView('swap'); }}>Trade</Button>}</td>
                       </tr>
                     );
@@ -2770,7 +2778,7 @@ function PortfolioView() {
             <div className="mt-2 border-t border-white/[0.06] px-4 pt-4">
               <div className="flex items-baseline justify-between gap-3">
                 <h3 className="text-sm font-semibold text-zinc-100">Margin & Futures</h3>
-                <div className="tnum text-sm font-semibold text-zinc-50">{marginRows.length ? usd(marginTotal) : ''}</div>
+                <div className="tnum text-sm font-semibold text-zinc-50">{marginRows.length ? <Num v={usd(marginTotal)} /> : ''}</div>
               </div>
               <p className="mt-1 text-[12px] leading-relaxed text-zinc-500">Used as margin on SoDEX. Move it to Spot here, or as a secondary option on <a href={SODEX_SITE} target="_blank" rel="noreferrer" className="text-orange-300 hover:text-orange-200">sodex.com</a>.</p>
             </div>
@@ -2783,9 +2791,9 @@ function PortfolioView() {
                   <tbody>{shownMargin.map(({ b, price, value }) => (
                     <tr key={b.id || b.coin} className="border-t border-white/[0.04]">
                       <td className="px-4 py-3"><div className="flex items-center gap-2.5"><TokenIcon name={coinLabel(b.coin)} size={28} /><div><div className="font-semibold text-zinc-100">{coinLabel(b.coin)}</div><div className="tnum text-[11px] text-zinc-500">{price ? '$' + px(price) : ''}</div></div></div></td>
-                      <td className="tnum text-right text-zinc-100">{num(b.total, 8)}</td>
+                      <td className="tnum text-right text-zinc-100"><Num v={num(b.total, 8)} /></td>
                       <td className="tnum text-right text-zinc-500">{b.available != null ? b.available : '–'}</td>
-                      <td className="tnum text-right text-zinc-200">{price ? usd(value) : '–'}</td>
+                      <td className="tnum text-right text-zinc-200">{price ? <Num v={usd(value)} /> : '–'}</td>
                       <td className="px-4 text-right"><MoveToSpotButton b={b} /></td>
                     </tr>
                   ))}</tbody>
@@ -2936,7 +2944,7 @@ function Watchlist() {
             <li key={sym.name} className="flex items-center gap-3 py-2">
               <TokenIcon name={sym.base} size={26} />
               <div className="min-w-0 flex-1"><div className="text-sm font-semibold text-zinc-100">{sym.display}</div>
-                <div className="tnum text-xs text-zinc-400">{t ? num(t.last, 6) : '–'} {t && <span className={t.changePct >= 0 ? 'text-emerald-400' : 'text-rose-400'}>{t.changePct >= 0 ? '+' : ''}{t.changePct.toFixed(2)}%</span>}</div>
+                <div className="tnum text-xs text-zinc-400">{t ? <Flash v={t.last}><Num v={num(t.last, 6)} /></Flash> : '–'} {t && <span className={t.changePct >= 0 ? 'text-emerald-400' : 'text-rose-400'}>{t.changePct >= 0 ? '+' : ''}{t.changePct.toFixed(2)}%</span>}</div>
                 {!sym.halted && <button type="button" onClick={() => goToTradeCheck(S, sym.name)} className="mt-0.5 inline-flex items-center gap-1 text-[11px] font-semibold text-orange-300 hover:text-orange-200"><ShieldCheck className="h-3 w-3" />Check this trade</button>}
               </div>
               <button aria-label={`Set a price alert for ${sym.display}`} title="Price alert" onClick={() => { S.setSelected(sym.name); skillIntent.tab = 'alerts'; S.setView('skills'); }} className="grid h-9 w-9 place-items-center rounded-lg border border-white/10 text-zinc-400 transition hover:border-orange-500/50 hover:text-orange-300"><AlertIcon size={20} /></button>
@@ -2949,35 +2957,59 @@ function Watchlist() {
   );
 }
 
+const HERO_EASE = [0.16, 1, 0.3, 1] as const;
+const heroParent = { hidden: {}, show: { transition: { staggerChildren: 0.07, delayChildren: 0.05 } } };
+const heroChild = { hidden: { opacity: 0, y: 18 }, show: { opacity: 1, y: 0, transition: { duration: 0.7, ease: HERO_EASE } } };
+
 function HomeView() {
   const S = useS();
+  const reduce = useReducedMotion();
   const tiles = [
-    { icon: <Layers className="h-5 w-5" />, t: 'SoDEX Mainnet', s: 'Real markets & routes' },
-    { icon: <Wallet className="h-5 w-5" />, t: 'Your Wallet', s: 'You sign every order' },
-    { icon: <LineChart className="h-5 w-5" />, t: 'Preview First', s: 'See route & estimate' },
-    { icon: <ShieldCheck className="h-5 w-5" />, t: 'No Seed Phrase', s: 'We never ask for it' },
+    { icon: <Layers className="h-5 w-5" />, t: 'SoDEX Mainnet', s: 'Real markets and live routes' },
+    { icon: <Wallet className="h-5 w-5" />, t: 'Your wallet', s: 'You sign every order' },
+    { icon: <LineChart className="h-5 w-5" />, t: 'Preview first', s: 'See the route and full cost' },
+    { icon: <ShieldCheck className="h-5 w-5" />, t: 'No seed phrase', s: 'We never ask for it' },
   ];
   return (
     <div className="relative">
-      <div className="grid items-center gap-6 md:grid-cols-[1.1fr_1fr]">
-        <Reveal>
-          <span className="inline-flex items-center gap-2 rounded-lg border border-orange-500/30 bg-orange-500/[0.07] px-3 py-1.5 text-xs font-medium text-zinc-200"><Logo size={16} glow={false} />Powered by SoDEX Mainnet</span>
-          <h1 className="mt-5 text-6xl font-extrabold leading-none tracking-tight text-zinc-50 sm:text-7xl">So<span className="bg-gradient-to-b from-orange-300 to-orange-600 bg-clip-text text-transparent">SwapDEX</span></h1>
-          <p className="mt-4 text-2xl font-bold text-zinc-50">Swap on SoDEX mainnet.</p>
-          <p className="mt-2 max-w-md text-lg leading-snug text-zinc-300">Live routes, a preview before you sign, your wallet.</p>
-          <div className="mt-6 flex flex-wrap gap-3">
-            <Button variant="primary" size="lg" className="!rounded-lg" onClick={() => S.setView('swap')}>Start Swapping<ArrowUpRight className="h-4 w-4" /></Button>
-            <Button size="lg" className="!rounded-lg !border-orange-500/40" onClick={() => S.setView('markets')}>View Markets</Button>
+      <div className="grid items-center gap-4 md:grid-cols-[1.05fr_1fr] md:gap-8">
+        <motion.div variants={heroParent} initial={reduce ? false : 'hidden'} animate="show">
+          <motion.span variants={heroChild} className="inline-flex items-center gap-2 rounded-lg border border-orange-500/30 bg-orange-500/[0.07] px-3 py-1.5 text-xs font-medium text-zinc-200"><Logo size={16} glow={false} />Powered by SoDEX Mainnet</motion.span>
+          <motion.h1 variants={heroChild} className="mt-5 text-6xl font-extrabold leading-none tracking-tight text-zinc-50 sm:text-7xl">So<span className="bg-gradient-to-b from-orange-300 to-orange-600 bg-clip-text text-transparent">SwapDEX</span></motion.h1>
+          <motion.p variants={heroChild} className="mt-4 text-2xl font-bold text-zinc-50">Swap on SoDEX mainnet.</motion.p>
+          <motion.p variants={heroChild} className="mt-2 max-w-md text-lg leading-snug text-zinc-300">Live routes, a preview before you sign, your wallet.</motion.p>
+          <motion.div variants={heroChild} className="mt-6 flex flex-wrap gap-3">
+            <Button variant="primary" size="lg" className="!rounded-lg" onClick={() => S.setView('swap')}>Start swapping<ArrowUpRight className="h-4 w-4" /></Button>
+            <Button size="lg" className="!rounded-lg !border-orange-500/40" onClick={() => S.setView('markets')}>View markets</Button>
             <InstallButton className="!h-12 !rounded-lg !px-4 !text-sm" />
-          </div>
-        </Reveal>
-        <div className="relative mx-auto grid h-[300px] w-full max-w-[420px] place-items-center" aria-hidden>
-          <div className="absolute bottom-6 h-24 w-72 rounded-[50%] border border-orange-500/40 bg-gradient-to-b from-orange-500/25 to-transparent blur-[1px] shadow-[0_0_80px_10px_rgba(249,115,22,0.35)]" />
-          <div className="absolute bottom-12 h-16 w-56 rounded-[50%] border border-orange-400/50 bg-black/70" />
-          <div className="relative -mt-8"><Logo size={230} /></div>
-        </div>
+          </motion.div>
+        </motion.div>
+        <motion.div
+          className="relative mx-auto w-full max-w-[300px] md:max-w-[400px]"
+          initial={reduce ? false : { opacity: 0, scale: 0.92 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.9, delay: 0.15, ease: HERO_EASE }}
+        >
+          <HeroOrbit><Logo size={150} /></HeroOrbit>
+        </motion.div>
       </div>
-      <Reveal><div className="mt-6 grid gap-3 md:grid-cols-[1fr_1.2fr]">
+
+      <Reveal className="mt-8">
+        <div className="mb-3 flex items-baseline justify-between gap-3">
+          <h2 className="text-base font-semibold text-zinc-100">Built so you stay in control</h2>
+          <span className="hidden text-xs text-zinc-500 sm:inline">Funds stay in your SoDEX account</span>
+        </div>
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          {tiles.map((t, i) => (
+            <AnimatedCard key={t.t} delay={0.06 * i} className="ss-feature rounded-2xl border border-white/[0.07] bg-[#0b0a0c]/90 p-4">
+              <div className="ss-feature-ico mb-3 grid h-10 w-10 place-items-center rounded-xl border border-orange-500/25 bg-orange-500/[0.08] text-orange-300">{t.icon}</div>
+              <div className="text-sm font-semibold text-zinc-100">{t.t}</div><div className="mt-0.5 text-[12px] leading-snug text-zinc-500">{t.s}</div>
+            </AnimatedCard>
+          ))}
+        </div>
+      </Reveal>
+
+      <Reveal className="mt-6"><div className="grid gap-3 md:grid-cols-[1fr_1.2fr]">
         <Card className="p-4">
           <div className="text-sm font-semibold text-zinc-100">Check before you swap</div>
           <p className="mt-2 text-sm leading-relaxed text-zinc-400">SoSwapDEX checks the live SoDEX order book before every spot trade and shows the real cost, slippage and risk. Then you sign each order yourself. Funds stay in your SoDEX account; we never hold them or ask for a seed phrase.</p>
@@ -2985,15 +3017,7 @@ function HomeView() {
         </Card>
         <Onboarding />
       </div></Reveal>
-      <Reveal><div className="mt-3"><Watchlist /></div></Reveal>
-      <div className="mt-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
-        {tiles.map((t, i) => (
-          <AnimatedCard key={t.t} delay={0.08 * i} className="rounded-2xl border border-orange-500/15 bg-white/[0.03] p-4 text-center">
-            <div className="mx-auto mb-2 grid h-10 w-10 place-items-center rounded-xl text-orange-400 drop-shadow-[0_0_10px_rgba(249,115,22,0.6)]">{t.icon}</div>
-            <div className="text-sm font-semibold text-zinc-100">{t.t}</div><div className="text-[11px] text-zinc-500">{t.s}</div>
-          </AnimatedCard>
-        ))}
-      </div>
+      <Reveal className="mt-3"><Watchlist /></Reveal>
     </div>
   );
 }
@@ -3367,7 +3391,7 @@ function MoveToSpotModal() {
           <p className="text-[12px] leading-relaxed text-zinc-400">From Margin & Futures to Spot, amount {check && check.ok ? check.amount : '—'} {label}, no app fee.</p>
           <Notice tone="warn">Moving margin can affect open perps positions on SoDEX.</Notice>
           {phase === 'busy' && <Notice tone="info"><span className="inline-flex items-center gap-2"><Spinner className="h-3.5 w-3.5" />{msg}</span></Notice>}
-          {phase === 'done' && <Notice tone="ok">{msg}</Notice>}
+          {phase === 'done' && <SuccessMark title="Moved to Spot" sub={msg} />}
           {phase === 'error' && <Notice tone="error">{msg}</Notice>}
           {phase === 'done'
             ? <Button className="w-full" size="lg" onClick={S.closeMoveToSpot}>Close</Button>
@@ -3394,7 +3418,7 @@ function SodexBalances({ compact = false }: { compact?: boolean }) {
         <li key={b.coin} style={{ '--i': Math.min(i, 8) } as React.CSSProperties} className="flex items-center gap-3 py-2">
           <TokenIcon name={coinLabel(b.coin)} size={24} />
           <div className="min-w-0 flex-1 text-[13px] font-medium text-zinc-100">{coinLabel(b.coin)}{locked && (b.locked ?? 0) > 0 && <span className="ml-2 text-[11px] font-normal text-zinc-500">{num(b.locked!, 4)} in orders</span>}</div>
-          <div className="text-right"><div className="tnum text-[13px] text-zinc-100">{num(b.total, 6)}</div><div className="tnum text-[11px] text-zinc-500">{value > 0 ? usd(value) : ''}</div></div>
+          <div className="text-right"><div className="tnum text-[13px] text-zinc-100"><Num v={num(b.total, 6)} /></div><div className="tnum text-[11px] text-zinc-500">{value > 0 ? <Num v={usd(value)} /> : ''}</div></div>
           {!locked && <MoveToSpotButton b={b as MarginBalance} />}
         </li>
       ))}
@@ -3402,11 +3426,11 @@ function SodexBalances({ compact = false }: { compact?: boolean }) {
   );
   return (
     <div className="rounded-2xl border border-orange-500/20 bg-black/40 p-4">
-      <div className="flex items-baseline justify-between gap-3"><h3 className="text-sm font-semibold text-zinc-100">Your SoDEX balance</h3><div className="tnum text-sm font-semibold text-zinc-50">{spotRows.length || marginRows.length ? usd(total) : ''}</div></div>
+      <div className="flex items-baseline justify-between gap-3"><h3 className="text-sm font-semibold text-zinc-100">Your SoDEX balance</h3><div className="tnum text-sm font-semibold text-zinc-50">{spotRows.length || marginRows.length ? <Num v={usd(total)} /> : ''}</div></div>
 
       <div className="mt-3 flex items-baseline justify-between gap-3">
         <h4 className="text-xs font-semibold uppercase tracking-wider text-zinc-400">Spot (spendable for swaps)</h4>
-        <div className="tnum text-xs font-semibold text-zinc-300">{spotRows.length ? usd(spotTotal) : ''}</div>
+        <div className="tnum text-xs font-semibold text-zinc-300">{spotRows.length ? <Num v={usd(spotTotal)} /> : ''}</div>
       </div>
       {S.accountID === undefined ? <div className="mt-2 space-y-2"><Skeleton className="h-8 w-full" /><Skeleton className="h-8 w-full" /></div>
         : spotRows.length === 0 ? <p className="mt-2 text-[13px] text-zinc-500">{S.accountID === null ? 'No SoDEX spot account for this wallet yet. Deposit on SoDEX to create it.' : 'No spot balances yet. Deposit assets on SoDEX to start trading.'}</p>
@@ -3414,7 +3438,7 @@ function SodexBalances({ compact = false }: { compact?: boolean }) {
 
       <div className="mt-4 flex items-baseline justify-between gap-3 border-t border-white/[0.06] pt-3">
         <h4 className="text-xs font-semibold uppercase tracking-wider text-zinc-400">Margin & Futures</h4>
-        <div className="tnum text-xs font-semibold text-zinc-300">{marginRows.length ? usd(marginTotal) : ''}</div>
+        <div className="tnum text-xs font-semibold text-zinc-300">{marginRows.length ? <Num v={usd(marginTotal)} /> : ''}</div>
       </div>
       <p className="mt-1 text-[12px] leading-relaxed text-zinc-500">Used as margin on SoDEX. Move it to Spot here, or as a secondary option on <a href={SODEX_SITE} target="_blank" rel="noreferrer" className="text-orange-300 hover:text-orange-200">sodex.com</a>.</p>
       {S.marginErr ? <div className="mt-2"><ErrorBox msg={S.marginErr} onRetry={() => S.refreshAccount()} /></div>
