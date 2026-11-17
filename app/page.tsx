@@ -26,6 +26,8 @@ import SwapFeedback from '@/components/motion/SwapFeedback';
 import CountUp from '@/components/motion/CountUp';
 import HeroOrbit from '@/components/motion/HeroOrbit';
 import SuccessMark from '@/components/motion/SuccessMark';
+import QuoteRefreshRing from '@/components/motion/QuoteRefreshRing';
+import PendingOrdersPill, { type FlightRow } from '@/components/motion/PendingOrdersPill';
 import { drawShareCard, canvasToBlob, SHARE_W, SHARE_H, type ShareData } from '@/components/shareCard';
 import { WC_PROJECT_ID, connectWalletConnect, restoreWalletConnect } from '@/components/walletconnect';
 import { InstallButton } from '@/components/Pwa';
@@ -64,6 +66,12 @@ import {
   UNKNOWN_SIG_MSG, allowanceCalldata, approvalStep, friendlyExecError, needsApproval,
   nextPollMs, statusLabel, txParams,
 } from '@/lib/routes/execute';
+import {
+  SWAP_QUOTE_POLL_MS, RECENT_PAIRS_KEY, LEAVE_FEES_KEY,
+  amountForPercent, priceMovePct, shouldWarnPriceMove, formatPriceMove,
+  readRecentPairs, pushRecentPair, classifyOrderStatus,
+  type RecentPair, type FlightStatus,
+} from '@/lib/swap-ux';
 import React, { createContext, useCallback, useContext, useEffect, useId, useMemo, useRef, useState } from 'react';
 import {
   AlertTriangle, ArrowDownUp, ArrowUpRight, Bot, CalendarClock, Check, ChevronDown, Copy, ExternalLink,
@@ -131,6 +139,10 @@ type Candle = { t: number; o: number; h: number; l: number; c: number; v: number
 type Level = { price: number; size: number };
 type TradeKey = { name: string; pk: string; address: string; accountID: number; expiresAt: number; net: Net; owner: string };
 type Asset = { key: string; coin: string; symbol: Sym | null; isQuote: boolean };
+type FlightOrder = {
+  localId: string; clOrdID: string; orderID?: number; symbol?: string; side?: string;
+  label: string; status: FlightStatus; detail?: string; startedAt: number; settledAt?: number;
+};
 
 /* ═════════════════════════ utils ═════════════════════════ */
 
@@ -159,6 +171,7 @@ const ssGet = <T,>(k: string, d: T): T => { try { const v = sessionStorage.getIt
 const ssSet = (k: string, v: unknown) => { try { if (v === null) sessionStorage.removeItem(k); else sessionStorage.setItem(k, JSON.stringify(v)); } catch { /* storage unavailable */ } };
 const cx = (...a: (string | false | null | undefined)[]) => a.filter(Boolean).join(' ');
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+const portfolioIntent: { tab?: 'open' | 'hist' } = {};
 
 /* ═════════════════════════ crypto (dependency-free) ═════════════════════════
  * keccak256 + secp256k1 deterministic signing (RFC 6979) + EIP-712 ExchangeAction digest.
@@ -763,6 +776,7 @@ type Store = {
   toast: (kind: ToastKind, text: string) => void; toasts: { id: number; kind: ToastKind; text: string }[];
   place: (orders: OrderIn[]) => Promise<OrderResult[]>; cancel: (items: { symbolID: number; orderID: number }[]) => Promise<OrderResult[]>;
   available: (coin: string) => number;
+  flights: FlightOrder[]; orderInFlight: boolean; dismissFlights: () => void;
   priceOf: (coin: string) => number;
   builder: { enabled: boolean; fee: number; approvedFee: number | undefined; active: boolean; approve: () => Promise<void>; revoke: () => Promise<void> };
 };
@@ -1196,14 +1210,89 @@ function useSoSwapStore(): Store {
     }
   }, [wallet, addr, moveTarget, net, walletSign, refreshAccount]);
 
+  const [flights, setFlights] = useState<FlightOrder[]>([]);
+  const openOrdersRef = useRef<OpenOrder[]>([]);
+  openOrdersRef.current = openOrders;
+  const placeBusy = useRef(false);
+  const orderInFlight = flights.some((f) => f.status === 'submitting');
+  const dismissFlights = useCallback(() => {
+    setFlights((f) => f.filter((x) => x.status === 'submitting' || x.status === 'partial'));
+  }, []);
+
   const place = useCallback(async (orders: OrderIn[]) => {
+    if (placeBusy.current) throw new Error('An order is already being submitted. Please wait.');
     if (!key || !keyValid) throw new Error('Enable trading first (trade key missing or expired).');
-    return placeOrders(net, key, orders, fee > 0 ? { id: BUILDER_ID, fee } : undefined);
-  }, [key, keyValid, net, fee]);
+    placeBusy.current = true;
+    const entries: FlightOrder[] = orders.map((o) => {
+      const sym = syms.find((s) => s.id === o.symbolID);
+      const side = o.side === 1 ? 'buy' : 'sell';
+      const base = sym?.base ?? 'token';
+      const qty = o.quantity || o.funds;
+      return {
+        localId: o.clOrdID, clOrdID: o.clOrdID, symbol: sym?.name, side,
+        label: `${side === 'buy' ? 'Buy' : 'Sell'}${qty ? ` ${qty}` : ''} ${base}`,
+        status: 'submitting', startedAt: Date.now(),
+      };
+    });
+    setFlights((f) => [...entries, ...f].slice(0, 16));
+    try {
+      const results = await placeOrders(net, key, orders, fee > 0 ? { id: BUILDER_ID, fee } : undefined);
+      setFlights((f) => f.map((x) => {
+        const r = results.find((row) => row.clOrdID === x.clOrdID);
+        if (!r || x.status !== 'submitting') return x;
+        if (r.code !== 0) return { ...x, status: 'failed', detail: 'The exchange did not accept this order.', settledAt: Date.now() };
+        return { ...x, status: 'submitted', orderID: r.orderID };
+      }));
+      return results;
+    } catch (e: any) {
+      const raw = userFacingError(e);
+      const detail = isUserRejected(e) ? 'Cancelled in your wallet.' : looksLikeRawSodex(raw) ? 'The order could not be submitted.' : raw;
+      setFlights((f) => f.map((x) => (
+        entries.some((e0) => e0.clOrdID === x.clOrdID) && x.status === 'submitting'
+          ? { ...x, status: 'failed', detail, settledAt: Date.now() }
+          : x
+      )));
+      throw e;
+    } finally {
+      placeBusy.current = false;
+    }
+  }, [key, keyValid, net, fee, syms]);
   const cancel = useCallback(async (items: { symbolID: number; orderID: number }[]) => {
     if (!key || !keyValid) throw new Error('Enable trading first (trade key missing or expired).');
     return cancelOrders(net, key, items);
   }, [key, keyValid, net]);
+
+  const pendingFlightKey = flights.filter((f) => f.status === 'submitted' || f.status === 'partial').map((f) => f.clOrdID).join('|');
+  useEffect(() => {
+    if (!addr || !pendingFlightKey) return;
+    let stop = false;
+    const matchOf = (f: FlightOrder) => (o: OpenOrder) => (!!f.orderID && o.orderID === f.orderID) || (!!f.clOrdID && o.clOrdID === f.clOrdID);
+    const poll = async () => {
+      if (stop) return;
+      try {
+        const hist = await fetchOrderHistory(net, addr, undefined, 40, aidRef.current ?? undefined);
+        if (stop) return;
+        setFlights((cur) => {
+          let changed = false;
+          const next = cur.map((f) => {
+            if (f.status !== 'submitted' && f.status !== 'partial') return f;
+            const found = openOrdersRef.current.find(matchOf(f)) || hist.find(matchOf(f));
+            if (!found) return f;
+            const cls = classifyOrderStatus(found.status, found.executed, found.qty);
+            const status: FlightStatus = cls === 'open' ? (found.executed > 0 ? 'partial' : 'submitted') : cls;
+            if (status === f.status && found.orderID === (f.orderID ?? found.orderID)) return f;
+            changed = true;
+            const settled = status === 'filled' || status === 'failed' || status === 'cancelled';
+            return { ...f, status, orderID: found.orderID || f.orderID, settledAt: settled ? Date.now() : f.settledAt };
+          });
+          return changed ? next : cur;
+        });
+      } catch { /* next poll */ }
+    };
+    poll();
+    const id = setInterval(poll, 2500);
+    return () => { stop = true; clearInterval(id); };
+  }, [addr, net, pendingFlightKey]);
 
   /* ───── dead-man's switch (SoDEX schedule-cancel), re-armed every 10s ───── */
   const wasArmed = useRef(false);
@@ -1232,6 +1321,7 @@ function useSoSwapStore(): Store {
     key, keyValid, createKey, importKey, forgetKey, builder,
     selected, setSelected, favs, toggleFav, slippage, setSlippage, deadman, setDeadman,
     view, setView, ui, setUi, toast, toasts, place, cancel, available, priceOf,
+    flights, orderInFlight, dismissFlights,
   };
 }
 
@@ -1762,7 +1852,10 @@ function SettingsModal() {
   );
 }
 
-function AssetPicker({ open, onClose, onPick, current, only }: { open: boolean; onClose: () => void; onPick: (a: Asset) => void; current?: string; only?: 'risk' }) {
+function AssetPicker({ open, onClose, onPick, current, only, recent, onPickPair, onClearRecent }: {
+  open: boolean; onClose: () => void; onPick: (a: Asset) => void; current?: string; only?: 'risk';
+  recent?: RecentPair[]; onPickPair?: (from: string, to: string) => void; onClearRecent?: () => void;
+}) {
   const S = useS();
   const [q, setQ] = useState('');
   useEffect(() => { if (!open) setQ(''); }, [open]);
@@ -1774,6 +1867,7 @@ function AssetPicker({ open, onClose, onPick, current, only }: { open: boolean; 
       .map((a) => ({ a, bal: S.available(a.coin), price: a.symbol ? S.tickers[a.symbol.name]?.last ?? 0 : 1 }))
       .sort((x, y) => y.bal * y.price - x.bal * x.price || 0);
   }, [S.assets, S.tickers, S.balances, q, only]); // eslint-disable-line react-hooks/exhaustive-deps
+  const recentShown = (recent ?? []).filter((p) => S.assetByKey[p.from] && S.assetByKey[p.to]);
   return (
     <Modal open={open} onClose={onClose} title="Select a token">
       <div className="space-y-3">
@@ -1781,6 +1875,21 @@ function AssetPicker({ open, onClose, onPick, current, only }: { open: boolean; 
           <Search className="h-4 w-4 text-zinc-500" />
           <input autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search name or symbol" className="h-10 w-full bg-transparent text-sm text-zinc-100 outline-none placeholder:text-zinc-600" />
         </div>
+        {!q && recentShown.length > 0 && onPickPair && (
+          <div className="ss-recent-pairs">
+            <div className="ss-recent-pairs-head">
+              <span>Recent pairs</span>
+              {onClearRecent && <button type="button" onClick={onClearRecent}>Clear</button>}
+            </div>
+            <div className="ss-recent-row">
+              {recentShown.map((p) => (
+                <button key={`${p.from}-${p.to}`} type="button" className="ss-recent-chip" onClick={() => { onPickPair(p.from, p.to); onClose(); }}>
+                  <TokenIcon name={p.from} size={18} />{p.from}<span className="ss-recent-chip-arrow">→</span><TokenIcon name={p.to} size={18} />{p.to}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
         <div className="-mx-2 max-h-[55vh] overflow-y-auto">
           {S.marketLoading && !rows.length && Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="m-2 h-11" />)}
           {!S.marketLoading && !rows.length && <Empty icon={<Search className="h-5 w-5" />} title="No tokens found" />}
@@ -1861,22 +1970,50 @@ function CostReceipt({ pay, get, lines, total, totalPct, notes }: {
   );
 }
 
-function ReviewModal({ open, onClose, title, rows, warn, confirmLabel, run, receipt, doneExtra, check, ack }: {
+function ReviewModal({ open, onClose, title, rows, warn, confirmLabel, run, receipt, doneExtra, check, ack, preflight, onRefreshQuote, blocked }: {
   receipt?: React.ReactNode; doneExtra?: React.ReactNode;
   /** Pre-trade check shown first in the review (see lib/risk.ts). `ack` makes the user tick a box before confirming. */
   check?: { grade: Grade; flags: Flag[] }; ack?: string;
   open: boolean; onClose: () => void; title: string; rows: { k: string; v: React.ReactNode; tone?: 'good' | 'bad' | 'warn' }[];
   warn?: string; confirmLabel: string; run: (progress: (s: string) => void) => Promise<string | void>;
+  /** Re-fetch the live book/quote right before signing. Never signs by itself. */
+  preflight?: () => Promise<{ warn: boolean; movedPct?: number }>;
+  onRefreshQuote?: () => Promise<void>;
+  blocked?: boolean;
 }) {
-  const [state, setState] = useState<'idle' | 'busy' | 'done' | 'error'>('idle');
+  const [state, setState] = useState<'idle' | 'checking' | 'price-warn' | 'busy' | 'done' | 'error'>('idle');
   const [msg, setMsg] = useState('');
   const [acked, setAcked] = useState(false);
-  useEffect(() => { if (open) { setState('idle'); setMsg(''); setAcked(false); } }, [open]);
-  const go = async () => {
+  const [movedPct, setMovedPct] = useState(0);
+  const skipWarn = useRef(false);
+  useEffect(() => { if (open) { setState('idle'); setMsg(''); setAcked(false); skipWarn.current = false; setMovedPct(0); } }, [open]);
+  const go = async (force = false) => {
     if (ack && !acked) return;
+    if (state === 'busy' || state === 'checking') return;
+    if (preflight && !force && !skipWarn.current) {
+      setState('checking'); setMsg('Checking the live price…');
+      try {
+        const r = await preflight();
+        if (r.warn) { setMovedPct(r.movedPct ?? 0); setState('price-warn'); setMsg(''); return; }
+      } catch {
+        setState('error'); setMsg('Could not refresh the price. Please try again.');
+        return;
+      }
+    }
+    skipWarn.current = false;
     setState('busy'); setMsg('Signing and submitting…');
     try { const r = await run((s) => setMsg(s)); setState('done'); setMsg(r || 'Done'); }
     catch (e: any) { setState('error'); setMsg(e?.message ?? 'Something went wrong'); }
+  };
+  const refreshQuote = async () => {
+    setState('checking'); setMsg('Refreshing the quote…');
+    try {
+      await onRefreshQuote?.();
+      await new Promise((r) => requestAnimationFrame(() => r(null)));
+      setState('idle'); setMsg('');
+    } catch {
+      setState('error'); setMsg('Could not refresh the quote. Please try again.');
+    }
   };
   return (
     <Modal open={open} onClose={() => state !== 'busy' && onClose()} title={title}>
@@ -1891,19 +2028,30 @@ function ReviewModal({ open, onClose, title, rows, warn, confirmLabel, run, rece
           </div>
         )}
         {receipt ?? <div className="space-y-2.5 rounded-2xl border border-white/[0.07] bg-black/30 p-4">{rows.map((r) => <Row key={r.k} k={r.k} v={r.v} tone={r.tone} />)}</div>}
-        {warn && state === 'idle' && <Notice tone="warn">{warn}</Notice>}
-        {ack && state === 'idle' && (
+        {warn && (state === 'idle' || state === 'price-warn') && <Notice tone="warn">{warn}</Notice>}
+        {ack && (state === 'idle' || state === 'price-warn') && (
           <label className="flex cursor-pointer items-start gap-2.5 text-[12px] text-zinc-300">
             <input type="checkbox" checked={acked} onChange={(e) => setAcked(e.target.checked)} className="mt-0.5 h-4 w-4 accent-orange-500" />
             <span>{ack}</span>
           </label>
+        )}
+        {state === 'checking' && <Notice tone="info"><span className="inline-flex items-center gap-2"><Spinner className="h-3.5 w-3.5" />{msg || 'Checking the live price…'}</span></Notice>}
+        {state === 'price-warn' && (
+          <div className="ss-price-warn" role="alert">
+            <p>{formatPriceMove(movedPct)}</p>
+            <div className="ss-price-warn-actions">
+              <Button onClick={refreshQuote}>Refresh quote</Button>
+              <Button variant="primary" disabled={!!ack && !acked} onClick={() => { skipWarn.current = true; go(true); }}>Continue</Button>
+            </div>
+          </div>
         )}
         {state === 'busy' && <Notice tone="info"><span className="inline-flex items-center gap-2"><Spinner className="h-3.5 w-3.5" />{msg}</span></Notice>}
         {state === 'done' && <SuccessMark title={msg || 'Done'} />}
         {state === 'done' && doneExtra}
         {state === 'error' && <Notice tone="error">{msg}</Notice>}
         {state === 'done' ? <Button className="w-full" size="lg" onClick={onClose}>Close</Button>
-          : <Button variant="primary" size="lg" className="w-full" loading={state === 'busy'} disabled={!!ack && !acked} onClick={go}>{state === 'error' ? 'Try again' : confirmLabel}</Button>}
+          : state === 'price-warn' ? null
+          : <Button variant="primary" size="lg" className="w-full" loading={state === 'busy' || state === 'checking'} disabled={(!!ack && !acked) || blocked} onClick={() => go()}>{state === 'error' ? 'Try again' : confirmLabel}</Button>}
       </div>
     </Modal>
   );
@@ -1913,31 +2061,74 @@ function ReviewModal({ open, onClose, title, rows, warn, confirmLabel, run, rece
 
 const ceilStep = (x: number, step: string) => stripZeros((Math.ceil(x / Number(step) - 1e-9) * Number(step)).toFixed(decimalsOf(step)));
 
-/** Polls several order books (visible tab only). */
+/** Polls several order books (visible tab only). Pauses while the tab is hidden. */
 function useBooks(names: string[], ms = 1800, limit = 25) {
   const S = useS();
   const [books, setBooks] = useState<Record<string, { bids: Level[]; asks: Level[] }>>({});
   const [err, setErr] = useState<string | null>(null);
+  const [updatedAt, setUpdatedAt] = useState(0);
+  const [refreshing, setRefreshing] = useState(false);
   const dep = names.join('|');
+  const namesRef = useRef(names);
+  namesRef.current = names;
+  const netRef = useRef(S.net);
+  netRef.current = S.net;
+  const sched = useRef<{ schedule: () => void; cancel: () => void } | null>(null);
+
+  const run = useCallback(async () => {
+    const nms = namesRef.current;
+    if (!nms.length) return {} as Record<string, { bids: Level[]; asks: Level[] }>;
+    setRefreshing(true);
+    try {
+      const res = await Promise.all(nms.map((n) => fetchBook(netRef.current, n, limit)));
+      const nb: Record<string, { bids: Level[]; asks: Level[] }> = {};
+      nms.forEach((n, i) => { nb[n] = res[i]; });
+      setBooks((b) => ({ ...b, ...nb }));
+      setUpdatedAt(Date.now());
+      setErr(null);
+      return nb;
+    } catch (e: any) {
+      setErr(e?.message ?? 'Order book unavailable');
+      return {} as Record<string, { bids: Level[]; asks: Level[] }>;
+    } finally {
+      setRefreshing(false);
+    }
+  }, [limit]);
+
   useEffect(() => {
     if (!names.length) return;
     let stop = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
-    const tick = async () => {
+    const schedule = () => {
       if (stop) return;
-      if (!document.hidden) {
-        try {
-          const res = await Promise.all(names.map((n) => fetchBook(S.net, n, limit)));
-          if (!stop) { setBooks((b) => { const nb = { ...b }; names.forEach((n, i) => { nb[n] = res[i]; }); return nb; }); setErr(null); }
-        } catch (e: any) { if (!stop) setErr(e?.message ?? 'Order book unavailable'); }
-      }
-      if (!stop) timer = setTimeout(tick, ms);
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(loop, ms);
     };
-    tick();
-    return () => { stop = true; if (timer) clearTimeout(timer); };
+    const loop = async () => {
+      if (stop) return;
+      if (typeof document === 'undefined' || !document.hidden) await run();
+      if (!stop && (typeof document === 'undefined' || !document.hidden)) schedule();
+    };
+    const onVis = () => {
+      if (stop) return;
+      if (document.hidden) { if (timer) { clearTimeout(timer); timer = undefined; } }
+      else loop();
+    };
+    sched.current = { schedule, cancel: () => { if (timer) { clearTimeout(timer); timer = undefined; } } };
+    loop();
+    document.addEventListener('visibilitychange', onVis);
+    return () => { stop = true; if (timer) clearTimeout(timer); sched.current = null; document.removeEventListener('visibilitychange', onVis); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dep, S.net, ms, limit]);
-  return { books, err };
+  }, [dep, S.net, ms, limit, run]);
+
+  const refreshNow = useCallback(async () => {
+    sched.current?.cancel();
+    const nb = await run();
+    sched.current?.schedule();
+    return nb;
+  }, [run]);
+
+  return { books, err, updatedAt, refreshing, refreshNow, intervalMs: ms };
 }
 
 /* ───────── candle chart ───────── */
@@ -2113,6 +2304,42 @@ const TokenBtn = ({ a, onClick }: { a?: Asset; onClick: () => void }) => (
 );
 
 
+type SwapBooks = Record<string, { bids: Level[]; asks: Level[] }>;
+function quoteSwap(fromA: Asset, toA: Asset, amt: number, books: SwapBooks) {
+  if (!fromA || !toA || !amt || fromA.key === toA.key) return null;
+  let proceeds = amt, impact = 0, notional = amt, feeUsd = 0, short = false, loading = false;
+  const route: string[] = [fromA.key];
+  let sellAvg = 0, buyAvg = 0;
+  if (!fromA.isQuote) {
+    const b = books[fromA.symbol!.name];
+    if (!b) loading = true; else {
+      const r = quoteSell(b.bids, amt);
+      notional = r.quote; short = short || r.shortfall; sellAvg = r.avg;
+      feeUsd += r.quote * fromA.symbol!.taker;
+      proceeds = r.quote * (1 - fromA.symbol!.taker);
+      if (b.bids[0]) impact += Math.max(0, ((b.bids[0].price - r.avg) / b.bids[0].price) * 100);
+    }
+    route.push('USDC');
+  }
+  let out = proceeds;
+  if (!toA.isQuote) {
+    const b = books[toA.symbol!.name];
+    if (!b) loading = true; else {
+      const r = quoteBuy(b.asks, proceeds);
+      short = short || r.shortfall; buyAvg = r.avg;
+      feeUsd += proceeds * toA.symbol!.taker;
+      out = r.base * (1 - toA.symbol!.taker);
+      if (b.asks[0]) impact += Math.max(0, ((r.avg - b.asks[0].price) / b.asks[0].price) * 100);
+    }
+  }
+  route.push(toA.key === 'USDC' ? '' : toA.key);
+  const legsN = (!fromA.isQuote ? 1 : 0) + (!toA.isQuote ? 1 : 0);
+  const minNotionals = [fromA, toA].filter((a) => !a.isQuote).map((a) => Number(a.symbol!.minNotional));
+  const legNotional = !fromA.isQuote ? notional : amt;
+  const belowMin = minNotionals.length > 0 && legNotional < Math.max(...minNotionals);
+  return { out, impact, feeUsd, short, loading, notional, route: route.filter(Boolean), legsN, belowMin, minNotional: Math.max(0, ...minNotionals), sellAvg, buyAvg };
+}
+
 function takeSwapIntent() {
   const i = { side: swapIntent.side, usd: swapIntent.usd, focus: !!swapIntent.focus };
   swapIntent.pair = undefined; swapIntent.side = undefined; swapIntent.usd = undefined; swapIntent.focus = undefined;
@@ -2129,6 +2356,13 @@ function SwapPanel() {
   const [review, setReview] = useState(false);
   const [slipOpen, setSlipOpen] = useState(false);
   const [pulsePreview, setPulsePreview] = useState(path.focus);
+  const [leaveFees, setLeaveFeesState] = useState(true);
+  const [recent, setRecent] = useState<RecentPair[]>([]);
+  useEffect(() => {
+    setLeaveFeesState(lsGet<boolean>(LEAVE_FEES_KEY, true));
+    setRecent(readRecentPairs(lsGet<unknown>(RECENT_PAIRS_KEY, [])));
+  }, []);
+  const setLeaveFees = (v: boolean) => { setLeaveFeesState(v); lsSet(LEAVE_FEES_KEY, v); };
 
   const fromA = S.assetByKey[fromKey], toA = S.assetByKey[toKey];
   const slip = clamp(parseFloat(S.slippage) || 0.5, 0.01, 20);
@@ -2175,48 +2409,33 @@ function SwapPanel() {
   const chooseTo = (a: Asset) => { if (a.key === fromKey) setFromKey(toKey); setToKey(a.key); const r = a.isQuote ? S.assetByKey[a.key === fromKey ? toKey : fromKey] : a; if (r?.symbol) S.setSelected(r.symbol.name); };
   const [flipTurn, setFlipTurn] = useState(0);
   const flip = () => { setFromKey(toKey); setToKey(fromKey); setAmount(''); setFlipTurn((n) => n + 1); };
+  const choosePair = (from: string, to: string) => {
+    setFromKey(from); setToKey(to);
+    const a = S.assetByKey[from], b = S.assetByKey[to];
+    const r = b && !b.isQuote ? b : a && !a.isQuote ? a : null;
+    if (r?.symbol) S.setSelected(r.symbol.name);
+  };
+  const clearRecent = () => { lsSet(RECENT_PAIRS_KEY, []); setRecent([]); };
 
   const legNames = [fromA && !fromA.isQuote ? fromA.symbol!.name : null, toA && !toA.isQuote ? toA.symbol!.name : null].filter(Boolean) as string[];
-  const { books, err: bookErr } = useBooks(legNames, 1800, 40);
+  const { books, err: bookErr, updatedAt, refreshing, refreshNow, intervalMs } = useBooks(legNames, SWAP_QUOTE_POLL_MS, 40);
 
   const amt = parseFloat(amount) || 0;
   const avail = fromA ? S.available(fromA.coin) : 0;
   const fromPrice = fromA ? (fromA.isQuote ? 1 : S.tickers[fromA.symbol!.name]?.last ?? 0) : 0;
 
-  const q = useMemo(() => {
-    if (!fromA || !toA || !amt || fromA.key === toA.key) return null;
-    let proceeds = amt, impact = 0, notional = amt, feeUsd = 0, short = false, loading = false;
-    const route: string[] = [fromA.key];
-    let sellAvg = 0, buyAvg = 0;
-    if (!fromA.isQuote) {
-      const b = books[fromA.symbol!.name];
-      if (!b) loading = true; else {
-        const r = quoteSell(b.bids, amt);
-        notional = r.quote; short = short || r.shortfall; sellAvg = r.avg;
-        feeUsd += r.quote * fromA.symbol!.taker;
-        proceeds = r.quote * (1 - fromA.symbol!.taker);
-        if (b.bids[0]) impact += Math.max(0, ((b.bids[0].price - r.avg) / b.bids[0].price) * 100);
-      }
-      route.push('USDC');
-    }
-    let out = proceeds;
-    if (!toA.isQuote) {
-      const b = books[toA.symbol!.name];
-      if (!b) loading = true; else {
-        const r = quoteBuy(b.asks, proceeds);
-        short = short || r.shortfall; buyAvg = r.avg;
-        feeUsd += proceeds * toA.symbol!.taker;
-        out = r.base * (1 - toA.symbol!.taker);
-        if (b.asks[0]) impact += Math.max(0, ((r.avg - b.asks[0].price) / b.asks[0].price) * 100);
-      }
-    }
-    route.push(toA.key === 'USDC' ? '' : toA.key);
-    const legsN = (!fromA.isQuote ? 1 : 0) + (!toA.isQuote ? 1 : 0);
-    const minNotionals = [fromA, toA].filter((a) => !a.isQuote).map((a) => Number(a.symbol!.minNotional));
-    const legNotional = !fromA.isQuote ? notional : amt; // value traded on the first leg, in USDC
-    const belowMin = minNotionals.length > 0 && legNotional < Math.max(...minNotionals);
-    return { out, impact, feeUsd, short, loading, notional, route: route.filter(Boolean), legsN, belowMin, minNotional: Math.max(0, ...minNotionals), sellAvg, buyAvg };
-  }, [books, fromA, toA, amt]);
+  const q = useMemo(() => (fromA && toA ? quoteSwap(fromA, toA, amt, books) : null), [books, fromA, toA, amt]);
+  const chipAmt = (fraction: number) => (
+    fromA ? amountForPercent({ available: avail, fraction, isQuote: fromA.isQuote, step: fromA.symbol?.step, leaveFeeBuffer: leaveFees }) : '0'
+  );
+  useEffect(() => {
+    if (!fromA?.isQuote || !avail) return;
+    const on = amountForPercent({ available: avail, fraction: 1, isQuote: true, leaveFeeBuffer: true });
+    const off = amountForPercent({ available: avail, fraction: 1, isQuote: true, leaveFeeBuffer: false });
+    if (amount === on || amount === off) setAmount(amountForPercent({ available: avail, fraction: 1, isQuote: true, leaveFeeBuffer: leaveFees }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [leaveFees]);
+  const previewSnap = useRef({ rate: 0 });
 
   const symSell = fromA && !fromA.isQuote ? fromA.symbol! : null;
   const symBuy = toA && !toA.isQuote ? toA.symbol! : null;
@@ -2252,7 +2471,10 @@ function SwapPanel() {
     return { impactUsd, appFee, totalUsd, pct: q.notional > 0 ? (totalUsd / q.notional) * 100 : 0, notes };
   })() : null;
 
-  let cta = 'Review swap', ctaDisabled = false, ctaAction: () => void = () => setReview(true);
+  let cta = 'Review swap', ctaDisabled = false, ctaAction: () => void = () => {
+    if (q && amt) previewSnap.current = { rate: q.out / amt };
+    setReview(true);
+  };
   if (!S.wallet) { cta = 'Connect wallet'; ctaAction = () => S.setUi('connect', true); }
   else if (S.accountID === null) { cta = 'Deposit on SoDEX first'; ctaAction = () => window.open(SODEX_SITE, '_blank'); }
   else if (S.accountID === undefined) { cta = 'Loading account…'; ctaDisabled = true; }
@@ -2264,6 +2486,7 @@ function SwapPanel() {
   else if (q?.short) { cta = 'Not enough liquidity'; ctaDisabled = true; }
   else if (q?.belowMin) { cta = `Minimum order ≈ $${q.minNotional}`; ctaDisabled = true; }
   else if (tooMuchImpact) { cta = 'Price impact above slippage'; ctaDisabled = true; }
+  else if (S.orderInFlight) { cta = 'Order in flight…'; ctaDisabled = true; }
 
   const [exec, setExec] = useState<'idle' | 'pending' | 'success' | 'error'>('idle');
   useEffect(() => { setExec((e) => (e === 'pending' ? e : 'idle')); }, [amount, fromKey, toKey]);
@@ -2315,10 +2538,31 @@ function SwapPanel() {
   const [shareData, setShareData] = useState<ShareData | null>(null);
   const runTracked = async (progress: (s: string) => void): Promise<string> => {
     setExec('pending');
-    try { const snap = q && receipt ? { pay: `${amount} ${fromKey}`, get: `${num(q.out, 6)} ${toKey}`, costPct: receipt.pct, netLabel: NETS[S.net].label } : null; const r = await runSwap(progress); const ok = !/fill pending/.test(r); if (ok) { lsSet('soswap.swapped', true); if (snap) setShareData(snap); } setExec(ok ? 'success' : 'idle'); return r; }
+    try { const snap = q && receipt ? { pay: `${amount} ${fromKey}`, get: `${num(q.out, 6)} ${toKey}`, costPct: receipt.pct, netLabel: NETS[S.net].label } : null; const r = await runSwap(progress); const ok = !/fill pending/.test(r); if (ok) { lsSet('soswap.swapped', true); const next = pushRecentPair(readRecentPairs(lsGet<unknown>(RECENT_PAIRS_KEY, [])), fromKey, toKey); lsSet(RECENT_PAIRS_KEY, next); setRecent(next); if (snap) setShareData(snap); } setExec(ok ? 'success' : 'idle'); return r; }
     catch (e) { setExec('error'); throw e; }
   };
   const swapStatus = exec !== 'idle' ? exec : q && !q.loading && q.out && !q.short && !q.belowMin ? 'preview' : 'idle';
+
+  const runPreflight = async () => {
+    if (!fromA || !toA || !amt) return { warn: false };
+    const names = legNames;
+    const res = await Promise.all(names.map((n) => fetchBook(S.net, n, 40)));
+    const fresh: SwapBooks = { ...books };
+    names.forEach((n, i) => { fresh[n] = res[i]; });
+    const live = quoteSwap(fromA, toA, amt, fresh);
+    if (!live || live.loading || !(live.out > 0)) return { warn: false };
+    const rate = live.out / amt;
+    const movedPct = priceMovePct(previewSnap.current.rate, rate);
+    const warn = shouldWarnPriceMove(previewSnap.current.rate, rate, slip);
+    if (!warn) previewSnap.current = { rate };
+    return { warn, movedPct };
+  };
+  const onRefreshQuote = async () => {
+    const nb = await refreshNow();
+    if (!fromA || !toA || !amt) return;
+    const live = quoteSwap(fromA, toA, amt, { ...books, ...nb });
+    if (live && live.out > 0) previewSnap.current = { rate: live.out / amt };
+  };
 
   const routeRows = q && !q.loading ? [
     { k: 'Best Route', v: q.route.join(' → ') },
@@ -2339,12 +2583,23 @@ function SwapPanel() {
               <input aria-label="Amount to pay" inputMode="decimal" autoComplete="off" value={amount} placeholder="0" onChange={(e) => { const v = e.target.value.replace(',', '.'); if (/^\d*\.?\d*$/.test(v)) setAmount(v); }}
                 className="tnum min-w-0 flex-1 bg-transparent text-right text-2xl font-semibold text-zinc-50 outline-none placeholder:text-zinc-600" />
             </div>
-            <div className="mt-1.5 flex items-center justify-between">
-              <span className="tnum text-[11px] text-zinc-500">{amt && fromPrice ? `≈ ${usd(amt * fromPrice)}` : ' '}</span>
-              <div className="flex gap-1">{[0.25, 0.5, 1].map((f) => (
-                <button key={f} onClick={() => fromA && setAmount(fromA.isQuote ? fixedStr(avail * f, 6) : floorStep(avail * f, fromA.symbol!.step))} disabled={!avail}
-                  className="rounded-md border border-white/10 px-1.5 py-0.5 text-[10px] text-zinc-400 transition hover:border-orange-500 hover:text-orange-400 disabled:opacity-40">{f === 1 ? 'MAX' : `${f * 100}%`}</button>))}</div>
+            <div className="mt-1.5 flex items-center justify-between gap-2">
+              <span className="tnum text-[11px] text-zinc-500">{amt && fromPrice ? <>≈ <Num v={usd(amt * fromPrice)} /></> : ' '}</span>
+              <div className="ss-amt-chips">{[0.25, 0.5, 1].map((f) => {
+                const v = chipAmt(f);
+                const on = !!amount && amount === v;
+                return (
+                  <button key={f} type="button" onClick={() => setAmount(v)} disabled={!avail || v === '0'}
+                    className={cx('ss-amt-chip', on && 'is-on')} aria-pressed={on}>{f === 1 ? 'MAX' : `${f * 100}%`}</button>
+                );
+              })}</div>
             </div>
+            {fromA?.isQuote && avail > 0 && (
+              <label className="ss-fee-toggle">
+                <input type="checkbox" checked={leaveFees} onChange={(e) => setLeaveFees(e.target.checked)} />
+                Leave a little for fees
+              </label>
+            )}
           </div>
           <div className="relative z-10 -my-4 flex justify-center">
             <motion.button onClick={flip} aria-label="Swap direction" animate={{ rotate: flipTurn * 180 }} whileTap={{ scale: 0.88 }} transition={{ type: 'spring', stiffness: 320, damping: 20 }} className="grid h-9 w-9 place-items-center rounded-full border-2 border-orange-500/30 bg-[#120c07] text-orange-300 transition-colors hover:bg-orange-500 hover:text-black"><ArrowDownUp className="h-4 w-4" /></motion.button>
@@ -2360,9 +2615,12 @@ function SwapPanel() {
         </div>
 
         <div id="route-preview" className={cx('rounded-2xl border border-orange-500/20 bg-black/40 p-4 transition', pulsePreview && 'ring-2 ring-orange-400/80 shadow-[0_0_40px_-10px_rgba(249,115,22,0.75)]')}>
-          <div className="mb-3 flex items-center justify-between">
+          <div className="mb-3 flex items-center justify-between gap-2">
             <h3 className="flex items-center gap-2 text-sm font-semibold text-zinc-100"><Star className="h-4 w-4 fill-orange-400 text-orange-400" />Route Preview (SoDEX)</h3>
-            <span className="rounded-md border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[11px] font-semibold text-emerald-300">{S.marketErr ? 'Offline' : 'Live'}</span>
+            <div className="flex items-center gap-2">
+              <QuoteRefreshRing intervalMs={intervalMs} updatedAt={updatedAt} refreshing={refreshing} onRefresh={() => { void refreshNow(); }} disabled={!legNames.length} />
+              <span className="rounded-md border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[11px] font-semibold text-emerald-300">{S.marketErr ? 'Offline' : 'Live'}</span>
+            </div>
           </div>
           {routeRows ? (
             <div className="ss-stagger space-y-2.5">
@@ -2398,13 +2656,14 @@ function SwapPanel() {
         </button>
       )}
 
-      <Button variant="primary" size="lg" className="mt-4 w-full !h-12 !rounded-lg" disabled={ctaDisabled} onClick={ctaAction}>
+      <Button variant="primary" size="lg" className="mt-4 w-full !h-12 !rounded-lg" disabled={ctaDisabled || S.orderInFlight} onClick={ctaAction}>
         {!S.wallet && <Wallet className="h-4 w-4" />}{!S.wallet ? 'Connect Wallet to Swap' : cta === 'Review swap' ? 'Swap on SoDEX' : cta}
       </Button>
       <p className="mt-3 flex items-center justify-center gap-1.5 text-[11px] text-zinc-500"><ShieldCheck className="h-3.5 w-3.5 text-orange-400" />You sign in your wallet. We never ask for a seed phrase.</p>
       <SwapFeedback status={swapStatus} />
 
       <ReviewModal open={review} onClose={() => setReview(false)} title="Review swap" confirmLabel="Confirm swap" run={runTracked} doneExtra={shareData ? <ShareTrade data={shareData} /> : undefined}
+        preflight={runPreflight} onRefreshQuote={onRefreshQuote} blocked={S.orderInFlight}
         check={safety ?? undefined} ack={safety?.grade === 'avoid' ? 'I understand this trade is flagged high risk and I want to continue.' : undefined}
         warn={q && q.legsN > 1 ? 'This swap uses two market orders via USDC. If the second one fails, you keep the USDC from the first.' : undefined}
         receipt={q && receipt ? <CostReceipt pay={`${amount} ${fromKey}`} get={`${num(q.out, 8)} ${toKey}`} total={usd(receipt.totalUsd, 3)} totalPct={receipt.pct} notes={receipt.notes}
@@ -2423,8 +2682,8 @@ function SwapPanel() {
           ...(S.builder.active ? [{ k: 'SoSwapDEX fee (max)', v: `${bpText(Math.min(S.builder.fee, S.builder.approvedFee ?? 0))} of each fill` }] : []),
           { k: 'Network', v: NETS[S.net].label, tone: S.net === 'mainnet' ? 'warn' : undefined },
         ] : []} />
-      <AssetPicker open={picker === 'from'} onClose={() => setPicker(null)} onPick={chooseFrom} current={fromKey} />
-      <AssetPicker open={picker === 'to'} onClose={() => setPicker(null)} onPick={chooseTo} current={toKey} />
+      <AssetPicker open={picker === 'from'} onClose={() => setPicker(null)} onPick={chooseFrom} current={fromKey} recent={recent} onPickPair={choosePair} onClearRecent={clearRecent} />
+      <AssetPicker open={picker === 'to'} onClose={() => setPicker(null)} onPick={chooseTo} current={toKey} recent={recent} onPickPair={choosePair} onClearRecent={clearRecent} />
     </div>
   );
 }
@@ -2456,6 +2715,7 @@ function LimitPanel({ sym, book, pickedPrice }: { sym?: Sym; book?: { bids: Leve
   else if (total < Number(sym.minNotional)) { cta = `Minimum order $${sym.minNotional}`; dis = true; }
   else if (side === 'buy' && total > availQuote + 1e-9) { cta = 'Insufficient USDC'; dis = true; }
   else if (side === 'sell' && qn > availBase + 1e-12) { cta = `Insufficient ${sym.base}`; dis = true; }
+  else if (S.orderInFlight) { cta = 'Order in flight…'; dis = true; }
 
   const run = async (progress: (s: string) => void) => {
     if (!sym) throw new Error('No pair');
@@ -2667,7 +2927,11 @@ function MarketsView() {
 
 function PortfolioView() {
   const S = useS();
-  const [tab, setTab] = useState<'bal' | 'open' | 'fills' | 'hist'>('bal');
+  const [tab, setTab] = useState<'bal' | 'open' | 'fills' | 'hist'>(() => {
+    const t0 = portfolioIntent.tab;
+    portfolioIntent.tab = undefined;
+    return t0 ?? 'bal';
+  });
   const [hideSmall, setHideSmall] = useState(true);
   const [hist, setHist] = useState<{ fills: Fill[] | null; orders: OpenOrder[] | null; err: string | null; loading: boolean }>({ fills: null, orders: null, err: null, loading: false });
   const [confirmAll, setConfirmAll] = useState(false);
@@ -5219,6 +5483,14 @@ function Shell() {
       </main>
 
       <WalletModal /><KeyModal /><SettingsModal />
+
+      <div className="pointer-events-none fixed bottom-24 left-4 z-[70] sm:bottom-6">
+        <PendingOrdersPill
+          flights={S.flights as FlightRow[]}
+          onDismiss={S.dismissFlights}
+          onOpenDetails={() => { portfolioIntent.tab = 'open'; S.setView('portfolio'); }}
+        />
+      </div>
 
       <div className="pointer-events-none fixed bottom-24 right-4 z-[70] sm:bottom-4 flex w-[min(92vw,360px)] flex-col gap-2" aria-live="polite">
         <AnimatePresence initial={false}>

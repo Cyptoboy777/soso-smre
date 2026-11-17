@@ -16,6 +16,7 @@ const setup = nodeTest(join(d, 'setup.test.ts'));
 const keys = nodeTest('tests/api-key.test.ts');
 const balances = nodeTest('tests/sodex-balances.test.ts');
 const transfer = nodeTest('tests/sodex-transfer.test.ts');
+const swapUx = nodeTest('tests/swap-ux.test.ts');
 
 function withTsExt(src) {
   return src.replaceAll(/from ['"](\.[^'"]+)['"]/g, (m, spec) => spec.endsWith('.ts') || spec.endsWith('.json') ? m : m.replace(spec, spec + '.ts'));
@@ -38,4 +39,4 @@ writeFileSync(join(r, 'tests', 'route-quote.test.ts'), readFileSync('tests/route
 const cfg = nodeTest(join(r, 'tests', 'sodex-config.test.ts'));
 const routes = nodeTest(join(r, 'tests', 'route-quote.test.ts'));
 
-process.exit((setup.status ?? 1) || (keys.status ?? 1) || (balances.status ?? 1) || (transfer.status ?? 1) || (cfg.status ?? 1) || (routes.status ?? 1));
+process.exit((setup.status ?? 1) || (keys.status ?? 1) || (balances.status ?? 1) || (transfer.status ?? 1) || (swapUx.status ?? 1) || (cfg.status ?? 1) || (routes.status ?? 1));

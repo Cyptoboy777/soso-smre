@@ -1,6 +1,7 @@
 @import "../components/motion/SoSwapMotion.css";
 @import "../components/motion/polish.css";
 @import "../components/motion/motion2.css";
+@import "../components/motion/ux5.css";
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
