@@ -29,7 +29,7 @@ import { InstallButton } from '@/components/Pwa';
 import { WalletGlyph, OfficialMark, resolveWalletKind } from '@/components/WalletLogos';
 import { SkillsMark, TradeCheckIcon, PositionIcon, PortfolioIcon, BriefIcon, NewsIcon, PlanIcon, JournalIcon, AlertIcon, SkillTile } from '@/components/SkillIcons';
 import { scanTrade, sizePosition, portfolioHealth, journalStats, type Grade, type Flag, type ScanOut } from '@/lib/risk';
-import { computeSetup, pickBest, assetAliases, etfAssetFor, type SetupOut, type SetupGrade } from '@/lib/setup';
+import { computeSetup, pickBest, assetAliases, etfAssetFor, MAX_SPREAD_PCT, MAX_IMPACT_PCT, type SetupOut, type SetupGrade } from '@/lib/setup';
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertTriangle, ArrowDownUp, ArrowUpRight, Bot, CalendarClock, Check, ChevronDown, Copy, ExternalLink,
@@ -2994,6 +2994,7 @@ function BotPreview({ kind, cfg, sym, price }: { kind: BotKind; cfg: BotCfg; sym
         <Row k="TP1 / TP2" v={`${px(parseFloat(c.tp1))} / ${px(parseFloat(c.tp2))}`} />
         <Row k="Size" v={`${c.qty} ${sym?.base ?? ''} · ${usd(parseFloat(c.notional) || 0)}`} />
         <Row k="R:R to TP1" v={c.rr ? `1:${c.rr}` : '–'} />
+        <Row k="Saved" v={`${ageText(c.at)} ago${Date.now() - c.at > 3_600_000 ? ' · prices are old, rebuild before trading' : ''}`} tone={Date.now() - c.at > 3_600_000 ? 'warn' : undefined} />
         <div className="mt-3"><Button size="sm" onClick={() => goToRoutePreview(S, c.pair, 'buy', c.notional)}>Preview route<ArrowUpRight className="h-3.5 w-3.5" /></Button></div>
       </div>
     );
@@ -3133,7 +3134,9 @@ function contextFor(base: string, shared: Awaited<ReturnType<typeof loadSetupCon
 }
 
 function setupExplain(res: SetupOut) {
+  const nt = res.grade === 'no-trade';
   const n = (v: number | null, d = 6) => (v != null && Number.isFinite(v) ? +v.toPrecision(d) : null);
+  const lv = (v: number, d = 6) => (nt ? null : n(v, d));
   return {
     pair: res.display,
     timeframe: '1 hour',
@@ -3145,15 +3148,15 @@ function setupExplain(res: SetupOut) {
     support: n(res.support),
     resistance: n(res.resistance),
     resistance2: n(res.resistance2),
-    entry: n(res.entry),
-    stop: n(res.stop),
-    takeProfit1: n(res.tp1),
-    takeProfit2: n(res.tp2),
-    rewardToRiskTp1: n(res.rr1, 4),
-    rewardToRiskTp2: n(res.rr2, 4),
-    positionQty: n(res.qty),
-    positionUsdc: n(res.notional, 6),
-    maxLossUsdc: n(res.maxLoss, 6),
+    entry: lv(res.entry),
+    stop: lv(res.stop),
+    takeProfit1: lv(res.tp1),
+    takeProfit2: lv(res.tp2),
+    rewardToRiskTp1: lv(res.rr1, 4),
+    rewardToRiskTp2: lv(res.rr2, 4),
+    positionQty: lv(res.qty),
+    positionUsdc: lv(res.notional, 6),
+    maxLossUsdc: lv(res.maxLoss, 6),
     stopDistancePct: n(res.stopDistPct, 4),
     spreadPct: n(res.spreadPct, 4),
     priceImpactPct: n(res.impactPct, 4),
@@ -3166,6 +3169,179 @@ function setupExplain(res: SetupOut) {
   };
 }
 
+/* ───────── Arm and confirm: watches a setup while the tab is open, then asks you to confirm. Never places an order. ───────── */
+
+const ageText = (t: number) => { const m = Math.max(0, Math.round((Date.now() - t) / 60000)); return m < 1 ? 'under a minute' : m < 60 ? `${m} min` : `${Math.floor(m / 60)} h ${m % 60} min`; };
+type ArmGrade = 'A' | 'B';
+type Armed = {
+  pair: string; display: string; minGrade: ArmGrade; maxUsd: number; equity: number; riskPct: number;
+  armedAt: number; expiresAt: number; status: 'watching' | 'ready' | 'expired'; ready?: { at: number; res: SetupOut }; checks: number; lastCheck?: number;
+};
+const ARM_LS = 'soswap.armed.v1';
+const ARM_EVERY_MS = 45_000;
+const ARM_FRESH_MS = 3 * 60_000;
+const gradeRank = (g: SetupGrade) => (g === 'A' ? 3 : g === 'B' ? 2 : g === 'C' ? 1 : 0);
+type ArmApi = { armed: Armed | null; arm: (a: Omit<Armed, 'armedAt' | 'status' | 'checks'>) => void; disarm: () => void; recheck: () => Promise<void>; checking: boolean };
+const ArmCtx = createContext<ArmApi | null>(null);
+const useArm = () => { const c = useContext(ArmCtx); if (!c) throw new Error('ArmHost missing'); return c; };
+
+function ArmHost({ children }: { children: React.ReactNode }) {
+  const S = useS();
+  const alerts = useContext(AlertsCtx);
+  const [armed, setArmed] = useState<Armed | null>(null);
+  const [checking, setChecking] = useState(false);
+  const loaded = useRef(false);
+  const busy = useRef(false);
+  const fails = useRef(0);
+  const sRef = useRef(S); sRef.current = S;
+  useEffect(() => {
+    const a = lsGet<Armed | null>(ARM_LS, null);
+    setArmed(a && a.pair ? (a.status === 'watching' && Date.now() > a.expiresAt ? { ...a, status: 'expired' } : a) : null);
+    loaded.current = true;
+  }, []);
+  useEffect(() => { if (loaded.current) lsSet(ARM_LS, armed); }, [armed]);
+
+  const check = useCallback(async () => {
+    const a = armed;
+    if (!a || a.status !== 'watching' || busy.current) return;
+    const St = sRef.current;
+    if (Date.now() > a.expiresAt) { setArmed({ ...a, status: 'expired' }); St.toast('info', `Armed setup for ${a.display} expired. Nothing was placed.`); return; }
+    const sym = St.symByName[a.pair];
+    if (!sym || sym.halted) return;
+    busy.current = true; setChecking(true);
+    try {
+      const [klines, book] = await Promise.all([fetchKlines(St.net, sym.name, '1h', 80), fetchBook(St.net, sym.name, 50)]);
+      const t = St.tickers[sym.name];
+      const res = computeSetup({
+        pair: sym.name, display: sym.display, base: sym.base, candles: klines, bids: book.bids, asks: book.asks,
+        last: t?.last ?? 0, quoteVol: t?.quoteVol ?? 0, takerFee: sym.taker, halted: sym.halted,
+        minNotional: parseFloat(sym.minNotional) || 0, equity: a.equity, riskPct: a.riskPct, interval: '1h',
+        builderFeePct: BUILDER_ID ? BUILDER_FEE / 1000 : 0, maxNotional: a.maxUsd,
+      });
+      fails.current = 0;
+      const ok = res.grade !== 'no-trade' && gradeRank(res.grade) >= gradeRank(a.minGrade);
+      setArmed((cur) => {
+        if (!cur || cur.status !== 'watching' || cur.armedAt !== a.armedAt) return cur;
+        return ok ? { ...cur, status: 'ready', ready: { at: Date.now(), res }, checks: cur.checks + 1, lastCheck: Date.now() } : { ...cur, checks: cur.checks + 1, lastCheck: Date.now() };
+      });
+      if (ok) {
+        try { if (typeof Notification !== 'undefined' && Notification.permission === 'granted') new Notification('SoSwapDEX setup ready', { body: `${sym.display} grade ${res.grade}. Open SoSwapDEX to review. Nothing has been placed.`, icon: '/icons/icon-192.png' }); } catch { /* ignore */ }
+      }
+    } catch {
+      fails.current += 1;
+      if (fails.current === 4) St.toast('err', 'The armed setup cannot read live market data right now. It keeps trying until it expires.');
+    } finally { busy.current = false; setChecking(false); }
+  }, [armed]);
+
+  useEffect(() => {
+    if (!armed || armed.status !== 'watching') return;
+    const t0 = setTimeout(check, 1500);
+    const id = setInterval(check, ARM_EVERY_MS);
+    return () => { clearTimeout(t0); clearInterval(id); };
+  }, [armed?.armedAt, armed?.status, check]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const api: ArmApi = {
+    armed, checking,
+    arm: (a) => { fails.current = 0; setArmed({ ...a, armedAt: Date.now(), status: 'watching', checks: 0 }); },
+    disarm: () => setArmed(null),
+    recheck: async () => { setArmed((c) => (c ? { ...c, status: 'watching', ready: undefined } : c)); },
+  };
+
+  const ready = armed?.status === 'ready' ? armed.ready : undefined;
+  const [alertsOn, setAlertsOn] = useState(true);
+  const fresh = !!ready && Date.now() - ready.at < ARM_FRESH_MS;
+  const r = ready?.res;
+  return (
+    <ArmCtx.Provider value={api}>
+      {children}
+      <Modal open={!!r} onClose={() => setArmed((c) => (c ? { ...c, status: 'expired', ready: undefined } : c))} title={r ? `Setup ready: ${r.display}` : 'Setup ready'}>
+        {r && (
+          <div className="space-y-3">
+            <Notice tone="ok">Conditions you armed were met (grade {r.grade}, minimum {armed?.minGrade}). Nothing has been placed. You decide.</Notice>
+            <div className="space-y-1.5 rounded-xl border border-white/[0.07] bg-black/30 p-3 text-sm">
+              <Row k="Entry (expected fill)" v={px(r.entry)} />
+              <Row k="Stop (you place it)" v={px(r.stop)} tone="bad" />
+              <Row k="TP1 / TP2" v={`${px(r.tp1)} / ${px(r.tp2)}`} tone="good" />
+              <Row k="R:R after fees" v={`1:${r.rr1.toFixed(2)} · 1:${r.rr2.toFixed(2)}`} />
+              <Row k="Size" v={`${Number(r.qty.toPrecision(5))} ${r.base} · ${usd(r.notional)}`} />
+              <Row k="Loss if price reaches the stop" v={usd(r.maxLoss)} tone="bad" />
+              <Row k="Spread / impact" v={`${r.spreadPct.toFixed(2)}% / ${r.impactPct.toFixed(2)}%`} />
+              <Row k="Numbers from" v={`${ageText(ready!.at)} ago`} tone={fresh ? undefined : 'warn'} />
+            </div>
+            {r.flags.length > 0 && <FlagList flags={r.flags} />}
+            <p className="text-[12px] leading-relaxed text-amber-300/90">The exchange side only takes market and limit orders here, so no stop-loss is placed for you. Tick the box below to get a price alert at the stop and at TP1, and keep this tab open.</p>
+            <label className="flex cursor-pointer items-start gap-2.5 text-[12px] text-zinc-300"><input type="checkbox" checked={alertsOn} onChange={(e) => setAlertsOn(e.target.checked)} className="mt-0.5 h-4 w-4 accent-orange-500" /><span>Set price alerts at the stop and at TP1</span></label>
+            {!fresh && <Notice tone="warn">These numbers are more than 3 minutes old. Re-check before you trade.</Notice>}
+            <div className="flex flex-wrap gap-2">
+              <Button variant="primary" disabled={!fresh} onClick={() => {
+                if (alertsOn && alerts) { alerts.add({ symbol: r.pair, dir: 'below', price: +r.stop.toPrecision(8) }); alerts.add({ symbol: r.pair, dir: 'above', price: +r.tp1.toPrecision(8) }); }
+                setArmed((c) => (c ? { ...c, status: 'expired', ready: undefined } : c));
+                goToRoutePreview(S, r.pair, 'buy', String(Math.round(r.notional * 100) / 100));
+              }}>Preview route<ArrowUpRight className="h-3.5 w-3.5" /></Button>
+              <Button onClick={() => { void api.recheck(); }}>Re-check</Button>
+              <Button onClick={() => setArmed(null)}>Dismiss</Button>
+            </div>
+          </div>
+        )}
+      </Modal>
+    </ArmCtx.Provider>
+  );
+}
+
+function ArmModal({ open, onClose, res, equity, riskPct }: { open: boolean; onClose: () => void; res: SetupOut; equity: number; riskPct: number }) {
+  const S = useS();
+  const { arm, armed } = useArm();
+  const [grade, setGrade] = useState<ArmGrade>('B');
+  const [maxUsd, setMaxUsd] = useState('');
+  const [hours, setHours] = useState<'1' | '4' | '12' | '24'>('4');
+  const [ack, setAck] = useState(false);
+  useEffect(() => { if (open) { setAck(false); setMaxUsd(String(Math.floor(Math.min(res.notional, equity) * 100) / 100)); } }, [open, res.pair]); // eslint-disable-line react-hooks/exhaustive-deps
+  const maxN = parseFloat(maxUsd) || 0;
+  const bad = !(maxN > 0) ? 'Enter a maximum order value in USDC.' : maxN > equity ? 'The maximum order cannot be larger than your account size.' : '';
+  return (
+    <Modal open={open} onClose={onClose} title={`Arm ${res.display}`}>
+      <div className="space-y-3.5">
+        <p className="text-[13px] leading-relaxed text-zinc-400">Arming lets SoSwapDEX watch {res.display} while this tab is open. When a fresh check meets your minimum grade, it shows you the exact numbers and asks you to confirm. <b className="text-zinc-200">It never places an order by itself.</b></p>
+        <Field label="Minimum grade"><Segmented value={grade} onChange={setGrade} options={[{ value: 'B', label: 'B or better' }, { value: 'A', label: 'A only' }]} /></Field>
+        <Field label="Maximum order value" hint={`risking ${riskPct}% of ${usd(equity, 0)}`}><AmountInput value={maxUsd} onChange={setMaxUsd} suffix="USDC" label="Maximum order value in USDC" /></Field>
+        <Field label="Stays armed for"><Segmented value={hours} onChange={setHours} options={[{ value: '1', label: '1 h' }, { value: '4', label: '4 h' }, { value: '12', label: '12 h' }, { value: '24', label: '24 h' }]} /></Field>
+        <ul className="list-disc space-y-1 rounded-xl border border-white/[0.07] bg-black/30 py-3 pl-8 pr-3 text-[12px] leading-relaxed text-zinc-400">
+          <li>It only runs while this tab is open and awake. Close the tab and it stops.</li>
+          <li>No stop-loss is placed on the exchange. You must watch the stop price or use the alert.</li>
+          <li>Prices can gap past your stop, so a loss can be bigger than the number shown.</li>
+          <li>It checks every {ARM_EVERY_MS / 1000} seconds, fires once, then disarms. You confirm every order and sign it yourself.</li>
+          <li>Setups are rules from candles and the order book. They do not predict the market and can lose money.</li>
+        </ul>
+        {armed?.status === 'watching' && <Notice tone="info">{armed.display} is already armed. Arming again replaces it.</Notice>}
+        <label className="flex cursor-pointer items-start gap-2.5 text-[12px] text-zinc-300"><input type="checkbox" checked={ack} onChange={(e) => setAck(e.target.checked)} className="mt-0.5 h-4 w-4 accent-orange-500" /><span>I understand this only watches and asks me to confirm, and that I place and manage any stop myself.</span></label>
+        {bad && <Notice tone="warn">{bad}</Notice>}
+        <Button variant="primary" className="w-full" disabled={!ack || !!bad} onClick={() => {
+          arm({ pair: res.pair, display: res.display, minGrade: grade, maxUsd: maxN, equity, riskPct, expiresAt: Date.now() + Number(hours) * 3_600_000 });
+          S.toast('ok', `${res.display} armed for ${hours} h. Keep this tab open.`);
+          onClose();
+        }}><Zap className="h-4 w-4" />Arm for {hours} h</Button>
+      </div>
+    </Modal>
+  );
+}
+
+function ArmedCard() {
+  const { armed, disarm, checking } = useArm();
+  const [, tick] = useState(0);
+  useEffect(() => { const id = setInterval(() => tick((n) => n + 1), 15_000); return () => clearInterval(id); }, []);
+  if (!armed) return null;
+  const left = Math.max(0, armed.expiresAt - Date.now());
+  const lh = Math.floor(left / 3_600_000), lm = Math.floor((left % 3_600_000) / 60_000);
+  const tone = armed.status === 'watching' ? 'ok' : armed.status === 'ready' ? 'warn' : 'info';
+  return (
+    <Notice tone={tone} action={<Button size="sm" onClick={disarm}>{armed.status === 'watching' ? 'Disarm' : 'Clear'}</Button>}>
+      {armed.status === 'watching' && <>Armed on <b>{armed.display}</b> ({armed.minGrade} or better, up to {usd(armed.maxUsd, 0)}). {checking ? 'Checking now…' : `Checked ${armed.checks} time${armed.checks === 1 ? '' : 's'}${armed.lastCheck ? `, last ${ageText(armed.lastCheck)} ago` : ''}.`} Expires in {lh} h {lm} min. Keep this tab open.</>}
+      {armed.status === 'ready' && <>A setup on <b>{armed.display}</b> is ready. Open the review that was shown, or re-arm.</>}
+      {armed.status === 'expired' && <>The armed setup on <b>{armed.display}</b> ended. Nothing was placed.</>}
+    </Notice>
+  );
+}
+
 function SetupBuilder({ cfg, setCfg }: { cfg: BotCfg; setCfg: (c: BotCfg) => void }) {
   const S = useS();
   const ai = useAi();
@@ -3173,6 +3349,7 @@ function SetupBuilder({ cfg, setCfg }: { cfg: BotCfg; setCfg: (c: BotCfg) => voi
   const eq0 = S.available(QUOTE);
   const [equity, setEquity] = useState('');
   const [risk, setRisk] = useState('1');
+  const [armOpen, setArmOpen] = useState(false);
   const [state, setState] = useState<{ loading: boolean; mode?: 'one' | 'best'; err?: string; res?: SetupOut; scanned?: number; failures?: { display: string; reason: string }[]; saved?: boolean }>({ loading: false });
   const gen = useRef(0);
   const eqN = parseFloat(equity || (eq0 ? String(eq0) : '')) || 0;
@@ -3185,7 +3362,7 @@ function SetupBuilder({ cfg, setCfg }: { cfg: BotCfg; setCfg: (c: BotCfg) => voi
     return computeSetup({
       pair: sym.name, display: sym.display, base: sym.base, candles: klines, bids: book.bids, asks: book.asks,
       last: t?.last ?? 0, quoteVol: t?.quoteVol ?? 0, takerFee: sym.taker, halted: sym.halted,
-      minNotional: parseFloat(sym.minNotional) || 0, equity: eqN, riskPct: riskN, interval: '1h',
+      minNotional: parseFloat(sym.minNotional) || 0, equity: eqN, riskPct: riskN, interval: '1h', builderFeePct: BUILDER_ID ? BUILDER_FEE / 1000 : 0,
       context: contextFor(sym.base, shared),
     });
   };
@@ -3307,13 +3484,13 @@ function SetupBuilder({ cfg, setCfg }: { cfg: BotCfg; setCfg: (c: BotCfg) => voi
           <div className="mt-3 grid gap-x-8 gap-y-1.5 sm:grid-cols-2">
             <Row k="Trend" v={`${TREND_LABEL[r.trend] ?? r.trend}${r.ema20 && r.ema50 ? ` · EMA20 ${px(r.ema20)} / EMA50 ${px(r.ema50)}` : ''}`} />
             <Row k="Support / Resistance" v={`${r.support ? px(r.support) : '–'} / ${r.resistance ? px(r.resistance) : '–'}`} />
-            <Row k="Entry" v={px(r.entry)} />
-            <Row k="Stop" v={px(r.stop)} tone="bad" />
-            <Row k="TP1 / TP2" v={`${px(r.tp1)} / ${px(r.tp2)}`} tone="good" />
-            <Row k="R:R" v={r.rr1 ? `1:${r.rr1.toFixed(2)} · 1:${r.rr2.toFixed(2)}` : '–'} />
             {r.grade !== 'no-trade' && <>
+              <Row k="Entry (expected fill)" v={px(r.entry)} />
+              <Row k="Stop (you place it)" v={px(r.stop)} tone="bad" />
+              <Row k="TP1 / TP2" v={`${px(r.tp1)} / ${px(r.tp2)}`} tone="good" />
+              <Row k="R:R after fees" v={`1:${r.rr1.toFixed(2)} · 1:${r.rr2.toFixed(2)}`} />
               <Row k="Position size" v={`${Number(r.qty.toPrecision(5))} ${r.base} · ${usd(r.notional)}`} />
-              <Row k="Max loss if stop hits" v={usd(r.maxLoss)} tone="bad" />
+              <Row k="Loss if price reaches the stop" v={usd(r.maxLoss)} tone="bad" />
             </>}
             <Row k="Spread / impact" v={`${r.spreadPct.toFixed(2)}% / ${r.impactPct.toFixed(2)}%`} tone={r.spreadPct > 1 || r.impactPct > 2 ? 'bad' : r.spreadPct > 0.3 || r.impactPct > 0.5 ? 'warn' : undefined} />
             <Row k="Book coverage" v={`${r.coveragePct.toFixed(0)}%`} tone={r.coveragePct < 99.9 && r.notional > 0 ? 'bad' : undefined} />
@@ -3322,14 +3499,17 @@ function SetupBuilder({ cfg, setCfg }: { cfg: BotCfg; setCfg: (c: BotCfg) => voi
           {r.flags.length > 0 && <FlagList flags={r.flags} />}
           {(r.newsNote || r.etfNote) && <div className="mt-3 space-y-1 rounded-lg bg-black/30 p-2.5 text-[12px] leading-relaxed text-zinc-400">{r.etfNote && <div>{r.etfNote}</div>}<div>{r.newsNote}</div></div>}
           <div className="mt-3 flex flex-wrap gap-2">
-            <Button size="md" onClick={() => goToRoutePreview(S, r.pair, 'buy', r.notional > 0 ? String(Math.round(r.notional * 100) / 100) : undefined)} disabled={!(r.entry > 0)}>Preview route<ArrowUpRight className="h-3.5 w-3.5" /></Button>
-            <Button size="md" variant="primary" onClick={save} disabled={r.grade === 'no-trade'}>{state.saved ? 'Saved as draft bot' : 'Save as draft bot'}</Button>
+            <Button size="md" onClick={() => goToRoutePreview(S, r.pair, 'buy', String(Math.round(r.notional * 100) / 100))} disabled={r.grade === 'no-trade' || !(r.notional > 0)}>Preview route<ArrowUpRight className="h-3.5 w-3.5" /></Button>
+            <Button size="md" onClick={save} disabled={r.grade === 'no-trade'}>{state.saved ? 'Saved as draft bot' : 'Save as draft bot'}</Button>
+            <Button size="md" variant="primary" onClick={() => setArmOpen(true)} disabled={r.grade === 'no-trade'}><Zap className="h-3.5 w-3.5" />Arm and confirm</Button>
           </div>
           {state.saved && <p className="mt-2 text-[12px] text-emerald-300">Saved as a draft bot below. It will not place any order.</p>}
+          {r.grade !== 'no-trade' && <p className="mt-2 text-[12px] leading-relaxed text-amber-300/90">SoSwapDEX cannot place a stop-loss on the exchange. The stop above is a price you must watch or alert on. If price gaps past it, you lose more than the number shown.</p>}
           <p className="mt-3 text-[11px] leading-relaxed text-zinc-500">Suggestions are not financial advice. SoSwapDEX does not place this order or a stop for you. Preview the route and sign in your own wallet if you decide to trade.</p>
         </div>
       )}
       <AiBox ai={ai} />
+      {r && r.grade !== 'no-trade' && <ArmModal open={armOpen} onClose={() => setArmOpen(false)} res={r} equity={eqN} riskPct={riskN} />}
     </Card>
   );
 }
@@ -3350,6 +3530,7 @@ function BotsView() {
     <div className="mx-auto max-w-[900px]">
       <PageTitle icon={<Bot className="h-8 w-8" />} title="Bots (Drafts)" sub="Build a code-checked spot-buy setup, or draft a DCA, grid or signal plan. Nothing runs unattended."
         right={<span className="rounded-lg border border-indigo-400/30 bg-indigo-500/20 px-3 py-2 text-xs font-semibold text-indigo-200">Draft Mode</span>} />
+      <ArmedCard />
       <SetupBuilder cfg={cfg} setCfg={setCfg} />
       <div className="mt-4 space-y-3">
         {bots.map((b, bi) => {
@@ -3388,7 +3569,7 @@ const GUIDE: { id: string; icon: React.ReactNode; title: string; sub: string; bo
   { id: 'route', icon: <Star className="h-4 w-4" />, title: 'Route Preview', sub: 'See the live route and estimate before you sign.', body: <>The Route Preview walks the live SoDEX order book to estimate what you receive, the price impact and the taker fee. It is an estimate: the book can move before your order fills, so a minimum-received limit based on your slippage setting protects each order.</> },
   { id: 'markets', icon: <BarChart3 className="h-4 w-4" />, title: 'Markets & Insights', sub: 'Get SoSoValue news, ETF flows, and sector moves.', body: <>Markets lists every SoDEX spot pair with live price, 24h change and volume. News, ETF flows and sectors come from SoSoValue and need a free API key (paste it in the panel). If a feed is down or no key is set you see an empty state, never sample numbers.</> },
   { id: 'cross', icon: <Link2 className="h-4 w-4" />, title: 'Cross-Chain (Mirror)', sub: 'View a staged cross-chain route and an indicative estimate.', body: <>Mirror shows an indicative estimate of what a source-chain asset is worth in a SoDEX token at the current price. It is a staged path, not an atomic swap: you deposit on SoDEX, swap here, then withdraw on SoDEX. Fees, spread, slippage and gas are not included.</> },
-  { id: 'bots', icon: <Bot className="h-4 w-4" />, title: 'Bots (Drafts)', sub: 'Create trading strategies. Draft only. Nothing runs unattended.', body: <>The AI Setup Builder computes a spot-buy plan from live 1-hour candles and the order book (trend, stop, targets and size). Gemini only explains those numbers and cannot change them. DCA, Grid and Signal bots are also drafts: they compute a dry-run preview from live prices and never send orders. Nothing runs in the background, and a closed tab means nothing happens.</> },
+  { id: 'bots', icon: <Bot className="h-4 w-4" />, title: 'Bots (Drafts)', sub: 'Create trading strategies. Draft only. Nothing runs unattended.', body: <>The AI Setup Builder computes a spot-buy plan from live 1-hour candles and the order book (trend, stop, targets and size). Gemini only explains those numbers and cannot change them. You can also arm a setup: while the tab is open it re-checks every 45 seconds and asks you to confirm when your minimum grade is met. It never places an order by itself, and no stop-loss is placed on the exchange. DCA, Grid and Signal bots are also drafts: they compute a dry-run preview from live prices and never send orders. Nothing runs in the background, and a closed tab means nothing happens.</> },
   { id: 'safety', icon: <ShieldCheck className="h-4 w-4" />, title: 'Safety & FAQs', sub: 'How SoSwapDEX handles your keys and funds.', body: <><ul className="list-disc space-y-1.5 pl-5"><li>SoSwapDEX never holds your funds and never asks for a seed phrase.</li><li>The session API key is a hot key kept in this tab (sessionStorage). Its permissions are set by SoDEX; fund only what you intend to trade and revoke keys on sodex.com/apikeys.</li><li>{DISCLAIMER}</li></ul></> },
 ];
 
@@ -3934,5 +4115,5 @@ function Shell() {
 
 export default function SoSwapPage() {
   const store = useSoSwapStore();
-  return <Ctx.Provider value={store}><AlertsHost><Shell /></AlertsHost></Ctx.Provider>;
+  return <Ctx.Provider value={store}><AlertsHost><ArmHost><Shell /></ArmHost></AlertsHost></Ctx.Provider>;
 }
