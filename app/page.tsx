@@ -9,7 +9,7 @@
  * DATA: every price, pair, balance and order comes from the SoDEX gateway (mainnet by default). There is no
  * simulated data: if a request fails the UI shows the error and a retry. Network switch (mainnet/testnet) is in Settings.
  *
- * KEYS: the wallet only signs (a) read-free session connection and (b) one AddAPIKey message that registers a
+ * KEYS: the wallet only signs (a) read-free session connection and (b) one UserSignedAddAPIKeyAction message that registers a
  * API key used for trading. That key's private key lives in this browser tab (sessionStorage) and signs orders locally.
  * Treat it as a hot key (its permissions are set by SoDEX, not by this app). You can also import a key created at sodex.com/apikeys.
  *
@@ -30,6 +30,11 @@ import { WalletGlyph, OfficialMark, resolveWalletKind } from '@/components/Walle
 import { SkillsMark, TradeCheckIcon, PositionIcon, PortfolioIcon, BriefIcon, NewsIcon, PlanIcon, JournalIcon, AlertIcon, SkillTile } from '@/components/SkillIcons';
 import { scanTrade, sizePosition, portfolioHealth, journalStats, type Grade, type Flag, type ScanOut } from '@/lib/risk';
 import { computeSetup, pickBest, assetAliases, etfAssetFor, MAX_SPREAD_PCT, MAX_IMPACT_PCT, type SetupOut, type SetupGrade } from '@/lib/setup';
+import {
+  buildUserSignedAddApiKey, friendlySodexError, isKeyGone, isUnrecognizedChain, isUserRejected,
+  keyListed, keySlots, KEYS_AT_CAP, looksLikeRawSodex, REGISTER_KEY_FAILED, userFacingError, walletActionError,
+  wrapUniversalSignature,
+} from '@/lib/sodex-keys';
 import React, { createContext, useCallback, useContext, useEffect, useId, useMemo, useRef, useState } from 'react';
 import {
   AlertTriangle, ArrowDownUp, ArrowUpRight, Bot, CalendarClock, Check, ChevronDown, Copy, ExternalLink,
@@ -355,7 +360,8 @@ async function signExchangeAction(opts: {
 
 class ApiError extends Error {
   code: number;
-  constructor(message: string, code = -1) { super(message); this.code = code; }
+  raw?: string;
+  constructor(message: string, code = -1, raw?: string) { super(message); this.code = code; this.raw = raw; }
 }
 
 const apiBase = (net: Net) => (DIRECT ? `${NETS[net].host}/api/v1` : `/api/sodex/${net}/api/v1`);
@@ -397,7 +403,9 @@ async function request<T>(net: Net, path: string, init: RequestInit & { timeoutM
       continue;
     }
     if (!res.ok || (json && typeof json.code === 'number' && json.code !== 0)) {
-      throw new ApiError(String(json?.error ?? json?.message ?? `SoDEX could not complete this request (${res.status}).`), Number(json?.code ?? res.status));
+      const raw = String(json?.error ?? json?.message ?? `SoDEX could not complete this request (${res.status}).`);
+      console.warn('[sodex]', res.status, json?.code ?? '', raw);
+      throw new ApiError(friendlySodexError(raw), Number(json?.code ?? res.status), raw);
     }
     return (json && 'data' in json ? json.data : json) as T;
   }
@@ -511,8 +519,6 @@ const OTYPE = { LIMIT: 1, MARKET: 2 } as const;
 type OrderIn = { symbolID: number; clOrdID: string; side: Side; type: 1 | 2; tif: 1 | 2 | 3 | 4; price?: string; quantity?: string; funds?: string };
 type OrderResult = { code: number; clOrdID: string; error?: string; orderID?: number };
 
-/** SoDEX answers "API key not found" when the tab's trade key is unknown to it (expired, revoked, or not yet active right after registration). */
-const isKeyGone = (e: unknown) => /api key/i.test(String((e as any)?.message ?? '')) && /not found|invalid|expired|revoked|disabled/i.test(String((e as any)?.message ?? ''));
 let onKeyGone: (() => void) | null = null;
 async function signedCall<T>(net: Net, key: TradeKey, method: 'POST' | 'DELETE', path: string, type: string, params: object): Promise<T> {
   // A freshly registered key can take a moment to activate on SoDEX; a rejected request placed nothing, so retrying it is safe.
@@ -631,39 +637,40 @@ async function approveBuilderFee(net: Net, o: {
 
 /* ───────── API-key registration (master wallet signs once) ───────── */
 
+async function fetchApiKeys(net: Net, address: string, aid?: number) {
+  const q = aid ? `?accountID=${aid}` : '';
+  const d: any = await request(net, `/user/${address}/api-keys${q}`);
+  return { spot: list<any>(d, 'spot'), perps: list<any>(d, 'perps') };
+}
+
 async function registerApiKey(net: Net, o: {
   address: string; accountID: number; name: string; keyAddress: string; expiresAt: number;
+  signatureChainId: number;
   signTyped: (typedDataJson: string) => Promise<string>;
 }): Promise<void> {
-  const chainId = NETS[net].chainId;
   const nonce = nextNonce();
-  const typed = {
-    types: {
-      EIP712Domain: [
-        { name: 'name', type: 'string' }, { name: 'version', type: 'string' },
-        { name: 'chainId', type: 'uint256' }, { name: 'verifyingContract', type: 'address' },
-      ],
-      AddAPIKey: [
-        { name: 'accountID', type: 'uint64' }, { name: 'name', type: 'string' }, { name: 'keyType', type: 'uint8' },
-        { name: 'publicKey', type: 'bytes' }, { name: 'expiresAt', type: 'uint64' }, { name: 'nonce', type: 'uint64' },
-      ],
-    },
-    primaryType: 'AddAPIKey',
-    domain: { name: 'universal', version: '1', chainId, verifyingContract: '0x0000000000000000000000000000000000000000' },
-    message: { accountID: String(o.accountID), name: o.name, keyType: 1, publicKey: o.keyAddress, expiresAt: String(o.expiresAt), nonce: String(nonce) },
-  };
-  const sig = await o.signTyped(JSON.stringify(typed));
-  const bytes = fromHex(sig);
-  if (bytes.length !== 65) throw new ApiError('Unexpected signature from wallet.');
-  if (bytes[64] >= 27) bytes[64] -= 27; // wire format uses recovery id 0/1
-  await request<null>(net, `/user/${o.address}/api-keys`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json', Accept: 'application/json',
-      'X-API-Chain': String(chainId), 'X-API-Sign': '0x02' + toHex(bytes), 'X-API-Nonce': String(nonce),
-    },
-    body: JSON.stringify({ accountID: o.accountID, name: o.name, type: 1, publicKey: o.keyAddress, expiresAt: o.expiresAt }),
+  const built = buildUserSignedAddApiKey({
+    sodexChainId: NETS[net].chainId,
+    signatureChainId: o.signatureChainId,
+    accountID: o.accountID,
+    name: o.name,
+    publicKey: o.keyAddress,
+    expiresAt: o.expiresAt,
+    nonce,
   });
+  const sig = await o.signTyped(JSON.stringify(built.typedData));
+  try {
+    await request<null>(net, `/user/${o.address}/api-keys`, {
+      method: 'POST',
+      headers: { ...built.headers, 'X-API-Sign': wrapUniversalSignature(sig) },
+      body: JSON.stringify(built.body),
+    });
+  } catch (e: any) {
+    if (isKeyGone(e) || looksLikeRawSodex(String(e?.raw ?? e?.message ?? ''))) {
+      throw new ApiError(REGISTER_KEY_FAILED, e?.code ?? -1, e?.raw ?? e?.message);
+    }
+    throw e;
+  }
 }
 
 /* ───────── quoting against the live order book ───────── */
@@ -933,42 +940,91 @@ function useSoSwapStore(): Store {
   const forgetKey = useCallback(() => persistKey(null), []);
   useEffect(() => { onKeyGone = () => persistKey(null); return () => { onKeyGone = null; }; }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  /** Read the wallet's live chain id (preferred over the cached value, which can be stale). */
+  const readWalletChainId = async (provider: any, fallback?: number) => {
+    try {
+      const id = parseInt(await provider.request({ method: 'eth_chainId' }), 16);
+      if (Number.isFinite(id)) return id;
+    } catch { /* use fallback */ }
+    return fallback;
+  };
+
+  /** Switch (and, on mainnet, add) a chain BEFORE any signature request, so the two prompts never overlap.
+   *  MetaMask auto-closes a sign prompt with code 4001 when the typed-data domain chain differs from the active chain. */
+  const ensureChain = async (provider: any, targetChainId: number) => {
+    const hex = '0x' + targetChainId.toString(16);
+    const current = await readWalletChainId(provider);
+    if (current === targetChainId) return targetChainId;
+    const switchTo = () => provider.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: hex }] });
+    try {
+      await switchTo();
+    } catch (e: any) {
+      if (isUserRejected(e)) { const err: any = new Error(walletActionError(e, 'switch')); err.code = 4001; throw err; }
+      if (!isUnrecognizedChain(e) && !/chain|network/i.test(String(e?.message ?? ''))) {
+        throw new Error(walletActionError(e, 'switch'));
+      }
+      if (net !== 'mainnet' || targetChainId !== NETS.mainnet.chainId) {
+        throw new Error(`Your wallet is not on the network this signature needs (chain ${targetChainId}). Add that network in the wallet and retry, or import an API key created on sodex.com/apikeys.`);
+      }
+      try {
+        await provider.request({ method: 'wallet_addEthereumChain', params: [VALUECHAIN] });
+        await switchTo();
+      } catch (e2: any) {
+        if (isUserRejected(e2)) { const err: any = new Error(walletActionError(e2, 'switch')); err.code = 4001; throw err; }
+        throw new Error('Your wallet could not add the ValueChain network (chain id 286623, RPC https://mainnet.valuechain.xyz). Add it manually in the wallet settings and retry.');
+      }
+    }
+    const after = await readWalletChainId(provider, targetChainId);
+    if (after !== targetChainId) throw new Error('The wallet is not yet on the required network. Switch to ValueChain and try again.');
+    return after;
+  };
+
   /** Signs EIP-712 typed data with the connected wallet (any wallet from the picker, incl. WalletConnect).
-   *  SoDEX signs on ValueChain (chain id 286623), so wallets that insist the typed-data chain equals the active
-   *  network are first asked to add/switch to it, the same way sodex.com does ("the backend will automatically add the network"). */
+   *  If the typed-data domain names a chain, that chain is made active first (one prompt at a time).
+   *  Enable trading uses the official UserSignedAddAPIKeyAction form, whose domain chain is the wallet's
+   *  current chain, so no switch is needed. Builder-fee approval uses the SoDEX chain in the domain. */
   const walletSign = useCallback(async (json: string) => {
     if (!wallet) throw new Error('Connect a wallet first.');
     const p = wallet.info.provider;
-    const call = () => p.request({ method: 'eth_signTypedData_v4', params: [wallet.address, json] }) as Promise<string>;
-    try { return await call(); }
-    catch (e: any) {
-      if (e?.code === 4001 || !/chain|network/i.test(String(e?.message ?? ''))) throw e;
-      const hex = '0x' + NETS[net].chainId.toString(16);
-      const switchTo = () => p.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: hex }] });
-      try { await switchTo(); }
-      catch {
-        if (net !== 'mainnet') throw new Error(`Your wallet refused to sign because the active network differs from SoDEX's signing chain (${NETS[net].chainId}). Add that network in your wallet and retry, or import an API key created on sodex.com/apikeys.`);
-        try {
-          await p.request({ method: 'wallet_addEthereumChain', params: [VALUECHAIN] });
-          await switchTo();
-        } catch (e2: any) {
-          if (e2?.code === 4001) throw e2;
-          throw new Error('Your wallet could not add the ValueChain network (chain id 286623, RPC https://mainnet.valuechain.xyz). Add it manually in the wallet settings and retry.');
-        }
-      }
-      return await call();
+    let target: number | undefined;
+    try {
+      const id = Number(JSON.parse(json)?.domain?.chainId);
+      if (Number.isFinite(id) && id > 0) target = id;
+    } catch { /* not JSON; sign as-is */ }
+    if (target) await ensureChain(p, target);
+    try {
+      return await p.request({ method: 'eth_signTypedData_v4', params: [wallet.address, json] }) as Promise<string>;
+    } catch (e: any) {
+      if (isUserRejected(e)) { const err: any = new Error(walletActionError(e, 'sign')); err.code = 4001; throw err; }
+      throw new Error(walletActionError(e, 'sign'));
     }
-  }, [wallet, net]);
+  }, [wallet, net]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const createKey = useCallback(async () => {
     if (!wallet || !addr) throw new Error('Connect a wallet first.');
     if (!accountID) throw new Error('No SoDEX account found for this wallet. Deposit on sodex.com first.');
+    try {
+      const listed = await fetchApiKeys(net, wallet.address, accountID);
+      if (keySlots(listed).full) throw new Error(KEYS_AT_CAP);
+    } catch (e: any) {
+      if (e?.message === KEYS_AT_CAP) throw e;
+      // Listing is best-effort: a failure must not block registration.
+    }
+    const signatureChainId = await readWalletChainId(wallet.info.provider, wallet.chainId);
+    if (!signatureChainId) throw new Error('Could not read the wallet network. Reconnect the wallet and try again.');
     const pk = randomPrivateKey();
     const keyAddress = addressFromPrivateKey(pk);
     const name = `soswap-${Math.random().toString(36).slice(2, 10)}`;
     const expiresAt = serverNow() + KEY_TTL_MS;
-    await registerApiKey(net, { address: wallet.address, accountID, name, keyAddress, expiresAt, signTyped: walletSign });
+    await registerApiKey(net, { address: wallet.address, accountID, name, keyAddress, expiresAt, signatureChainId, signTyped: walletSign });
     persistKey({ name, pk, address: keyAddress, accountID, expiresAt, net, owner: addr });
+    for (let i = 0; i < 3; i++) {
+      try {
+        const listed = await fetchApiKeys(net, wallet.address, accountID);
+        if (keyListed(listed, name)) break;
+      } catch { /* listing is best-effort */ }
+      if (i < 2) await sleep(800);
+    }
   }, [wallet, addr, accountID, net, walletSign]);
 
   const importKey = useCallback(async (name: string, pk: string) => {
@@ -1299,7 +1355,7 @@ function BuilderBlock() {
   const run = async (fn: () => Promise<void>, ok: string) => {
     setBusy(true);
     try { await fn(); S.toast('ok', ok); }
-    catch (e: any) { S.toast('err', e?.code === 4001 ? 'Signature rejected in the wallet.' : e?.message ?? 'Could not complete the request.'); }
+    catch (e: any) { S.toast('err', userFacingError(e, 'Could not complete the request.')); }
     finally { setBusy(false); }
   };
   const b = S.builder;
@@ -1495,7 +1551,7 @@ function KeyModal() {
       if (mode === 'create') await S.createKey(); else await S.importKey(name, pk);
       S.toast('ok', 'Trading enabled for this tab.');
       close();
-    } catch (e: any) { setErr(e?.code === 4001 ? 'Signature was rejected in the wallet.' : e?.message ?? 'Failed'); }
+    } catch (e: any) { setErr(userFacingError(e, 'Could not enable trading. Please try again.')); }
     finally { setBusy(false); }
   };
 
@@ -2358,7 +2414,7 @@ function Onboarding() {
     { done: !!S.wallet, label: 'Connect your wallet', sub: 'Shares your address only', act: () => S.setUi('connect', true) },
     { done: !!S.accountID, label: 'Fund your SoDEX account', sub: 'Deposit on sodex.com (BTC, ETH, SOL, USDC…)', act: () => window.open(SODEX_SITE, '_blank') },
     { done: S.keyValid, label: 'Enable trading', sub: 'One signature, key stays in this tab', act: () => S.setUi('key', true) },
-    ...(S.builder.enabled ? [{ done: S.builder.active, label: 'Approve the SoSwapDEX fee', sub: `One signature, max ${bpText(S.builder.fee)} per fill. Optional, revocable`, act: () => { if (!S.accountID) { S.toast('err', 'Fund your SoDEX account first.'); return; } S.builder.approve().then(() => S.toast('ok', 'SoSwapDEX fee approved.')).catch((e: any) => S.toast('err', e?.code === 4001 ? 'Signature rejected in the wallet.' : e?.message ?? 'Could not approve.')); } }] : []),
+    ...(S.builder.enabled ? [{ done: S.builder.active, label: 'Approve the SoSwapDEX fee', sub: `One signature, max ${bpText(S.builder.fee)} per fill. Optional, revocable`, act: () => { if (!S.accountID) { S.toast('err', 'Fund your SoDEX account first.'); return; } S.builder.approve().then(() => S.toast('ok', 'SoSwapDEX fee approved.')).catch((e: any) => S.toast('err', userFacingError(e, 'Could not approve.'))); } }] : []),
     { done: swapped, label: 'Make your first swap', sub: 'Pick a pair, preview the route, sign in your wallet', act: () => S.setView('swap') },
   ];
   if (steps.every((s) => s.done)) return null;

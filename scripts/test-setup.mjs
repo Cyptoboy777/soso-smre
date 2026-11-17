@@ -3,9 +3,14 @@ import { mkdtempSync, readFileSync, writeFileSync, copyFileSync } from 'node:fs'
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
+
+const nodeTest = (file) => spawnSync(process.execPath, ['--experimental-strip-types', '--no-warnings', '--test', file], { stdio: 'inherit' });
+
 const d = mkdtempSync(join(tmpdir(), 'setup-test-'));
+writeFileSync(join(d, 'package.json'), JSON.stringify({ type: 'module' }));
 copyFileSync('lib/risk.ts', join(d, 'risk.ts'));
 writeFileSync(join(d, 'setup.ts'), readFileSync('lib/setup.ts', 'utf8').replace("'@/lib/risk'", "'./risk.ts'"));
 copyFileSync('tests/setup.test.ts', join(d, 'setup.test.ts'));
-const r = spawnSync(process.execPath, ['--experimental-strip-types', '--no-warnings', '--test', join(d, 'setup.test.ts')], { stdio: 'inherit' });
-process.exit(r.status ?? 1);
+const setup = nodeTest(join(d, 'setup.test.ts'));
+const keys = nodeTest('tests/api-key.test.ts');
+process.exit((setup.status ?? 1) || (keys.status ?? 1));

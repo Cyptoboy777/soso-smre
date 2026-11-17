@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 
 /**
  * Same-origin pass-through to the public SoDEX gateway (avoids browser CORS limits).
- * - Only /api/v1/spot/** and POST /api/v1/user/<address>/api-keys and GET/POST /api/v1/user/<address>/builders are reachable (no open proxy).
+ * - Only /api/v1/spot/**, GET/POST /api/v1/user/<address>/api-keys and GET/POST /api/v1/user/<address>/builders are reachable (no open proxy).
  * - Users' own API-key signature headers are forwarded untouched and never logged or stored.
  * - No secret of this deployment is involved: SoDEX market data needs no key.
  */
@@ -44,7 +44,7 @@ async function handle(req: NextRequest, ctx: { params: Promise<{ path: string[] 
   const host = HOSTS[net];
   const path = rest.join('/');
   const method = req.method;
-  const allowed = SPOT.test(path) || (method === 'POST' && KEYREG.test(path)) || ((method === 'GET' || method === 'POST') && BUILDERS.test(path));
+  const allowed = SPOT.test(path) || ((method === 'GET' || method === 'POST') && KEYREG.test(path)) || ((method === 'GET' || method === 'POST') && BUILDERS.test(path));
   if (!host || !allowed || path.includes('..')) return NextResponse.json({ error: 'Not found.' }, { status: 404 });
 
   const ip = (req.headers.get('x-forwarded-for') ?? 'unknown').split(',')[0].trim();
