@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
 import "./soswap-ai.css";
 import AnimalOrb, { ANIMALS, type AnimalKind, type Expression } from "./AnimalFace";
 import { BarChart3, Newspaper, Repeat, Search } from "lucide-react";
@@ -160,8 +161,11 @@ export default function SoSwapAI() {
         {!open && <span className="ss-launcher__ping" />}
       </button>
 
+      <AnimatePresence>
       {open && (
-        <section className="ss-panel" aria-label="SoSwapDEX AI assistant">
+        <motion.section className="ss-panel" aria-label="SoSwapDEX AI assistant"
+          initial={{ opacity: 0, y: 14, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 10, scale: 0.98, transition: { duration: 0.16 } }}
+          transition={{ duration: 0.26, ease: [0.22, 1, 0.36, 1] }} style={{ transformOrigin: "bottom right" }}>
           <header className="ss-panel__header">
             <div className="ss-panel__identity">
               <button type="button" className="ss-panel__orbbtn" onClick={() => setShowPick((v) => !v)} aria-expanded={showPick} aria-label="Change bot face" title="Change bot face"><Orb compact kind={kind} talking={busy} /></button>
@@ -244,8 +248,9 @@ export default function SoSwapAI() {
             <span>AI can make mistakes. Verify all trading information.</span>
             <span>Never share your seed phrase.</span>
           </footer>
-        </section>
+        </motion.section>
       )}
+      </AnimatePresence>
     </>
   );
 }

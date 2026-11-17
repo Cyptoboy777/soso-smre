@@ -1,6 +1,6 @@
 "use client";
 
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import type { ReactNode } from "react";
 
 export default function AnimatedTabs({
@@ -10,14 +10,15 @@ export default function AnimatedTabs({
   activeKey: string;
   children: ReactNode;
 }) {
+  const reduce = useReducedMotion();
   return (
     <AnimatePresence mode="wait" initial={false}>
       <motion.div
         key={activeKey}
-        initial={{ opacity: 0, x: 10, filter: "blur(3px)" }}
-        animate={{ opacity: 1, x: 0, filter: "blur(0px)" }}
-        exit={{ opacity: 0, x: -8, filter: "blur(2px)" }}
-        transition={{ duration: 0.22, ease: "easeOut" }}
+        initial={{ opacity: 0, x: reduce ? 0 : 8 }}
+        animate={{ opacity: 1, x: 0 }}
+        exit={{ opacity: 0, transition: { duration: 0.1 } }}
+        transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
       >
         {children}
       </motion.div>

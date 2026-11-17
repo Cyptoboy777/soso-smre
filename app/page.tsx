@@ -17,7 +17,7 @@
  */
 
 import AnimalOrb from '@/components/AnimalFace';
-import { AnimatePresence, motion } from 'framer-motion';
+import { AnimatePresence, LayoutGroup, motion, useReducedMotion } from 'framer-motion';
 import MotionPage from '@/components/motion/MotionPage';
 import AnimatedCard from '@/components/motion/AnimatedCard';
 import AnimatedTabs from '@/components/motion/AnimatedTabs';
@@ -30,7 +30,7 @@ import { WalletGlyph, OfficialMark, resolveWalletKind } from '@/components/Walle
 import { SkillsMark, TradeCheckIcon, PositionIcon, PortfolioIcon, BriefIcon, NewsIcon, PlanIcon, JournalIcon, AlertIcon, SkillTile } from '@/components/SkillIcons';
 import { scanTrade, sizePosition, portfolioHealth, journalStats, type Grade, type Flag, type ScanOut } from '@/lib/risk';
 import { computeSetup, pickBest, assetAliases, etfAssetFor, MAX_SPREAD_PCT, MAX_IMPACT_PCT, type SetupOut, type SetupGrade } from '@/lib/setup';
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useId, useMemo, useRef, useState } from 'react';
 import {
   AlertTriangle, ArrowDownUp, ArrowUpRight, Bot, CalendarClock, Check, ChevronDown, Copy, ExternalLink,
   Grid3x3, History, Info, KeyRound, Layers, LineChart, Loader2, LogOut, Plug, Plus, RefreshCw, Search,
@@ -1091,10 +1091,24 @@ const TokenIcon = ({ name, size = 28 }: { name: string; size?: number }) => {
 };
 
 const Spinner = ({ className = 'h-4 w-4' }: { className?: string }) => <Loader2 className={cx('animate-spin', className)} aria-hidden />;
-const Skeleton = ({ className = '' }: { className?: string }) => <div className={cx('animate-pulse rounded-md bg-white/[0.06]', className)} />;
+const Skeleton = ({ className = '' }: { className?: string }) => <div aria-hidden className={cx('ss-skel', className)} />;
 
-const Card = ({ className = '', children }: { className?: string; children: React.ReactNode }) => (
-  <section className={cx('rounded-2xl border border-white/[0.07] bg-[#0a0a0c]/90 shadow-[0_20px_50px_-28px_rgba(0,0,0,0.9)]', className)}>{children}</section>
+/** Live value with a soft green or red wash when it ticks up or down. Pure opacity animation, no layout change. */
+function Flash({ v, children, className = '' }: { v: number | undefined; children: React.ReactNode; className?: string }) {
+  const prev = useRef<number | undefined>(v);
+  const [fx, setFx] = useState<{ n: number; dir: 'up' | 'down' } | null>(null);
+  useEffect(() => {
+    const was = prev.current; prev.current = v;
+    if (v == null || was == null || v === was) return;
+    setFx((c) => ({ n: (c?.n ?? 0) + 1, dir: v > was ? 'up' : 'down' }));
+  }, [v]);
+  return <span className={cx('relative inline-block', className)}>{fx && <i key={fx.n} aria-hidden className={cx('ss-tick-fx', fx.dir === 'up' ? 'ss-tick-up' : 'ss-tick-down')} />}<span className="relative">{children}</span></span>;
+}
+/** A number that fades in when it changes (a keyed remount; no timers). */
+const Num = ({ v }: { v: React.ReactNode }) => <span key={String(v)} className="ss-num">{v}</span>;
+
+const Card = ({ className = '', glow, children }: { className?: string; glow?: boolean; children: React.ReactNode }) => (
+  <section className={cx('ss-card', glow && 'ss-card-glow', className)}>{children}</section>
 );
 const CardHead = ({ title, icon, right }: { title: React.ReactNode; icon?: React.ReactNode; right?: React.ReactNode }) => (
   <div className="flex items-center justify-between gap-3 border-b border-white/[0.06] px-4 py-3">
@@ -1106,8 +1120,8 @@ const CardHead = ({ title, icon, right }: { title: React.ReactNode; icon?: React
 type BtnProps = React.ButtonHTMLAttributes<HTMLButtonElement> & { variant?: 'primary' | 'secondary' | 'ghost' | 'danger' | 'success'; size?: 'sm' | 'md' | 'lg'; loading?: boolean };
 const Button = ({ variant = 'secondary', size = 'md', loading, className = '', children, disabled, ...rest }: BtnProps) => {
   const v = {
-    primary: 'bg-gradient-to-b from-orange-400 to-orange-500 text-black shadow-[0_10px_30px_-12px_rgba(245,158,11,0.8)] hover:brightness-110',
-    secondary: 'border border-white/10 bg-white/[0.04] text-zinc-100 hover:bg-white/[0.08]',
+    primary: 'ss-btn-primary bg-gradient-to-b from-orange-400 to-orange-500 text-black',
+    secondary: 'border border-white/10 bg-white/[0.04] text-zinc-100 hover:border-white/20 hover:bg-white/[0.08]',
     ghost: 'text-zinc-400 hover:bg-white/[0.06] hover:text-zinc-100',
     danger: 'border border-rose-500/40 bg-rose-500/10 text-rose-300 hover:bg-rose-500/20',
     success: 'border border-emerald-500/40 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20',
@@ -1117,7 +1131,7 @@ const Button = ({ variant = 'secondary', size = 'md', loading, className = '', c
     <button
       {...rest}
       disabled={disabled || loading}
-      className={cx('inline-flex items-center justify-center gap-2 rounded-xl font-semibold transition active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-45 disabled:active:scale-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-400', v, s, className)}>
+      className={cx('ss-btn inline-flex items-center justify-center gap-2 rounded-xl font-semibold disabled:cursor-not-allowed disabled:opacity-45 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-400', v, s, className)}>
       {loading && <Spinner className="h-4 w-4" />}{children}
     </button>
   );
@@ -1142,39 +1156,74 @@ const Notice = ({ tone = 'info', children, action }: { tone?: 'info' | 'warn' | 
 };
 
 const Modal = ({ open, onClose, title, children, wide, maxW }: { open: boolean; onClose: () => void; title: React.ReactNode; children: React.ReactNode; wide?: boolean; maxW?: string }) => {
+  const ref = useRef<HTMLDivElement>(null);
+  const closeRef = useRef(onClose); closeRef.current = onClose;
+  const reduce = useReducedMotion();
+  const titleId = useId();
   useEffect(() => {
     if (!open) return;
-    const h = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    const back = document.activeElement as HTMLElement | null;
+    const h = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') { closeRef.current(); return; }
+      if (e.key !== 'Tab') return;
+      const root = ref.current; if (!root) return;
+      const f = Array.from(root.querySelectorAll<HTMLElement>('a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])')).filter((el) => el.offsetParent !== null);
+      if (!f.length) { e.preventDefault(); root.focus(); return; }
+      const first = f[0], last = f[f.length - 1], act = document.activeElement;
+      if (e.shiftKey && (act === first || act === root)) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && act === last) { e.preventDefault(); first.focus(); }
+    };
     window.addEventListener('keydown', h);
     const prev = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
-    return () => { window.removeEventListener('keydown', h); document.body.style.overflow = prev; };
-  }, [open, onClose]);
-  if (!open) return null;
+    const t = setTimeout(() => { const r = ref.current; if (r && !r.contains(document.activeElement)) r.focus(); }, 40);
+    return () => { window.removeEventListener('keydown', h); document.body.style.overflow = prev; clearTimeout(t); if (back && document.contains(back)) back.focus?.(); };
+  }, [open]);
+  const ease = [0.22, 1, 0.36, 1] as const;
   return (
-    <div className="ss-fade fixed inset-0 z-[60] flex items-end justify-center bg-black/70 backdrop-blur-sm sm:items-center sm:p-4" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div role="dialog" aria-modal="true" aria-label={typeof title === 'string' ? title : undefined}
-        className={cx('ss-rise max-h-[92vh] w-full overflow-y-auto rounded-t-3xl border border-white/10 bg-[#0a0a0c] shadow-2xl sm:rounded-3xl', maxW ?? (wide ? 'sm:max-w-2xl' : 'sm:max-w-md'))}>
-        <div className="sticky top-0 z-10 flex items-center justify-between border-b border-white/[0.06] bg-[#0a0a0c]/95 px-5 py-4 backdrop-blur">
-          <h3 className="text-[15px] font-semibold text-zinc-50">{title}</h3>
-          <button onClick={onClose} aria-label="Close" className="rounded-lg p-1.5 text-zinc-500 transition hover:bg-white/[0.06] hover:text-zinc-100"><X className="h-4 w-4" /></button>
-        </div>
-        <div className="p-5">{children}</div>
-      </div>
-    </div>
+    <AnimatePresence>
+      {open && (
+        <motion.div key="scrim" className="ss-scrim fixed inset-0 z-[60] flex items-end justify-center sm:items-center sm:p-4"
+          initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: reduce ? 0 : 0.18 }}
+          onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+          <motion.div ref={ref} role="dialog" aria-modal="true" aria-labelledby={titleId} tabIndex={-1}
+            initial={reduce ? false : { opacity: 0, y: 28, scale: 0.985 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={reduce ? { opacity: 0 } : { opacity: 0, y: 14, scale: 0.99 }}
+            transition={{ duration: reduce ? 0 : 0.26, ease }}
+            className={cx('ss-sheet max-h-[92vh] w-full overflow-y-auto rounded-t-3xl border border-white/10 outline-none sm:rounded-3xl', maxW ?? (wide ? 'sm:max-w-2xl' : 'sm:max-w-md'))}>
+            <div className="sticky top-0 z-10 flex items-center justify-between border-b border-white/[0.06] bg-[#0a090b]/95 px-5 py-4 md:backdrop-blur">
+              <h3 id={titleId} className="text-[15px] font-semibold tracking-tight text-zinc-50">{title}</h3>
+              <button onClick={onClose} aria-label="Close" className="ss-btn rounded-lg p-1.5 text-zinc-500 hover:bg-white/[0.06] hover:text-zinc-100"><X className="h-4 w-4" /></button>
+            </div>
+            <div className="p-5">{children}</div>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
   );
 };
 
-const Segmented = <T extends string>({ value, onChange, options, className = '' }: { value: T; onChange: (v: T) => void; options: { value: T; label: React.ReactNode }[]; className?: string }) => (
-  <div role="tablist" className={cx('inline-flex rounded-xl border border-white/[0.07] bg-black/30 p-1', className)}>
-    {options.map((o) => (
-      <button key={o.value} role="tab" aria-selected={value === o.value} onClick={() => onChange(o.value)}
-        className={cx('rounded-lg px-3 py-1.5 text-xs font-semibold transition', value === o.value ? 'bg-white/[0.1] text-zinc-50 shadow-sm' : 'text-zinc-500 hover:text-zinc-200')}>
-        {o.label}
-      </button>
-    ))}
-  </div>
-);
+const Segmented = <T extends string>({ value, onChange, options, className = '' }: { value: T; onChange: (v: T) => void; options: { value: T; label: React.ReactNode }[]; className?: string }) => {
+  const id = useId();
+  const reduce = useReducedMotion();
+  const move = (i: number, d: number) => { const n = options[(i + d + options.length) % options.length]; onChange(n.value); };
+  return (
+    <LayoutGroup id={id}>
+      <div role="tablist" className={cx('inline-flex rounded-xl border border-white/[0.07] bg-black/30 p-1', className)}>
+        {options.map((o, i) => {
+          const on = value === o.value;
+          return (
+            <button key={o.value} role="tab" aria-selected={on} tabIndex={on ? 0 : -1} onClick={() => onChange(o.value)}
+              onKeyDown={(e) => { if (e.key === 'ArrowRight') { e.preventDefault(); move(i, 1); } else if (e.key === 'ArrowLeft') { e.preventDefault(); move(i, -1); } }}
+              className={cx('relative rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors duration-150', on ? 'text-zinc-50' : 'text-zinc-500 hover:text-zinc-200')}>
+              {on && <motion.span layoutId="seg-pill" className="absolute inset-0 rounded-lg bg-white/[0.1] shadow-sm" transition={reduce ? { duration: 0 } : { type: 'spring', stiffness: 520, damping: 40 }} />}
+              <span className="relative">{o.label}</span>
+            </button>
+          );
+        })}
+      </div>
+    </LayoutGroup>
+  );
+};
 
 /** Decimal input (digits and one dot only). */
 const AmountInput = ({ value, onChange, placeholder = '0', className = '', suffix, label, id }: { value: string; onChange: (v: string) => void; placeholder?: string; className?: string; suffix?: React.ReactNode; label?: string; id?: string }) => (
@@ -1578,22 +1627,22 @@ function CostReceipt({ pay, get, lines, total, totalPct, notes }: {
   return (
     <div className="ss-receipt" role="group" aria-label="Cost breakdown">
       <div className="flex items-baseline justify-between gap-3">
-        <div><div className="text-[12px] text-zinc-500">You pay</div><div className="tnum text-lg font-semibold text-zinc-50">{pay}</div></div>
-        <div className="text-right"><div className="text-[12px] text-zinc-500">You get, about</div><div className="tnum text-lg font-semibold text-zinc-50">{get}</div></div>
+        <div><div className="text-[12px] text-zinc-500">You pay</div><div className="tnum text-lg font-semibold text-zinc-50"><Num v={pay} /></div></div>
+        <div className="text-right"><div className="text-[12px] text-zinc-500">You get, about</div><div className="tnum text-lg font-semibold text-zinc-50"><Num v={get} /></div></div>
       </div>
       <div className="ss-rule" />
-      <dl className="space-y-1.5 text-[13px]">
-        {lines.map((l) => (
-          <div key={l.k} className="flex items-baseline justify-between gap-3">
+      <dl className="ss-stagger space-y-1.5 text-[13px]">
+        {lines.map((l, i) => (
+          <div key={l.k} style={{ '--i': i } as React.CSSProperties} className="flex items-baseline justify-between gap-3">
             <dt className="text-zinc-400">{l.k}{l.sub && <span className="ml-1.5 text-[11px] text-zinc-600">{l.sub}</span>}</dt>
-            <dd className="tnum shrink-0 whitespace-nowrap text-right text-zinc-200">{l.v}</dd>
+            <dd className="tnum shrink-0 whitespace-nowrap text-right text-zinc-200"><Num v={l.v} /></dd>
           </div>
         ))}
       </dl>
       <div className="ss-rule" />
       <div className="flex items-end justify-between gap-3">
         <div className="text-sm font-semibold text-zinc-100">Total cost of this swap</div>
-        <div className="text-right"><div className="ss-total">{total}</div><div className="tnum text-[11px] text-zinc-500">{totalPct.toFixed(totalPct < 0.1 ? 3 : 2)}% of the order</div></div>
+        <div className="text-right"><div className="ss-total"><Num v={total} /></div><div className="tnum text-[11px] text-zinc-500">{totalPct.toFixed(totalPct < 0.1 ? 3 : 2)}% of the order</div></div>
       </div>
       {notes.length > 0 && <ul className="mt-3 space-y-1 text-[11px] leading-relaxed text-zinc-500">{notes.map((n) => <li key={n}>{n}</li>)}</ul>}
     </div>
@@ -2091,7 +2140,7 @@ function SwapPanel() {
             <div className="mb-1.5 flex items-center justify-between text-xs"><span className="font-semibold text-zinc-200">To</span><span className="tnum text-zinc-400">Balance: {num(toA ? S.available(toA.coin) : 0, 6)}</span></div>
             <div className="flex items-center gap-3">
               <TokenBtn a={toA} onClick={() => setPicker('to')} />
-              <div className={cx('tnum min-w-0 flex-1 truncate text-right text-2xl font-semibold', q && !q.loading && q.out ? 'text-zinc-50' : 'text-zinc-600')}>{q?.loading ? <Skeleton className="ml-auto h-7 w-28" /> : q && q.out ? '≈ ' + num(q.out, 6) : '0'}</div>
+              <div className={cx('tnum min-w-0 flex-1 truncate text-right text-2xl font-semibold', q && !q.loading && q.out ? 'text-zinc-50' : 'text-zinc-600')}>{q?.loading ? <Skeleton className="ml-auto h-7 w-28" /> : q && q.out ? <Num v={'≈ ' + num(q.out, 6)} /> : '0'}</div>
             </div>
             <div className="tnum mt-1.5 text-[11px] text-zinc-500">{q && !q.loading && q.out && toA ? `≈ ${usd(q.out * (toA.isQuote ? 1 : S.tickers[toA.symbol!.name]?.last ?? 0))}` : ' '}</div>
           </div>
@@ -2103,12 +2152,12 @@ function SwapPanel() {
             <span className="rounded-md border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[11px] font-semibold text-emerald-300">{S.marketErr ? 'Offline' : 'Live'}</span>
           </div>
           {routeRows ? (
-            <div className="ss-fade space-y-2.5">
-              {routeRows.map((r) => <div key={r.k} className="flex items-center justify-between gap-3 text-[13px]"><span className="text-zinc-400">{r.k}</span><span className="tnum text-right font-medium text-zinc-100">{r.v}</span></div>)}
-              <div className="my-1 border-t border-white/[0.06]" />
-              <Row k="Price impact" v={`${q!.impact < 0.01 ? '<0.01' : q!.impact.toFixed(2)}%`} tone={q!.impact > slip ? 'bad' : q!.impact > slip / 2 ? 'warn' : 'good'} />
-              <Row k={`Min received (${slip}%)`} v={`${num(minOut, 6)} ${toKey}`} />
-              <Row k="Fee (taker, est.)" v={usd(q!.feeUsd, 4)} />
+            <div className="ss-stagger space-y-2.5">
+              {routeRows.map((r, i) => <div key={r.k} style={{ '--i': i } as React.CSSProperties} className="flex items-center justify-between gap-3 text-[13px]"><span className="text-zinc-400">{r.k}</span><span className="tnum text-right font-medium text-zinc-100"><Num v={r.v} /></span></div>)}
+              <div style={{ '--i': 4 } as React.CSSProperties} className="my-1 border-t border-white/[0.06]" />
+              <div style={{ '--i': 5 } as React.CSSProperties}><Row k="Price impact" v={<Num v={`${q!.impact < 0.01 ? '<0.01' : q!.impact.toFixed(2)}%`} />} tone={q!.impact > slip ? 'bad' : q!.impact > slip / 2 ? 'warn' : 'good'} /></div>
+              <div style={{ '--i': 6 } as React.CSSProperties}><Row k={`Min received (${slip}%)`} v={<Num v={`${num(minOut, 6)} ${toKey}`} />} /></div>
+              <div style={{ '--i': 7 } as React.CSSProperties}><Row k="Fee (taker, est.)" v={<Num v={usd(q!.feeUsd, 4)} />} /></div>
             </div>
           ) : (
             <div className="space-y-2.5 text-[13px]">
@@ -2239,7 +2288,7 @@ function PairHeader({ sym }: { sym?: Sym }) {
         {sym ? <TokenIcon name={sym.base} size={38} /> : <Skeleton className="h-9 w-9 rounded-full" />}
         <div><div className="flex items-center gap-1.5 text-lg font-bold leading-tight text-zinc-50">{sym?.display ?? '…'}<ChevronDown className="h-4 w-4 text-zinc-500" /></div><div className="text-[11px] text-zinc-500">SoDEX spot{sym?.halted ? ' · halted' : ''}</div></div>
       </button>
-      <div><div className="tnum text-2xl font-bold text-zinc-50">{t ? '$' + px(t.last) : <Skeleton className="h-7 w-28" />}</div>{t && <Chg pct={t.changePct} />}</div>
+      <div><div className="tnum text-2xl font-bold text-zinc-50">{t ? <Flash v={t.last}>{'$' + px(t.last)}</Flash> : <Skeleton className="h-7 w-28" />}</div>{t && <Chg pct={t.changePct} />}</div>
       <div className="tnum ml-auto hidden gap-6 text-xs sm:flex">
         <div><div className="text-zinc-600">24h high</div><div className="text-zinc-200">{t ? px(t.high) : '–'}</div></div>
         <div><div className="text-zinc-600">24h low</div><div className="text-zinc-200">{t ? px(t.low) : '–'}</div></div>
@@ -2262,7 +2311,7 @@ function SwapView() {
   return (
     <div className="mx-auto max-w-[920px]">
       <PageTitle icon={<ArrowDownUp className="h-7 w-7" />} title="Swap" sub="Trade tokens on SoDEX mainnet with your own wallet." />
-      <Card className="p-3 sm:p-4"><SwapPanel /></Card>
+      <Card glow className="p-3 sm:p-4"><SwapPanel /></Card>
       <div className="mt-4"><Onboarding /></div>
       <button onClick={() => setAdv((a) => !a)} className="mx-auto mt-6 flex items-center gap-2 rounded-full border border-white/10 px-4 py-2 text-xs font-medium text-zinc-300 transition hover:border-orange-500/50 hover:text-orange-300">
         <LineChart className="h-3.5 w-3.5" />{adv ? 'Hide' : 'Show'} advanced: chart, order book & limit orders<ChevronDown className={cx('h-3.5 w-3.5 transition', adv && 'rotate-180')} />
@@ -2351,9 +2400,9 @@ function MarketsView() {
         <Segmented value={tab} onChange={setTab} options={[{ value: 'all', label: `All ${S.syms.length || ''}` }, { value: 'fav', label: 'Favorites' }, { value: 'up', label: 'Gainers' }, { value: 'down', label: 'Losers' }]} />
       </div>
       {S.marketErr && <div className="p-4"><ErrorBox msg={S.marketErr} onRetry={S.reloadMarkets} /></div>}
-      <div className="hidden grid-cols-[minmax(170px,1.5fr)_1fr_.8fr_1fr_auto] gap-2 px-4 py-2 text-[11px] font-medium uppercase tracking-wider text-zinc-600 sm:grid">
+      <div className="hidden grid-cols-[minmax(170px,1.5fr)_1fr_.8fr_1fr_212px] gap-2 px-4 py-2 text-[11px] font-medium uppercase tracking-wider text-zinc-600 sm:grid">
         <H k="pair">Pair</H><H k="price" right>Price</H><H k="chg" right>24h</H>
-        <H k="vol" right>Volume (24h)</H><span className="w-28" />
+        <H k="vol" right>Volume (24h)</H><span />
       </div>
       <div className="flex items-center justify-between px-4 py-2 text-[11px] font-medium uppercase tracking-wider text-zinc-600 sm:hidden">
         <H k="pair">Pair</H>
@@ -2363,14 +2412,14 @@ function MarketsView() {
         {S.marketLoading && !S.syms.length && Array.from({ length: 8 }).map((_, i) => <Skeleton key={i} className="mx-4 my-2 h-10" />)}
         {!S.marketLoading && !rows.length && !S.marketErr && <Empty icon={<Search className="h-5 w-5" />} title={tab === 'fav' ? 'No favorites yet' : 'No pairs match'} body={tab === 'fav' ? 'Tap the star next to a pair to pin it here.' : undefined} />}
         {rows.map(({ s, t }, i) => (
-          <div key={s.name} className="cursor-pointer border-t border-white/[0.04] px-4 py-2.5 transition hover:bg-white/[0.04] sm:grid sm:grid-cols-[minmax(170px,1.5fr)_1fr_.8fr_1fr_auto] sm:items-center sm:gap-2"
+          <div key={s.name} className="ss-row cursor-pointer border-t border-white/[0.04] px-4 py-2.5 hover:bg-white/[0.04] sm:grid sm:grid-cols-[minmax(170px,1.5fr)_1fr_.8fr_1fr_212px] sm:items-center sm:gap-2"
             onClick={() => { S.setSelected(s.name); S.setView('swap'); }}>
             <div className="flex min-w-0 items-center gap-2.5">
               <span className="tnum hidden w-4 text-[11px] text-zinc-600 sm:block">{i + 1}</span>
               <button aria-label={S.favs.includes(s.name) ? 'Remove favorite' : 'Add favorite'} onClick={(e) => { e.stopPropagation(); S.toggleFav(s.name); }} className="text-zinc-600 transition hover:text-orange-400">
                 <Star className={cx('h-4 w-4', S.favs.includes(s.name) && 'fill-orange-400 text-orange-400')} />
               </button>
-              <TokenIcon name={s.base} size={28} />
+              <span className="ss-row-ico"><TokenIcon name={s.base} size={28} /></span>
               <div className="min-w-0 flex-1">
                 <div className="truncate text-sm font-semibold text-zinc-100">{s.display}</div>
                 {s.halted && <Badge tone="rose">Halted</Badge>}
@@ -2383,7 +2432,7 @@ function MarketsView() {
               )}
             </div>
             <div className="mt-1 flex items-center justify-end gap-4 sm:mt-0 sm:contents">
-              <div className="tnum text-right text-sm text-zinc-100">{t ? px(t.last) : <Skeleton className="ml-auto h-4 w-16" />}</div>
+              <div className="tnum text-right text-sm text-zinc-100">{t ? <Flash v={t.last}>{px(t.last)}</Flash> : <Skeleton className="ml-auto h-4 w-16" />}</div>
               <div className="text-right">{t ? <Chg pct={t.changePct} /> : <Skeleton className="ml-auto h-4 w-12" />}</div>
               <div className="tnum hidden text-right text-sm text-zinc-300 sm:block">{t ? '$' + compact(t.quoteVol) : '–'}</div>
               <div className="hidden items-center justify-end gap-2 sm:flex">
@@ -2615,7 +2664,7 @@ function FeedState({ feed, what }: { feed: Feed<any>; what: string }) {
 
 const PageTitle = ({ icon, title, sub, right }: { icon: React.ReactNode; title: string; sub: string; right?: React.ReactNode }) => (
   <div className="mb-5 flex flex-wrap items-center gap-x-4 gap-y-3">
-    <div className="text-orange-500 drop-shadow-[0_0_14px_rgba(249,115,22,0.6)]">{icon}</div>
+    <div className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl border border-orange-500/25 bg-orange-500/[0.07] text-orange-400 shadow-[0_0_28px_-10px_rgba(249,115,22,0.7)] [&>svg]:h-6 [&>svg]:w-6">{icon}</div>
     <div className="min-w-0 flex-1"><h1 className="text-[26px] font-bold leading-tight tracking-tight text-zinc-50">{title}</h1><p className="text-[13px] text-zinc-400">{sub}</p></div>
     {right}
   </div>
@@ -2880,6 +2929,30 @@ const CHAINS = [
 ];
 const selectCls = 'h-11 w-full appearance-none rounded-lg border border-white/10 bg-black/50 pl-11 pr-9 text-sm font-medium text-zinc-100 outline-none focus:border-orange-500/60';
 
+/** SoDEX spot balances for the connected wallet. One source (S.balances), cleared the moment the wallet disconnects. */
+function SodexBalances({ compact = false }: { compact?: boolean }) {
+  const S = useS();
+  const rows = useMemo(() => S.balances.map((b) => ({ b, value: b.total * S.priceOf(b.coin) })).filter((x) => x.b.total > 0).sort((a, c) => c.value - a.value), [S.balances, S.priceOf]); // eslint-disable-line react-hooks/exhaustive-deps
+  const total = rows.reduce((t, r) => t + r.value, 0);
+  if (!S.wallet) return <div className="rounded-2xl border border-white/[0.07] bg-black/40 p-4"><Empty icon={<Wallet className="h-5 w-5" />} title="Connect a wallet to see your SoDEX balances" body="Your assets appear here while the wallet is connected and clear when you disconnect." action={<Button variant="primary" onClick={() => S.setUi('connect', true)}>Connect wallet</Button>} /></div>;
+  return (
+    <div className="rounded-2xl border border-orange-500/20 bg-black/40 p-4">
+      <div className="flex items-baseline justify-between gap-3"><h3 className="text-sm font-semibold text-zinc-100">Your SoDEX balance</h3><div className="tnum text-sm font-semibold text-zinc-50">{rows.length ? usd(total) : ''}</div></div>
+      {S.accountID === undefined ? <div className="mt-3 space-y-2"><Skeleton className="h-8 w-full" /><Skeleton className="h-8 w-full" /></div>
+        : rows.length === 0 ? <p className="mt-3 text-[13px] text-zinc-500">{S.accountID === null ? 'No SoDEX account for this wallet yet. Deposit on SoDEX to create it.' : 'No balances yet. Deposit assets on SoDEX to start trading.'}</p>
+        : <ul className={cx('ss-stagger mt-3 divide-y divide-white/[0.05]', compact && 'max-h-60 overflow-y-auto')}>
+            {rows.map(({ b, value }, i) => (
+              <li key={b.coin} style={{ '--i': Math.min(i, 8) } as React.CSSProperties} className="flex items-center gap-3 py-2">
+                <TokenIcon name={coinLabel(b.coin)} size={24} />
+                <div className="min-w-0 flex-1 text-[13px] font-medium text-zinc-100">{coinLabel(b.coin)}{b.locked > 0 && <span className="ml-2 text-[11px] font-normal text-zinc-500">{num(b.locked, 4)} in orders</span>}</div>
+                <div className="text-right"><div className="tnum text-[13px] text-zinc-100">{num(b.total, 6)}</div><div className="tnum text-[11px] text-zinc-500">{value > 0 ? usd(value) : ''}</div></div>
+              </li>
+            ))}
+          </ul>}
+    </div>
+  );
+}
+
 function CrossChainView() {
   const S = useS();
   const [chainId, setChainId] = useState('eth');
@@ -2946,6 +3019,7 @@ function CrossChainView() {
           )}
         </div>
       </div>
+      <div className="mt-4"><SodexBalances /></div>
       <div className="mt-6 flex items-center justify-center gap-4 opacity-90" aria-hidden>
         <span className="grid h-14 w-14 place-items-center rounded-full border border-orange-500/50 shadow-[0_0_24px_rgba(249,115,22,0.35)]"><TokenIcon name={chain.native} size={34} /></span>
         <motion.span className="h-px w-40 origin-left bg-gradient-to-r from-orange-500/60 to-orange-500" animate={{ scaleX: go && est ? 1 : 0.2, opacity: go && est ? 1 : 0.5 }} transition={{ duration: 0.6, ease: 'easeOut' }} /><ChevronRight className="-ml-5 h-5 w-5 text-orange-500" />
@@ -4053,8 +4127,8 @@ const NAV: { id: View; label: string; icon: React.ReactNode }[] = [
 function NetPill() {
   const S = useS();
   return (
-    <button onClick={() => S.setUi('settings', true)} className="inline-flex h-8 items-center gap-2 rounded-lg border border-white/10 bg-white/[0.04] px-3 text-[11px] font-medium text-zinc-100 transition hover:bg-white/[0.08]" aria-label="Network settings">
-      <span className={cx('h-1.5 w-1.5 rounded-full', S.marketErr ? 'bg-rose-500' : 'bg-emerald-400')} />SoDEX {NETS[S.net].label}
+    <button onClick={() => S.setUi('settings', true)} className="ss-btn inline-flex h-8 items-center gap-2 rounded-lg border border-white/10 bg-white/[0.04] px-2.5 text-[11px] font-medium text-zinc-100 hover:bg-white/[0.08] sm:px-3" aria-label={`Network settings, SoDEX ${NETS[S.net].label}`}>
+      <span className={cx('h-1.5 w-1.5 rounded-full', S.marketErr ? 'bg-rose-500' : 'bg-emerald-400')} /><span className={S.net === 'mainnet' ? 'hidden sm:inline' : ''}>SoDEX {NETS[S.net].label}</span>
     </button>
   );
 }
@@ -4066,7 +4140,7 @@ function WalletButton() {
   const item = 'flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-[13px] text-zinc-200 hover:bg-white/[0.06]';
   return (
     <div className="relative">
-      <button onClick={() => setOpen((o) => !o)} aria-haspopup="menu" aria-expanded={open} className="inline-flex h-8 items-center gap-2 rounded-lg border border-orange-500/40 bg-orange-500/[0.08] px-3 text-[11px] font-semibold text-zinc-100">
+      <button onClick={() => setOpen((o) => !o)} aria-haspopup="menu" aria-expanded={open} className="ss-btn inline-flex h-8 items-center gap-2 rounded-lg border border-orange-500/40 bg-orange-500/[0.08] px-3 text-[11px] font-semibold text-zinc-100 hover:bg-orange-500/[0.14]">
         {S.wallet.info.icon ? <img src={S.wallet.info.icon} alt="" className="h-4 w-4 rounded" /> : <Wallet className="h-3.5 w-3.5 text-orange-400" />}<span className="tnum">{short(S.wallet.address)}</span>
       </button>
       {open && (
@@ -4093,34 +4167,38 @@ function Shell() {
   }, [view]);
   const Page = { home: HomeView, swap: SwapView, markets: MarketsHub, cross: CrossChainView, bots: BotsView, skills: SkillsView, guide: GuideView, portfolio: PortfolioView }[view];
   return (
-    <div className="relative min-h-screen overflow-x-hidden bg-black font-sans text-zinc-200 selection:bg-orange-500/30">
-      <div aria-hidden className="pointer-events-none fixed inset-0 z-0" style={{ background: 'radial-gradient(70% 45% at 50% 105%, rgba(249,115,22,0.28), transparent 65%), radial-gradient(40% 30% at 0% 0%, rgba(249,115,22,0.10), transparent 70%), radial-gradient(40% 30% at 100% 0%, rgba(249,115,22,0.08), transparent 70%)' }} />
+    <div className="relative min-h-screen overflow-x-hidden font-sans text-zinc-200">
+      <div aria-hidden className="ss-bg"><div className="ss-bg-grid" /><div className="ss-bg-grain" /></div>
 
-      <header className="sticky top-0 z-40 border-b border-white/[0.06] bg-black/80 backdrop-blur-xl">
+      <header className="ss-header sticky top-0 z-40 border-b border-white/[0.06]">
         <div className="mx-auto flex max-w-[1180px] items-center gap-4 px-4 py-2.5">
           <button onClick={() => S.setView('home')} className="flex items-center gap-2" aria-label="SoSwapDEX home"><Logo size={32} /><Wordmark /></button>
-          <nav aria-label="Primary" className="ml-4 hidden items-center gap-1 md:flex">
-            {NAV.filter((n) => n.id !== 'home').map((n) => (
+          <LayoutGroup id="nav-d">
+            <nav aria-label="Primary" className="ml-4 hidden items-center gap-1 md:flex">
+              {NAV.filter((n) => n.id !== 'home').map((n) => (
+                <button key={n.id} onClick={() => S.setView(n.id)} aria-current={view === n.id ? 'page' : undefined}
+                  className={cx('relative px-3 py-2 text-[13px] font-medium transition-colors duration-150', view === n.id ? 'text-orange-400' : 'text-zinc-300 hover:text-zinc-50')}>
+                  {n.label}{view === n.id && <motion.span layoutId="nav-ul" transition={{ type: 'spring', stiffness: 500, damping: 38 }} className="absolute inset-x-3 -bottom-[11px] h-0.5 rounded bg-orange-500 shadow-[0_0_10px_rgba(249,115,22,0.9)]" />}
+                </button>
+              ))}
+            </nav>
+          </LayoutGroup>
+          <div className="ml-auto flex items-center gap-2"><NetPill /><WalletButton /></div>
+        </div>
+        <LayoutGroup id="nav-m">
+          <nav aria-label="Primary mobile" className="mx-auto flex max-w-[1180px] justify-between gap-0.5 overflow-x-auto px-2 pb-1 md:hidden">
+            {NAV.map((n) => (
               <button key={n.id} onClick={() => S.setView(n.id)} aria-current={view === n.id ? 'page' : undefined}
-                className={cx('relative px-3 py-2 text-[13px] font-medium transition', view === n.id ? 'text-orange-400' : 'text-zinc-300 hover:text-zinc-50')}>
-                {n.label}{view === n.id && <span className="absolute inset-x-3 -bottom-[11px] h-0.5 rounded bg-orange-500 shadow-[0_0_10px_rgba(249,115,22,0.9)]" />}
+                className={cx('relative flex min-h-[48px] min-w-[52px] flex-1 flex-col items-center justify-center gap-0.5 whitespace-nowrap px-1 pb-2 pt-1 text-[10px] font-medium transition-colors duration-150 active:scale-95', view === n.id ? 'text-orange-400' : 'text-zinc-400')}>
+                {n.icon}{n.label}
+                {view === n.id && <motion.span layoutId="nav-ul-m" transition={{ type: 'spring', stiffness: 500, damping: 38 }} className="absolute inset-x-2 bottom-0 h-0.5 rounded bg-orange-500 shadow-[0_0_8px_rgba(249,115,22,0.9)]" />}
               </button>
             ))}
           </nav>
-          <div className="ml-auto flex items-center gap-2"><NetPill /><div className="hidden md:block"><WalletButton /></div></div>
-        </div>
-        <div className="flex justify-end px-4 pb-2 md:hidden"><WalletButton /></div>
-        <nav aria-label="Primary mobile" className="mx-auto flex max-w-[1180px] justify-between gap-1 overflow-x-auto px-2 pb-1 md:hidden">
-          {NAV.map((n) => (
-            <button key={n.id} onClick={() => S.setView(n.id)} aria-current={view === n.id ? 'page' : undefined}
-              className={cx('flex min-w-[52px] flex-1 flex-col items-center gap-0.5 whitespace-nowrap border-b-2 px-1 pb-1.5 pt-1 text-[10px] font-medium', view === n.id ? 'border-orange-500 text-orange-400' : 'border-transparent text-zinc-400')}>
-              {n.icon}{n.label}
-            </button>
-          ))}
-        </nav>
+        </LayoutGroup>
       </header>
 
-      <main className="relative z-10 mx-auto max-w-[1180px] px-4 pb-28 pt-6 sm:pb-10">
+      <main className="relative z-10 mx-auto min-h-[70vh] max-w-[1180px] px-4 pb-28 pt-6 sm:pb-10">
         <AnimatePresence mode="wait" initial={false}><MotionPage key={view}><Page /></MotionPage></AnimatePresence>
         <footer className="mt-12 border-t border-white/[0.06] pt-5 pr-0 text-[11px] max-[520px]:pr-20 leading-relaxed text-zinc-600">{DISCLAIMER}</footer>
       </main>
@@ -4128,9 +4206,12 @@ function Shell() {
       <WalletModal /><KeyModal /><SettingsModal />
 
       <div className="pointer-events-none fixed bottom-24 right-4 z-[70] sm:bottom-4 flex w-[min(92vw,360px)] flex-col gap-2" aria-live="polite">
-        {S.toasts.map((t) => (
-          <div key={t.id} className={cx('ss-toast pointer-events-auto rounded-xl border px-4 py-3 text-[13px] shadow-2xl backdrop-blur', t.kind === 'ok' ? 'border-emerald-500/40 bg-emerald-950/90 text-emerald-100' : t.kind === 'err' ? 'border-rose-500/40 bg-rose-950/90 text-rose-100' : 'border-white/15 bg-zinc-900/95 text-zinc-100')}>{t.text}</div>
-        ))}
+        <AnimatePresence initial={false}>
+          {S.toasts.map((t) => (
+            <motion.div key={t.id} layout="position" initial={{ opacity: 0, x: 28 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 28, transition: { duration: 0.18 } }} transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
+              className={cx('pointer-events-auto rounded-xl border px-4 py-3 text-[13px] leading-snug shadow-2xl', t.kind === 'ok' ? 'border-emerald-500/40 bg-emerald-950/95 text-emerald-100' : t.kind === 'err' ? 'border-rose-500/40 bg-rose-950/95 text-rose-100' : 'border-white/15 bg-zinc-900/95 text-zinc-100')}>{t.text}</motion.div>
+          ))}
+        </AnimatePresence>
       </div>
     </div>
   );
