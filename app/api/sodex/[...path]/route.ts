@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 
 /**
  * Same-origin pass-through to the public SoDEX gateway (avoids browser CORS limits).
- * - Only /api/v1/spot/**, GET /api/v1/perps/accounts/<address>/(balances|state), GET/POST /api/v1/user/<address>/api-keys and GET/POST /api/v1/user/<address>/builders are reachable (no open proxy).
+ * - Only /api/v1/spot/**, GET /api/v1/perps/accounts/<address>/(balances|state), GET /api/v1/perps/markets/coins, POST /api/v1/perps/accounts/transfers, GET/POST /api/v1/user/<address>/api-keys and GET/POST /api/v1/user/<address>/builders are reachable (no open proxy).
  * - Users' own API-key signature headers are forwarded untouched and never logged or stored.
  * - No secret of this deployment is involved: SoDEX market data needs no key.
  */
@@ -30,6 +30,8 @@ function limited(ip: string, bucket: string, max: number) {
 
 const SPOT = /^api\/v1\/spot\/[A-Za-z0-9_\-./]+$/;
 const PERPS_READ = /^api\/v1\/perps\/accounts\/0x[0-9a-fA-F]{40}\/(balances|state)$/; // public, address-only reads
+const PERPS_COINS = /^api\/v1\/perps\/markets\/coins$/; // public coin precision for transfer flooring
+const PERPS_TRANSFER = /^api\/v1\/perps\/accounts\/transfers$/; // user-signed Move to Spot only
 const KEYREG = /^api\/v1\/user\/0x[0-9a-fA-F]{40}\/api-keys$/;
 const BUILDERS = /^api\/v1\/user\/0x[0-9a-fA-F]{40}\/builders$/; // builder-fee approval (GET status, POST signed approval)
 
@@ -45,7 +47,7 @@ async function handle(req: NextRequest, ctx: { params: Promise<{ path: string[] 
   const host = HOSTS[net];
   const path = rest.join('/');
   const method = req.method;
-  const allowed = SPOT.test(path) || (method === 'GET' && PERPS_READ.test(path)) || ((method === 'GET' || method === 'POST') && KEYREG.test(path)) || ((method === 'GET' || method === 'POST') && BUILDERS.test(path));
+  const allowed = SPOT.test(path) || (method === 'GET' && PERPS_READ.test(path)) || (method === 'GET' && PERPS_COINS.test(path)) || (method === 'POST' && PERPS_TRANSFER.test(path)) || ((method === 'GET' || method === 'POST') && KEYREG.test(path)) || ((method === 'GET' || method === 'POST') && BUILDERS.test(path));
   if (!host || !allowed || path.includes('..')) return NextResponse.json({ error: 'Not found.' }, { status: 404 });
 
   const ip = (req.headers.get('x-forwarded-for') ?? 'unknown').split(',')[0].trim();

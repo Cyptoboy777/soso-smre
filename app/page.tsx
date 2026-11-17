@@ -35,7 +35,17 @@ import {
   keyListed, keySlots, KEYS_AT_CAP, looksLikeRawSodex, REGISTER_KEY_FAILED, userFacingError, walletActionError,
   wrapUniversalSignature,
 } from '@/lib/sodex-keys';
-import { parsePerpsBalances, marginUsd, type MarginBalance } from '@/lib/sodex-balances';
+import { parsePerpsBalances, parsePerpsState, marginUsd, type MarginBalance } from '@/lib/sodex-balances';
+import {
+  SPOT_WITHDRAW_TO_ACCOUNT_ID,
+  buildTransferAssetParams,
+  transferAssetBodyJson,
+  transferAssetPayloadJson,
+  transferAssetTypedData,
+  validateMoveToSpot,
+  floorToPrecision,
+  friendlyTransferError,
+} from '@/lib/sodex-transfer';
 import {
   assetsForToken, bestDestination, cheapestWithdraw, evmDestinationsFor, findAsset,
   minDepositGate, tokensWithWithdrawOptions, totalWithdrawFee, CHAIN_LABEL, STABLECOINS, type SodexAsset,
@@ -496,9 +506,23 @@ async function fetchBalances(net: Net, address: string, aid?: number): Promise<B
     id: Number(b.id), coin: String(b.coin), total: asNum(b.total), locked: asNum(b.locked),
   }));
 }
-/** Public read. Perps/margin funds are not spendable for spot swaps. */
+/** Public read of official frontend state: aid, per-coin `at`, and wallet balances. */
+async function fetchPerpsAccount(net: Net, address: string) {
+  return parsePerpsState(await request(net, `/perps/accounts/${address}/state`));
+}
+/** Public read. Perps/margin funds are not spendable for spot swaps. Prefers `/state` so `at` is present. */
 async function fetchPerpsBalances(net: Net, address: string): Promise<MarginBalance[]> {
-  return parsePerpsBalances(await request(net, `/perps/accounts/${address}/balances`));
+  try {
+    return (await fetchPerpsAccount(net, address)).balances;
+  } catch {
+    return parsePerpsBalances(await request(net, `/perps/accounts/${address}/balances`));
+  }
+}
+type PerpsCoin = { id: number; name: string; precision: number };
+async function fetchPerpsCoins(net: Net): Promise<PerpsCoin[]> {
+  return list<any>(await request(net, '/perps/markets/coins'), 'coins').map((c) => ({
+    id: Number(c.id), name: String(c.name), precision: Number(c.precision),
+  })).filter((c) => c.id > 0 && c.name && Number.isInteger(c.precision) && c.precision >= 0 && c.precision <= 36);
 }
 const toOrder = (o: any): OpenOrder => ({
   symbol: String(o.symbol ?? o.s ?? ''), orderID: Number(o.orderID ?? o.i ?? 0), clOrdID: String(o.clOrdID ?? o.c ?? ''),
@@ -725,6 +749,8 @@ type Store = {
   accountID: number | null | undefined; balances: Balance[]; openOrders: OpenOrder[]; accountErr: string | null;
   marginBalances: MarginBalance[]; marginErr: string | null; marginLoaded: boolean;
   refreshAccount: () => Promise<{ orders: OpenOrder[]; balances: Balance[] } | null>;
+  moveTarget: MarginBalance | null; openMoveToSpot: (b: MarginBalance) => void; closeMoveToSpot: () => void;
+  submitMoveToSpot: (amount: string) => Promise<string>;
   key: TradeKey | null; keyValid: boolean; createKey: () => Promise<void>; importKey: (name: string, pk: string) => Promise<void>; forgetKey: () => void;
   selected: string; setSelected: (s: string) => void; favs: string[]; toggleFav: (s: string) => void;
   slippage: string; setSlippage: (s: string) => void;
@@ -909,6 +935,8 @@ function useSoSwapStore(): Store {
   const [marginBalances, setMarginBalances] = useState<MarginBalance[]>([]);
   const [marginErr, setMarginErr] = useState<string | null>(null);
   const [marginLoaded, setMarginLoaded] = useState(false);
+  const [moveTarget, setMoveTarget] = useState<MarginBalance | null>(null);
+  const moveBusy = useRef(false);
   const addr = wallet?.address?.toLowerCase();
   const aidRef = useRef<number | null | undefined>(undefined);
   aidRef.current = accountID;
@@ -945,7 +973,7 @@ function useSoSwapStore(): Store {
 
   useEffect(() => {
     setAccountID(undefined); setBalances([]); setOpenOrders([]); setAccountErr(null);
-    setMarginBalances([]); setMarginErr(null); setMarginLoaded(false);
+    setMarginBalances([]); setMarginErr(null); setMarginLoaded(false); setMoveTarget(null);
     if (!addr) return;
     let stop = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -1102,6 +1130,69 @@ function useSoSwapStore(): Store {
   const builder = useMemo(() => ({ enabled: BUILDER_ID > 0, fee: BUILDER_FEE, approvedFee, active: fee > 0, approve: approveBuilder, revoke: revokeBuilder }),
     [approvedFee, fee, approveBuilder, revokeBuilder]);
 
+  const openMoveToSpot = useCallback((b: MarginBalance) => setMoveTarget(b), []);
+  const closeMoveToSpot = useCallback(() => { if (!moveBusy.current) setMoveTarget(null); }, []);
+  const submitMoveToSpot = useCallback(async (amountInput: string) => {
+    if (moveBusy.current) throw new Error('This transfer is already being signed.');
+    if (!wallet || !addr) throw new Error('Connect a wallet first.');
+    if (!moveTarget) throw new Error('Pick an asset to move.');
+    moveBusy.current = true;
+    try {
+      const [state, coins] = await Promise.all([fetchPerpsAccount(net, wallet.address), fetchPerpsCoins(net)]);
+      const fromAccountID = state.accountID;
+      if (!fromAccountID) throw new Error('No SoDEX Margin & Futures account was found for this wallet.');
+      const fresh = state.balances.find((b) => (moveTarget.id && b.id === moveTarget.id) || b.coin === moveTarget.coin);
+      if (!fresh) throw new Error('This balance is no longer on your Margin & Futures account.');
+      if (!fresh.id) throw new Error('This coin is missing its SoDEX id.');
+      const coin = coins.find((c) => c.id === fresh.id) ?? coins.find((c) => c.name === fresh.coin);
+      if (coin == null || !Number.isInteger(coin.precision)) {
+        throw new Error("Could not read this coin's official precision. Please try again.");
+      }
+      if (fresh.available == null) {
+        throw new Error('SoDEX did not report how much of this coin can be moved. Try again, or move it on sodex.com.');
+      }
+      const check = validateMoveToSpot({ amount: amountInput, available: fresh.available, precision: coin.precision });
+      if (!check.ok) throw new Error(check.message);
+      const params = buildTransferAssetParams({
+        id: nextNonce(),
+        fromAccountID,
+        toAccountID: SPOT_WITHDRAW_TO_ACCOUNT_ID,
+        coinID: fresh.id,
+        amount: check.amount,
+      });
+      const body = transferAssetBodyJson(params);
+      const payloadJson = transferAssetPayloadJson(params);
+      if (`{"type":"transferAsset","params":${body}}` !== payloadJson) {
+        throw new Error('Transfer payload could not be built safely. Please try again.');
+      }
+      const nonce = nextNonce();
+      const chainId = NETS[net].chainId;
+      const payloadHash = '0x' + toHex(keccak256(utf8(payloadJson)));
+      const typed = transferAssetTypedData({ chainId, payloadHash, nonce });
+      const sig = await walletSign(JSON.stringify(typed));
+      const bytes = fromHex(sig);
+      if (bytes.length !== 65) throw new Error('Unexpected signature from wallet.');
+      if (bytes[64] >= 27) bytes[64] -= 27;
+      try {
+        await request(net, '/perps/accounts/transfers', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json', Accept: 'application/json',
+            'X-API-Sign': '0x01' + toHex(bytes), 'X-API-Nonce': String(nonce), 'X-API-Chain': String(chainId),
+          },
+          body,
+        });
+      } catch (e: any) {
+        const raw = String(e?.raw ?? e?.message ?? '');
+        throw new Error(isUserRejected(e) ? userFacingError(e) : friendlyTransferError(raw));
+      }
+      await refreshAccount();
+      return `Moved ${check.amount} ${coinLabel(fresh.coin)} to Spot.`;
+    } finally {
+      moveBusy.current = false;
+    }
+  }, [wallet, addr, moveTarget, net, walletSign, refreshAccount]);
+
   const place = useCallback(async (orders: OrderIn[]) => {
     if (!key || !keyValid) throw new Error('Enable trading first (trade key missing or expired).');
     return placeOrders(net, key, orders, fee > 0 ? { id: BUILDER_ID, fee } : undefined);
@@ -1134,6 +1225,7 @@ function useSoSwapStore(): Store {
     assets, assetByKey, symByName, symByCoin,
     wallets, wallet, connect, connectWC, wcEnabled: !!WC_PROJECT_ID, disconnect,
     accountID, balances, openOrders, accountErr, marginBalances, marginErr, marginLoaded, refreshAccount,
+    moveTarget, openMoveToSpot, closeMoveToSpot, submitMoveToSpot,
     key, keyValid, createKey, importKey, forgetKey, builder,
     selected, setSelected, favs, toggleFav, slippage, setSlippage, deadman, setDeadman,
     view, setView, ui, setUi, toast, toasts, place, cancel, available, priceOf,
@@ -2680,19 +2772,21 @@ function PortfolioView() {
                 <h3 className="text-sm font-semibold text-zinc-100">Margin & Futures</h3>
                 <div className="tnum text-sm font-semibold text-zinc-50">{marginRows.length ? usd(marginTotal) : ''}</div>
               </div>
-              <p className="mt-1 text-[12px] leading-relaxed text-zinc-500">Used as margin on SoDEX. Move it to Spot on <a href={SODEX_SITE} target="_blank" rel="noreferrer" className="text-orange-300 hover:text-orange-200">sodex.com</a> to swap it.</p>
+              <p className="mt-1 text-[12px] leading-relaxed text-zinc-500">Used as margin on SoDEX. Move it to Spot here, or as a secondary option on <a href={SODEX_SITE} target="_blank" rel="noreferrer" className="text-orange-300 hover:text-orange-200">sodex.com</a>.</p>
             </div>
             {S.marginErr ? <div className="p-4"><ErrorBox msg={S.marginErr} onRetry={() => S.refreshAccount()} /></div>
               : !S.marginLoaded ? <div className="space-y-2 p-4">{Array.from({ length: 3 }).map((_, i) => <Skeleton key={'m' + i} className="h-10" />)}</div>
               : shownMargin.length === 0 ? <Empty icon={<Layers className="h-5 w-5" />} title="No Margin & Futures balances" body="Balances used as margin on SoDEX will show up here." />
               : (
                 <div className="overflow-x-auto"><table className="w-full min-w-[520px] text-sm">
-                  <thead><tr className="text-left text-[11px] uppercase tracking-wider text-zinc-600"><th className="px-4 py-2">Asset</th><th className="text-right">Total</th><th className="text-right">Value</th></tr></thead>
+                  <thead><tr className="text-left text-[11px] uppercase tracking-wider text-zinc-600"><th className="px-4 py-2">Asset</th><th className="text-right">Total</th><th className="text-right">Available</th><th className="text-right">Value</th><th className="px-4" /></tr></thead>
                   <tbody>{shownMargin.map(({ b, price, value }) => (
                     <tr key={b.id || b.coin} className="border-t border-white/[0.04]">
                       <td className="px-4 py-3"><div className="flex items-center gap-2.5"><TokenIcon name={coinLabel(b.coin)} size={28} /><div><div className="font-semibold text-zinc-100">{coinLabel(b.coin)}</div><div className="tnum text-[11px] text-zinc-500">{price ? '$' + px(price) : ''}</div></div></div></td>
                       <td className="tnum text-right text-zinc-100">{num(b.total, 8)}</td>
-                      <td className="tnum px-4 text-right text-zinc-200">{price ? usd(value) : '–'}</td>
+                      <td className="tnum text-right text-zinc-500">{b.available != null ? b.available : '–'}</td>
+                      <td className="tnum text-right text-zinc-200">{price ? usd(value) : '–'}</td>
+                      <td className="px-4 text-right"><MoveToSpotButton b={b} /></td>
                     </tr>
                   ))}</tbody>
                 </table></div>
@@ -3190,6 +3284,101 @@ function RoutableDestinations() {
 }
 
 
+
+function MoveToSpotButton({ b }: { b: MarginBalance }) {
+  const S = useS();
+  const can = !!b.id && b.available != null && b.available !== '0';
+  return (
+    <Button size="sm" disabled={!can} onClick={() => S.openMoveToSpot(b)} title={can ? 'Move this to your Spot account' : 'SoDEX has no amount available to transfer for this coin right now'}>Move to Spot</Button>
+  );
+}
+
+function MoveToSpotModal() {
+  const S = useS();
+  const target = S.moveTarget;
+  const open = !!target;
+  const [amount, setAmount] = useState('');
+  const [precision, setPrecision] = useState<number | null>(null);
+  const [avail, setAvail] = useState<string | null>(null);
+  const [loadErr, setLoadErr] = useState('');
+  const [phase, setPhase] = useState<'idle' | 'busy' | 'done' | 'error'>('idle');
+  const [msg, setMsg] = useState('');
+  useEffect(() => {
+    if (!target || !S.wallet) return;
+    setAmount(''); setPhase('idle'); setMsg(''); setLoadErr('');
+    setAvail(target.available);
+    setPrecision(null);
+    let stop = false;
+    (async () => {
+      try {
+        const [st, coins] = await Promise.all([fetchPerpsAccount(S.net, S.wallet!.address), fetchPerpsCoins(S.net)]);
+        if (stop) return;
+        const fresh = st.balances.find((b) => (target.id && b.id === target.id) || b.coin === target.coin) ?? null;
+        const coin = fresh ? (coins.find((c) => c.id === fresh.id) ?? coins.find((c) => c.name === fresh.coin)) : undefined;
+        setAvail(fresh ? fresh.available : null);
+        setPrecision(coin && Number.isInteger(coin.precision) ? coin.precision : null);
+        if (!fresh) setLoadErr('This balance is no longer on your Margin & Futures account.');
+        else if (coin == null) setLoadErr("Could not read this coin's official precision. Please try again, or move it on sodex.com.");
+      } catch {
+        if (!stop) setLoadErr('Could not refresh the available amount. Please try again, or move it on sodex.com.');
+      }
+    })();
+    return () => { stop = true; };
+  }, [target, S.wallet, S.net]);
+  const check = open && precision != null && avail != null ? validateMoveToSpot({ amount, available: avail, precision }) : null;
+  const max = precision != null && avail != null ? floorToPrecision(avail, precision) : avail;
+  const label = target ? coinLabel(target.coin) : '';
+  const ready = !!check && check.ok && phase !== 'busy' && !loadErr;
+  const go = async () => {
+    if (!ready) return;
+    setPhase('busy'); setMsg('Waiting for your wallet signature…');
+    try {
+      const r = await S.submitMoveToSpot(amount);
+      setPhase('done'); setMsg(r);
+      S.toast('ok', r);
+    } catch (e: any) {
+      setPhase('error');
+      setMsg(userFacingError(e, 'SoDEX could not complete this transfer. Please try again.'));
+    }
+  };
+  return (
+    <Modal open={open} onClose={() => phase !== 'busy' && S.closeMoveToSpot()} title="Move to Spot">
+      {target && (
+        <div className="space-y-4">
+          <div className="flex items-center gap-3 rounded-2xl border border-white/[0.07] bg-black/30 p-3">
+            <TokenIcon name={label} size={32} />
+            <div>
+              <div className="text-sm font-semibold text-zinc-100">{label}</div>
+              <div className="tnum text-[12px] text-zinc-500">Total {num(target.total, 8)} · available to move {max ?? '—'}</div>
+            </div>
+          </div>
+          <Field label="Amount" hint={<button type="button" className="font-semibold text-orange-300 hover:text-orange-200 disabled:text-zinc-600" disabled={!max || max === '0' || phase === 'busy' || phase === 'done'} onClick={() => max && setAmount(max)}>MAX</button>}>
+            <AmountInput value={amount} onChange={setAmount} label="Amount to move" suffix={label} />
+          </Field>
+          {amount && check && !check.ok && <p className="text-[12px] leading-relaxed text-orange-300">{check.message}</p>}
+          {!amount && avail === '0' && <p className="text-[12px] leading-relaxed text-zinc-500">SoDEX is holding this as margin. There is no amount available to move right now.</p>}
+          {loadErr && <Notice tone="warn">{loadErr}</Notice>}
+          <div className="space-y-2.5 rounded-2xl border border-white/[0.07] bg-black/30 p-4">
+            <Row k="From" v="Margin & Futures" />
+            <Row k="To" v="Spot" />
+            <Row k="Amount" v={check && check.ok ? `${check.amount} ${label}` : '—'} />
+            <Row k="App fee" v="No app fee" />
+          </div>
+          <p className="text-[12px] leading-relaxed text-zinc-400">From Margin & Futures to Spot, amount {check && check.ok ? check.amount : '—'} {label}, no app fee.</p>
+          <Notice tone="warn">Moving margin can affect open perps positions on SoDEX.</Notice>
+          {phase === 'busy' && <Notice tone="info"><span className="inline-flex items-center gap-2"><Spinner className="h-3.5 w-3.5" />{msg}</span></Notice>}
+          {phase === 'done' && <Notice tone="ok">{msg}</Notice>}
+          {phase === 'error' && <Notice tone="error">{msg}</Notice>}
+          {phase === 'done'
+            ? <Button className="w-full" size="lg" onClick={S.closeMoveToSpot}>Close</Button>
+            : <Button variant="primary" size="lg" className="w-full" loading={phase === 'busy'} disabled={!ready} onClick={go}>{phase === 'error' ? 'Try again' : 'Confirm move to Spot'}</Button>}
+          <p className="text-center text-[12px] text-zinc-500">You can also move it on <a href={SODEX_SITE} target="_blank" rel="noreferrer" className="text-orange-300 hover:text-orange-200">sodex.com</a>.</p>
+        </div>
+      )}
+    </Modal>
+  );
+}
+
 /** SoDEX balances for the connected wallet. Spot (S.balances) and Margin & Futures (S.marginBalances) clear the moment the wallet disconnects. */
 function SodexBalances({ compact = false }: { compact?: boolean }) {
   const S = useS();
@@ -3199,13 +3388,14 @@ function SodexBalances({ compact = false }: { compact?: boolean }) {
   const marginTotal = marginRows.reduce((t, r) => t + r.value, 0);
   const total = spotTotal + marginTotal;
   if (!S.wallet) return <div className="rounded-2xl border border-white/[0.07] bg-black/40 p-4"><Empty icon={<Wallet className="h-5 w-5" />} title="Connect a wallet to see your SoDEX balances" body="Your assets appear here while the wallet is connected and clear when you disconnect." action={<Button variant="primary" onClick={() => S.setUi('connect', true)}>Connect wallet</Button>} /></div>;
-  const rowList = (rows: { b: { coin: string; total: number; locked?: number }; value: number }[], locked: boolean) => (
+  const rowList = (rows: { b: { coin: string; total: number; locked?: number } & Partial<MarginBalance>; value: number }[], locked: boolean) => (
     <ul className={cx('ss-stagger mt-2 divide-y divide-white/[0.05]', compact && 'max-h-60 overflow-y-auto')}>
       {rows.map(({ b, value }, i) => (
         <li key={b.coin} style={{ '--i': Math.min(i, 8) } as React.CSSProperties} className="flex items-center gap-3 py-2">
           <TokenIcon name={coinLabel(b.coin)} size={24} />
           <div className="min-w-0 flex-1 text-[13px] font-medium text-zinc-100">{coinLabel(b.coin)}{locked && (b.locked ?? 0) > 0 && <span className="ml-2 text-[11px] font-normal text-zinc-500">{num(b.locked!, 4)} in orders</span>}</div>
           <div className="text-right"><div className="tnum text-[13px] text-zinc-100">{num(b.total, 6)}</div><div className="tnum text-[11px] text-zinc-500">{value > 0 ? usd(value) : ''}</div></div>
+          {!locked && <MoveToSpotButton b={b as MarginBalance} />}
         </li>
       ))}
     </ul>
@@ -3226,7 +3416,7 @@ function SodexBalances({ compact = false }: { compact?: boolean }) {
         <h4 className="text-xs font-semibold uppercase tracking-wider text-zinc-400">Margin & Futures</h4>
         <div className="tnum text-xs font-semibold text-zinc-300">{marginRows.length ? usd(marginTotal) : ''}</div>
       </div>
-      <p className="mt-1 text-[12px] leading-relaxed text-zinc-500">Used as margin on SoDEX. Move it to Spot on <a href={SODEX_SITE} target="_blank" rel="noreferrer" className="text-orange-300 hover:text-orange-200">sodex.com</a> to swap it.</p>
+      <p className="mt-1 text-[12px] leading-relaxed text-zinc-500">Used as margin on SoDEX. Move it to Spot here, or as a secondary option on <a href={SODEX_SITE} target="_blank" rel="noreferrer" className="text-orange-300 hover:text-orange-200">sodex.com</a>.</p>
       {S.marginErr ? <div className="mt-2"><ErrorBox msg={S.marginErr} onRetry={() => S.refreshAccount()} /></div>
         : !S.marginLoaded ? <div className="mt-2 space-y-2"><Skeleton className="h-8 w-full" /><Skeleton className="h-8 w-full" /></div>
         : marginRows.length === 0 ? <p className="mt-2 text-[13px] text-zinc-500">No Margin & Futures balances.</p>
@@ -5020,5 +5210,5 @@ function Shell() {
 
 export default function SoSwapPage() {
   const store = useSoSwapStore();
-  return <Ctx.Provider value={store}><AlertsHost><ArmHost><Shell /></ArmHost></AlertsHost></Ctx.Provider>;
+  return <Ctx.Provider value={store}><AlertsHost><ArmHost><Shell /><MoveToSpotModal /></ArmHost></AlertsHost></Ctx.Provider>;
 }
