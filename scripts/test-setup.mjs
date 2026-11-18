@@ -15,11 +15,14 @@ copyFileSync('lib/swap-ux.ts', join(d, 'swap-ux.ts'));
 writeFileSync(join(d, 'trade-guard.ts'), readFileSync('lib/trade-guard.ts', 'utf8').replaceAll("from './setup'", "from './setup.ts'").replaceAll("from './swap-ux'", "from './swap-ux.ts'").replaceAll("from './risk'", "from './risk.ts'"));
 writeFileSync(join(d, 'grid-bot.ts'), readFileSync('lib/grid-bot.ts', 'utf8').replaceAll("from './swap-ux'", "from './swap-ux.ts'").replaceAll("from './trade-guard'", "from './trade-guard.ts'"));
 copyFileSync('tests/setup.test.ts', join(d, 'setup.test.ts'));
+for (const f of ['backtest', 'strategies', 'paper']) writeFileSync(join(d, f + '.ts'), readFileSync('lib/' + f + '.ts', 'utf8').replaceAll("from './setup'", "from './setup.ts'"));
+writeFileSync(join(d, 'backtest.test.ts'), readFileSync('tests/backtest.test.ts', 'utf8').replaceAll("'../lib/", "'./"));
 writeFileSync(join(d, 'trade-guard.test.ts'), readFileSync('tests/trade-guard.test.ts', 'utf8').replaceAll("from '../lib/trade-guard.ts'", "from './trade-guard.ts'").replaceAll("from '../lib/setup.ts'", "from './setup.ts'"));
 writeFileSync(join(d, 'grid-bot.test.ts'), readFileSync('tests/grid-bot.test.ts', 'utf8').replaceAll("from '../lib/grid-bot.ts'", "from './grid-bot.ts'").replaceAll("from '../lib/trade-guard.ts'", "from './trade-guard.ts'"));
 const setup = nodeTest(join(d, 'setup.test.ts'));
 const guard = nodeTest(join(d, 'trade-guard.test.ts'));
 const grid = nodeTest(join(d, 'grid-bot.test.ts'));
+const bt = nodeTest(join(d, 'backtest.test.ts'));
 const keys = nodeTest('tests/api-key.test.ts');
 const balances = nodeTest('tests/sodex-balances.test.ts');
 const transfer = nodeTest('tests/sodex-transfer.test.ts');
@@ -49,4 +52,4 @@ writeFileSync(join(r, 'tests', 'route-quote.test.ts'), readFileSync('tests/route
 const cfg = nodeTest(join(r, 'tests', 'sodex-config.test.ts'));
 const routes = nodeTest(join(r, 'tests', 'route-quote.test.ts'));
 
-process.exit((setup.status ?? 1) || (guard.status ?? 1) || (grid.status ?? 1) || (keys.status ?? 1) || (balances.status ?? 1) || (transfer.status ?? 1) || (swapUx.status ?? 1) || (journal.status ?? 1) || (watch.status ?? 1) || (brief.status ?? 1) || (cfg.status ?? 1) || (routes.status ?? 1));
+process.exit((setup.status ?? 1) || (guard.status ?? 1) || (grid.status ?? 1) || (bt.status ?? 1) || (keys.status ?? 1) || (balances.status ?? 1) || (transfer.status ?? 1) || (swapUx.status ?? 1) || (journal.status ?? 1) || (watch.status ?? 1) || (brief.status ?? 1) || (cfg.status ?? 1) || (routes.status ?? 1));
