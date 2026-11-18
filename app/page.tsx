@@ -6673,6 +6673,9 @@ const placePerpOrders = (net: Net, key: TradeKey, aid: number, symbolID: number,
 };
 const cancelPerpOrders = (net: Net, key: TradeKey, aid: number, items: { symbolID: number; orderID: number }[]) =>
   signedCall<OrderResult[]>(net, key, 'DELETE', '/trade/orders', 'cancelOrder', { accountID: aid, cancels: items.map((c) => ({ symbolID: c.symbolID, orderID: c.orderID })) }, 'perps');
+/** Change the trigger price of a resting TP/SL order (docs: modifyOrder, POST /trade/orders/modify). */
+const modifyPerpStop = (net: Net, key: TradeKey, aid: number, symbolID: number, orderID: number, stopPrice: string) =>
+  signedCall<unknown>(net, key, 'POST', '/trade/orders/modify', 'modifyOrder', { accountID: aid, symbolID, orderID, stopPrice }, 'perps');
 const updatePerpLeverage = (net: Net, key: TradeKey, aid: number, symbolID: number, leverage: number, marginMode: 1 | 2) =>
   signedCall<unknown>(net, key, 'POST', '/trade/leverage', 'updateLeverage', { accountID: aid, symbolID, leverage, marginMode }, 'perps');
 
@@ -7093,6 +7096,36 @@ function PerpPositions({ syms, tks, acct, reload, builderFee }: { syms: PerpSym[
   };
   const cancel = (items: PerpOrd[]) => { const list = items.map((o) => ({ symbolID: symOf(o.symbol)?.id ?? 0, orderID: o.orderID })).filter((x) => x.symbolID > 0); return cancelPerpOrders(S.net, S.key!, acct!.aid!, list).then((r) => { const bad = firstErr(r); if (bad) throw new Error(friendlySodexError(String(bad.error ?? 'Cancel was not accepted.'))); }); };
   const pos = acct?.positions ?? [], ords = acct?.orders ?? [];
+  const [editing, setEditing] = useState<string | null>(null);
+  const [eTp, setETp] = useState(''), [eSl, setESl] = useState('');
+  const stopsOf = (p: PerpPos) => {
+    const long = p.size > 0, mark = tks[p.symbol]?.mark || p.entry;
+    const mine = ords.filter((o) => o.symbol === p.symbol && o.reduceOnly && o.stopPrice != null && o.stopPrice > 0);
+    const isTp = (o: PerpOrd) => (o.stopType ? /TAKE/i.test(o.stopType) || o.stopType === '2' : long ? o.stopPrice! > mark : o.stopPrice! < mark);
+    return { tp: mine.find(isTp), sl: mine.find((o) => !isTp(o)), mark, long };
+  };
+  const openEdit = (p: PerpPos) => { const st = stopsOf(p); const d = decimalsOf(symOf(p.symbol)?.tick ?? '0.01'); setETp(st.tp?.stopPrice != null ? st.tp.stopPrice.toFixed(d) : ''); setESl(st.sl?.stopPrice != null ? st.sl.stopPrice.toFixed(d) : ''); setEditing(editing === p.symbol ? null : p.symbol); };
+  const saveStops = async (p: PerpPos) => {
+    const sym = symOf(p.symbol); if (!sym || !S.key || !acct?.aid) return;
+    const st = stopsOf(p), tp = Number(eTp) || 0, sl = Number(eSl) || 0;
+    if (tp <= 0 && sl <= 0) throw new Error('Enter a take-profit, a stop-loss, or both.');
+    if (sl > 0 && (st.long ? sl >= st.mark : sl <= st.mark)) throw new Error(`The stop-loss must be ${st.long ? 'below' : 'above'} the current price (${px(st.mark)}).`);
+    if (tp > 0 && (st.long ? tp <= st.mark : tp >= st.mark)) throw new Error(`The take-profit must be ${st.long ? 'above' : 'below'} the current price (${px(st.mark)}).`);
+    const exitSide: 1 | 2 = st.long ? 2 : 1;
+    const fresh: PerpOrderIn[] = [];
+    const apply = async (cur: PerpOrd | undefined, v: number, type: 1 | 2) => {
+      if (v <= 0) return;
+      const str = roundTo(v, sym.tick);
+      if (cur) { if (Math.abs((cur.stopPrice ?? 0) - Number(str)) > 1e-12) await modifyPerpStop(S.net, S.key!, acct.aid!, sym.id, cur.orderID, str); }
+      else fresh.push({ clOrdID: perpCid(type === 2 ? 'tp' : 'sl'), modifier: 2, side: exitSide, type: 2, tif: 3, stopPrice: str, stopType: type, triggerType: 2, reduceOnly: true }); // whole position: quantity omitted
+    };
+    await apply(st.sl, sl, 1); await apply(st.tp, tp, 2);
+    if (fresh.length) {
+      const res = await placePerpOrders(S.net, S.key, acct.aid, sym.id, fresh, fee10 > 0 ? { id: BUILDER_ID, fee: fee10 } : undefined);
+      const bad = firstErr(res); if (bad) throw new Error(friendlySodexError(String(bad.error ?? 'SoDEX did not accept the stop or target.')));
+    }
+    setEditing(null);
+  };
   if (!S.wallet) return null;
   return (
     <Card>
@@ -7120,8 +7153,16 @@ function PerpPositions({ syms, tks, acct, reload, builderFee }: { syms: PerpSym[
                   <div className="mt-2 flex flex-wrap gap-2">
                     <Button size="sm" variant="danger" disabled={!canSign} loading={busy === p.symbol + ':1'} onClick={() => act(p.symbol + ':1', () => closePos(p, 1), 'Close sent.')}>Close</Button>
                     <Button size="sm" disabled={!canSign} loading={busy === p.symbol + ':.5'} onClick={() => act(p.symbol + ':.5', () => closePos(p, 0.5), 'Half close sent.')}>Close 50%</Button>
-                    <Button size="sm" disabled title="Coming soon">Edit TP/SL · Coming soon</Button>
+                    <Button size="sm" variant="ghost" disabled={!canSign} onClick={() => openEdit(p)}><Pencil className="h-3.5 w-3.5" />Edit TP/SL</Button>
                   </div>
+                  {(() => { const st = stopsOf(p); return (st.sl || st.tp) ? <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[12px]">{st.sl?.stopPrice != null && <span className="text-zinc-500">Stop <span className="tnum text-rose-300">{px(st.sl.stopPrice)}</span></span>}{st.tp?.stopPrice != null && <span className="text-zinc-500">Target <span className="tnum text-emerald-300">{px(st.tp.stopPrice)}</span></span>}</div> : <p className="mt-2 text-[12px] text-orange-300">No stop-loss on this position.</p>; })()}
+                  {editing === p.symbol && (
+                    <div className="ss-fade mt-3 rounded-xl border border-white/[0.07] bg-black/25 p-3">
+                      <div className="grid grid-cols-2 gap-2"><Field label="Take profit"><AmountInput value={eTp} onChange={setETp} /></Field><Field label="Stop loss"><AmountInput value={eSl} onChange={setESl} /></Field></div>
+                      <p className="mt-2 text-[11px] text-zinc-500">Triggers on the mark price and closes at market. Existing stops are moved; missing ones are added for the whole position. To remove one, cancel it in Open orders.</p>
+                      <div className="mt-2 flex gap-2"><Button size="sm" onClick={() => setEditing(null)}>Back</Button><Button size="sm" variant="primary" loading={busy === p.symbol + ':stops'} onClick={() => act(p.symbol + ':stops', () => saveStops(p), 'Stop and target updated.')}>Sign and save</Button></div>
+                    </div>
+                  )}
                 </li>
               );
             })}

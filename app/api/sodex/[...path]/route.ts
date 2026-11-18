@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 
 /**
  * Same-origin pass-through to the public SoDEX gateway (avoids browser CORS limits).
- * - Only /api/v1/spot/**, GET /api/v1/perps/accounts/<address>/(balances|state), GET /api/v1/perps/markets/(coins|symbols|tickers|<symbol>/klines|<symbol>/orderbook), POST/DELETE /api/v1/perps/trade/orders, POST /api/v1/perps/trade/leverage, POST /api/v1/perps/accounts/transfers, GET/POST /api/v1/user/<address>/api-keys and GET/POST /api/v1/user/<address>/builders are reachable (no open proxy).
+ * - Only /api/v1/spot/**, GET /api/v1/perps/accounts/<address>/(balances|state), GET /api/v1/perps/markets/(coins|symbols|tickers|<symbol>/klines|<symbol>/orderbook), POST/DELETE /api/v1/perps/trade/orders, POST /api/v1/perps/trade/orders/modify, POST /api/v1/perps/trade/leverage, POST /api/v1/perps/accounts/transfers, GET/POST /api/v1/user/<address>/api-keys and GET/POST /api/v1/user/<address>/builders are reachable (no open proxy).
  * - Users' own API-key signature headers are forwarded untouched and never logged or stored.
  * - No secret of this deployment is involved: SoDEX market data needs no key.
  */
@@ -34,6 +34,7 @@ const PERPS_COINS = /^api\/v1\/perps\/markets\/coins$/; // public coin precision
 const PERPS_TRANSFER = /^api\/v1\/perps\/accounts\/transfers$/; // user-signed Move to Spot only
 const PERPS_MARKET = /^api\/v1\/perps\/markets\/(symbols|tickers|[A-Za-z0-9_-]{1,40}\/(klines|orderbook))$/; // public perps market data
 const PERPS_ORDERS = /^api\/v1\/perps\/trade\/orders$/; // user-signed perps orders (POST place, DELETE cancel)
+const PERPS_MODIFY = /^api\/v1\/perps\/trade\/orders\/modify$/; // user-signed change of a resting TP/SL trigger
 const PERPS_LEVERAGE = /^api\/v1\/perps\/trade\/leverage$/; // user-signed leverage update
 const KEYREG = /^api\/v1\/user\/0x[0-9a-fA-F]{40}\/api-keys$/;
 const BUILDERS = /^api\/v1\/user\/0x[0-9a-fA-F]{40}\/builders$/; // builder-fee approval (GET status, POST signed approval)
@@ -59,7 +60,7 @@ async function handle(req: NextRequest, ctx: { params: Promise<{ path: string[] 
   const host = HOSTS[net];
   const path = rest.join('/');
   const method = req.method;
-  const allowed = SPOT.test(path) || (method === 'GET' && PERPS_READ.test(path)) || (method === 'GET' && PERPS_COINS.test(path)) || (method === 'POST' && PERPS_TRANSFER.test(path)) || (method === 'GET' && PERPS_MARKET.test(path)) || ((method === 'POST' || method === 'DELETE') && PERPS_ORDERS.test(path)) || (method === 'POST' && PERPS_LEVERAGE.test(path)) || ((method === 'GET' || method === 'POST') && KEYREG.test(path)) || ((method === 'GET' || method === 'POST') && BUILDERS.test(path));
+  const allowed = SPOT.test(path) || (method === 'GET' && PERPS_READ.test(path)) || (method === 'GET' && PERPS_COINS.test(path)) || (method === 'POST' && PERPS_TRANSFER.test(path)) || (method === 'GET' && PERPS_MARKET.test(path)) || ((method === 'POST' || method === 'DELETE') && PERPS_ORDERS.test(path)) || (method === 'POST' && PERPS_LEVERAGE.test(path)) || (method === 'POST' && PERPS_MODIFY.test(path)) || ((method === 'GET' || method === 'POST') && KEYREG.test(path)) || ((method === 'GET' || method === 'POST') && BUILDERS.test(path));
   if (!host || !allowed || path.includes('..')) return NextResponse.json({ error: 'Not found.' }, { status: 404 });
 
   if (method !== 'GET' && !sameOrigin(req)) return NextResponse.json({ error: 'Not allowed.' }, { status: 403 });
