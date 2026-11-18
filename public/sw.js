@@ -1,6 +1,6 @@
 /* SoSwapDEX service worker: makes the app installable and keeps the shell available offline.
  * It never caches /api/* (market data, account data and signed requests always hit the network). */
-const VERSION = 'soswap-v1';
+const VERSION = 'soswap-v2';
 const SHELL = ['/', '/icons/icon-192.png', '/icons/icon-512.png'];
 
 self.addEventListener('install', (e) => { e.waitUntil(caches.open(VERSION).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting())); });
@@ -17,4 +17,15 @@ self.addEventListener('fetch', (e) => {
   if (url.pathname.startsWith('/_next/static/') || url.pathname.startsWith('/icons/')) {
     e.respondWith(caches.match(req).then((hit) => hit || fetch(req).then((r) => { const copy = r.clone(); caches.open(VERSION).then((c) => c.put(req, copy)); return r; })));
   }
+});
+
+/* Tapping an alert opens SoSwapDEX on Swap for that pair. */
+self.addEventListener('notificationclick', (e) => {
+  e.notification.close();
+  const pair = e.notification.data && e.notification.data.pair;
+  e.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((list) => {
+    const open = list[0];
+    if (open) { if (pair) open.postMessage({ type: 'open-pair', pair }); return open.focus(); }
+    return self.clients.openWindow(pair ? '/?pair=' + encodeURIComponent(pair) : '/');
+  }));
 });

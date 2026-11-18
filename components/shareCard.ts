@@ -52,3 +52,46 @@ export async function drawShareCard(canvas: HTMLCanvasElement, d: ShareData) {
 export function canvasToBlob(c: HTMLCanvasElement): Promise<Blob | null> {
   return new Promise((r) => c.toBlob((b) => r(b), 'image/png'));
 }
+
+/* ───────── win card: shared after a real, profitable, closed trade ─────────
+ * Draws only the pair, the % gain, the brand and the site. The wallet address is never drawn.
+ * The amount is drawn only when the user turns it on. */
+
+export type WinCardData = { pair: string; pct: number; amountLabel?: string };
+
+export async function drawWinCard(canvas: HTMLCanvasElement, d: WinCardData) {
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
+  canvas.width = SHARE_W; canvas.height = SHARE_H;
+  const sans = '"Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
+
+  ctx.fillStyle = '#050506'; ctx.fillRect(0, 0, SHARE_W, SHARE_H);
+  const g = ctx.createRadialGradient(SHARE_W - 160, 120, 10, SHARE_W - 160, 120, 640);
+  g.addColorStop(0, 'rgba(249,115,22,0.42)'); g.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, SHARE_W, SHARE_H);
+  // faint grid
+  ctx.strokeStyle = 'rgba(255,255,255,0.04)'; ctx.lineWidth = 1;
+  for (let x = 0; x <= SHARE_W; x += 60) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, SHARE_H); ctx.stroke(); }
+  for (let y = 0; y <= SHARE_H; y += 60) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(SHARE_W, y); ctx.stroke(); }
+  // border
+  ctx.strokeStyle = 'rgba(249,115,22,0.35)'; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.roundRect(24, 24, SHARE_W - 48, SHARE_H - 48, 28); ctx.stroke();
+
+  const logo = await loadLogo();
+  if (logo) ctx.drawImage(logo, 72, 64, 64, 64);
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = '#fafafa'; ctx.font = `800 36px ${sans}`; ctx.fillText('So', 152, 97);
+  const w = ctx.measureText('So').width; ctx.fillStyle = '#fb923c'; ctx.fillText('SwapDEX', 152 + w, 97);
+
+  ctx.textBaseline = 'alphabetic';
+  ctx.fillStyle = '#a1a1aa'; ctx.font = `600 34px ${sans}`; ctx.fillText(d.pair, 72, 250);
+  ctx.fillStyle = '#a1a1aa'; ctx.font = `500 28px ${sans}`; ctx.fillText('Closed trade', 72, 296);
+  const pct = `${d.pct >= 0 ? '+' : ''}${d.pct.toFixed(2)}%`;
+  const grad = ctx.createLinearGradient(0, 330, 0, 470); grad.addColorStop(0, '#6ee7b7'); grad.addColorStop(1, '#10b981');
+  ctx.fillStyle = grad; ctx.font = `800 150px ${sans}`; ctx.fillText(pct, 66, 450);
+  if (d.amountLabel) { ctx.fillStyle = '#e4e4e7'; ctx.font = `600 32px ${sans}`; ctx.fillText(d.amountLabel, 72, 506); }
+
+  ctx.fillStyle = '#71717a'; ctx.font = `500 24px ${sans}`; ctx.fillText('Real fills on SoDEX. Past results do not predict future ones.', 72, 566);
+  ctx.textAlign = 'right'; ctx.fillStyle = '#fdba74'; ctx.font = `700 28px ${sans}`; ctx.fillText('soswapdex.xyz', SHARE_W - 72, 566);
+  ctx.textAlign = 'left';
+}
