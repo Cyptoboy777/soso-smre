@@ -4,6 +4,7 @@
 @import "../components/motion/ux5.css";
 @import "../components/motion/killer.css";
 @import "../components/motion/grid.css";
+@import "../components/motion/phone.css";
 @tailwind base;
 @tailwind components;
 @tailwind utilities;

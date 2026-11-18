@@ -5254,7 +5254,7 @@ function GridBotPanel({ cfg, setCfg }: { cfg: BotCfg; setCfg: (c: BotCfg) => voi
 
           {previewErr && !preview ? <Notice tone="warn">{previewErr}</Notice> : null}
           {preview && (
-            <div className="space-y-1.5 rounded-xl border border-white/[0.07] bg-black/30 p-3 text-xs">
+            <div className="ss-depth space-y-1.5 rounded-xl border border-white/[0.07] bg-black/30 p-3 text-xs">
               <div className="mb-1 flex items-center justify-between gap-2">
                 <span className="font-semibold text-zinc-200">Before you start</span>
                 {verdictLabel && gridV && <span className="ss-guard__badge" data-verdict={gridV.verdict}>{verdictLabel}</span>}
@@ -5843,7 +5843,7 @@ function JournalTrades() {
       <h3 className="mb-1.5 text-sm font-semibold text-zinc-100">Your closed trades</h3>
       <div className="overflow-x-auto"><table className="w-full min-w-[560px] text-[13px]"><thead><tr className="text-left text-[11px] text-zinc-500"><th className="py-1.5 pr-3 font-medium">Pair</th><th className="pr-3 text-right font-medium">Entry</th><th className="pr-3 text-right font-medium">Exit</th><th className="pr-3 text-right font-medium">Fees</th><th className="pr-3 text-right font-medium">Realised P&L</th><th /></tr></thead>
         <tbody>{rows.map((t) => (
-          <tr key={t.id} className="border-t border-white/[0.05]">
+          <tr key={t.id} className="ss-depth-row border-t border-white/[0.05]">
             <td className="py-1.5 pr-3"><div className="text-zinc-200">{d(t.symbol)}</div><div className="text-[11px] text-zinc-600">{new Date(t.closedAt).toLocaleString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}</div></td>
             <td className="tnum pr-3 text-right text-zinc-300">{t.entry != null ? px(t.entry) : <span className="text-zinc-600" title="Bought before this journal started">n/a</span>}</td>
             <td className="tnum pr-3 text-right text-zinc-300">{px(t.exit)}</td>

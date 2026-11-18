@@ -24,10 +24,10 @@ export default function TradeGuardCard({
   return (
     <motion.section
       layout={!reduce}
-      initial={reduce ? false : { opacity: 0, y: 8 }}
-      animate={{ opacity: 1, y: 0 }}
+      initial={reduce ? false : { opacity: 0, y: 16, scale: 0.97 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
       transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
-      className="ss-guard"
+      className="ss-guard ss-lift"
       data-verdict={verdict}
       data-testid="trade-guard"
       aria-live="polite"

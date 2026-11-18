@@ -1,0 +1,93 @@
+/* Phone-style motion: screen slides, odometer digits, stacked card depth. Transform/opacity only. */
+
+/* ── Screen / tab changes ── */
+@media (max-width: 767px) and (prefers-reduced-motion: no-preference) {
+  .ss-screen { animation: ss-phone-slide 0.5s cubic-bezier(0.16, 1.15, 0.3, 1) both; }
+  .ss-screen--tab { animation-duration: 0.42s; }
+}
+@media (min-width: 768px) and (prefers-reduced-motion: no-preference) {
+  .ss-screen { animation: ss-fade-rise 0.4s cubic-bezier(0.22, 1, 0.36, 1) both; }
+  .ss-screen--tab { animation-duration: 0.32s; }
+}
+@keyframes ss-phone-slide {
+  0% { transform: translateX(28px) scale(0.97); }
+  72% { transform: translateX(-3px) scale(1.01); }
+  100% { transform: none; }
+}
+@keyframes ss-fade-rise {
+  from { transform: translateY(14px); }
+  to { transform: none; }
+}
+
+/* ── Odometer digits ── */
+.ss-odo {
+  display: inline-flex;
+  align-items: baseline;
+  line-height: 1;
+  height: 1em;
+  font-variant-numeric: tabular-nums;
+}
+.ss-odo-digit {
+  display: inline-block;
+  height: 1em;
+  overflow: hidden;
+  line-height: 1;
+  vertical-align: bottom;
+}
+.ss-odo-strip {
+  display: flex;
+  flex-direction: column;
+  line-height: 1;
+  will-change: transform;
+}
+.ss-odo.is-ready .ss-odo-strip { transition: transform 0.45s cubic-bezier(0.22, 1, 0.36, 1); }
+.ss-odo-strip > span { display: block; height: 1em; line-height: 1; }
+.ss-odo-ch { display: inline-block; line-height: 1; white-space: pre; }
+.ss-count-up .ss-count-live { color: #34d399; }
+.ss-count-down .ss-count-live { color: #fb7185; }
+.ss-count-live { transition: color 0.35s ease; }
+
+/* ── Stacked depth (shadow via pseudo so only opacity moves) ── */
+.ss-lift, .ss-depth { position: relative; }
+.ss-lift::after, .ss-depth::after {
+  content: "";
+  position: absolute;
+  inset: 10% 4% -10%;
+  border-radius: inherit;
+  box-shadow: 0 22px 40px -18px rgba(0, 0, 0, 0.72);
+  opacity: 0;
+  pointer-events: none;
+  z-index: -1;
+  animation: ss-lift-sh 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@keyframes ss-lift-sh { from { opacity: 0; } to { opacity: 1; } }
+
+.ss-depth {
+  animation: ss-depth 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@keyframes ss-depth {
+  from { opacity: 0; transform: translateY(16px) scale(0.97); }
+  to { opacity: 1; transform: none; }
+}
+
+.ss-depth-row { animation: ss-depth 0.42s cubic-bezier(0.22, 1, 0.36, 1) both; }
+.ss-depth-row:nth-child(1) { animation-delay: 0ms; }
+.ss-depth-row:nth-child(2) { animation-delay: 40ms; }
+.ss-depth-row:nth-child(3) { animation-delay: 80ms; }
+.ss-depth-row:nth-child(4) { animation-delay: 120ms; }
+.ss-depth-row:nth-child(5) { animation-delay: 160ms; }
+.ss-depth-row:nth-child(6) { animation-delay: 200ms; }
+.ss-depth-row:nth-child(7) { animation-delay: 240ms; }
+.ss-depth-row:nth-child(8) { animation-delay: 280ms; }
+.ss-depth-row:nth-child(9) { animation-delay: 320ms; }
+.ss-depth-row:nth-child(10) { animation-delay: 360ms; }
+.ss-depth-row:nth-child(11) { animation-delay: 400ms; }
+.ss-depth-row:nth-child(12) { animation-delay: 440ms; }
+
+@media (prefers-reduced-motion: reduce) {
+  .ss-screen, .ss-screen--tab, .ss-depth, .ss-depth-row, .ss-lift::after, .ss-depth::after {
+    animation: none !important;
+  }
+  .ss-odo.is-ready .ss-odo-strip { transition: none !important; }
+  .ss-count-up .ss-count-live, .ss-count-down .ss-count-live { color: inherit; }
+}
