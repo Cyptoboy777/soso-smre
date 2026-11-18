@@ -34,6 +34,9 @@ import { InstallButton } from '@/components/Pwa';
 import { WalletGlyph, OfficialMark, resolveWalletKind } from '@/components/WalletLogos';
 import { SkillsMark, TradeCheckIcon, PositionIcon, PortfolioIcon, BriefIcon, NewsIcon, PlanIcon, JournalIcon, AlertIcon, SkillTile } from '@/components/SkillIcons';
 import { scanTrade, sizePosition, portfolioHealth, journalStats, type Grade, type Flag, type ScanOut } from '@/lib/risk';
+import { runBacktest, type BtResult } from '@/lib/backtest';
+import { simulateDca, simulateGrid, gridCellPct, planTwap, type SimOut } from '@/lib/strategies';
+import { openPaper, stepPaper, paperStats, readPaper, PAPER_CAP, type PaperPos, type PaperClosed } from '@/lib/paper';
 import { computeSetup, pickBest, assetAliases, etfAssetFor, MAX_SPREAD_PCT, MAX_IMPACT_PCT, type SetupOut, type SetupGrade } from '@/lib/setup';
 import TradeGuardCard from '@/components/TradeGuardCard';
 import SmartExitCard from '@/components/SmartExitCard';
@@ -4554,6 +4557,8 @@ const ArmCtx = createContext<ArmApi | null>(null);
 const useArm = () => { const c = useContext(ArmCtx); if (!c) throw new Error('ArmHost missing'); return c; };
 
 function ArmHost({ children }: { children: React.ReactNode }) {
+  const paper = usePaper();
+  const paperRef = useRef(paper); paperRef.current = paper;
   const S = useS();
   const alerts = useContext(AlertsCtx);
   const [armed, setArmed] = useState<Armed | null>(null);
@@ -4593,6 +4598,7 @@ function ArmHost({ children }: { children: React.ReactNode }) {
         return ok ? { ...cur, status: 'ready', ready: { at: Date.now(), res }, checks: cur.checks + 1, lastCheck: Date.now() } : { ...cur, checks: cur.checks + 1, lastCheck: Date.now() };
       });
       if (ok) {
+        if (paperRef.current.auto) paperRef.current.add({ pair: res.pair, display: res.display, grade: res.grade, entry: res.entry, stop: res.stop, tp1: res.tp1, qty: res.qty });
         try { if (typeof Notification !== 'undefined' && Notification.permission === 'granted') new Notification('SoSwapDEX setup ready', { body: `${sym.display} grade ${res.grade}. Open SoSwapDEX to review. Nothing has been placed.`, icon: '/icons/icon-192.png' }); } catch { /* ignore */ }
       }
     } catch {
@@ -4626,6 +4632,7 @@ function ArmHost({ children }: { children: React.ReactNode }) {
         {r && (
           <div className="space-y-3">
             <Notice tone="ok">Conditions you armed were met (grade {r.grade}, minimum {armed?.minGrade}). Nothing has been placed. You decide.</Notice>
+            {paper.open.some((x) => x.pair === r.pair) && <Notice tone="info">Also recorded as a paper trade, so you can see how it plays out with no money at risk (Bots, Paper trades).</Notice>}
             <div className="space-y-1.5 rounded-xl border border-white/[0.07] bg-black/30 p-3 text-sm">
               <Row k="Entry (expected fill)" v={px(r.entry)} />
               <Row k="Stop (you place it)" v={px(r.stop)} tone="bad" />
@@ -4882,6 +4889,178 @@ function SetupBuilder({ cfg, setCfg }: { cfg: BotCfg; setCfg: (c: BotCfg) => voi
   );
 }
 
+/* ═════════════════════════ Strategy Lab (backtest) + Paper trading ═════════════════════════
+ * Past candles from SoDEX and the same rules the live builder uses. A look at the past, not a forecast.
+ * Paper trades follow live prices and never send an order. Everything stays in this browser. */
+
+const PAPER_KEY = 'soswap.paper.v1';
+const PAPER_AUTO_KEY = 'soswap.paper.auto';
+type PaperCtxT = { open: PaperPos[]; closed: PaperClosed[]; auto: boolean; setAuto: (b: boolean) => void; add: (s: { pair: string; display: string; grade: string; entry: number; stop: number; tp1: number; qty: number }) => boolean; clear: () => void };
+const PaperCtx = createContext<PaperCtxT | null>(null);
+const usePaper = () => useContext(PaperCtx)!;
+
+function PaperHost({ children }: { children: React.ReactNode }) {
+  const S = useS();
+  const [open, setOpen] = useState<PaperPos[]>([]);
+  const [closed, setClosed] = useState<PaperClosed[]>([]);
+  const [auto, setAutoState] = useState(true);
+  const loaded = useRef(false);
+  useEffect(() => { const v = lsGet<{ open?: unknown; closed?: unknown }>(PAPER_KEY, {}); setOpen(readPaper<PaperPos>(v.open)); setClosed(readPaper<PaperClosed>(v.closed)); setAutoState(lsGet<boolean>(PAPER_AUTO_KEY, true)); loaded.current = true; }, []);
+  useEffect(() => { if (loaded.current) lsSet(PAPER_KEY, { open, closed }); }, [open, closed]);
+  useEffect(() => {
+    if (!open.length) return;
+    const now = Date.now(); const done: PaperClosed[] = [];
+    for (const p of open) { const t = S.tickers[p.pair]; const c = t ? stepPaper(p, t.last, now) : null; if (c) done.push(c); }
+    if (!done.length) return;
+    setOpen((o) => o.filter((p) => !done.some((d) => d.id === p.id)));
+    setClosed((c) => [...c, ...done].slice(-PAPER_CAP));
+  }, [S.tickers]); // eslint-disable-line react-hooks/exhaustive-deps
+  const api = useMemo<PaperCtxT>(() => ({
+    open, closed, auto,
+    setAuto: (b) => { setAutoState(b); lsSet(PAPER_AUTO_KEY, b); },
+    add: (x) => { const feePct = (S.symByName[x.pair]?.taker ?? 0.00065) * 100 + (BUILDER_ID ? BUILDER_FEE / 1000 : 0); const pos = openPaper(x, Date.now(), feePct); if (!pos) return false; setOpen((o) => (o.some((q) => q.pair === pos.pair) ? o : [...o, pos])); return true; },
+    clear: () => { setOpen([]); setClosed([]); },
+  }), [open, closed, auto, S.symByName]);
+  return <PaperCtx.Provider value={api}>{children}</PaperCtx.Provider>;
+}
+
+async function loadHistory(net: Net, symbol: string): Promise<Candle[]> {
+  for (const n of [500, 300, 150]) { try { const c = await fetchKlines(net, symbol, '1h', n); if (c.length >= 100) return c; } catch { /* try a smaller window */ } }
+  throw new Error('Not enough price history for this pair.');
+}
+
+function MiniCurve({ points, base }: { points: { t: number; eq: number }[]; base: number }) {
+  if (points.length < 2) return null;
+  const step = Math.max(1, Math.floor(points.length / 160));
+  const pts = points.filter((_, i) => i % step === 0 || i === points.length - 1);
+  const ys = pts.map((q) => q.eq); const lo = Math.min(...ys, base), hi = Math.max(...ys, base);
+  const W = 320, H = 70, sx = (i: number) => (i / (pts.length - 1)) * W, sy = (v: number) => H - 4 - ((v - lo) / Math.max(hi - lo, 1e-9)) * (H - 8);
+  const up = ys[ys.length - 1] >= base;
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label="Value over time" className="h-[70px] w-full">
+      <line x1="0" x2={W} y1={sy(base)} y2={sy(base)} stroke="rgba(255,255,255,0.12)" strokeDasharray="3 4" />
+      <polyline fill="none" stroke={up ? '#34d399' : '#fb7185'} strokeWidth="1.8" strokeLinejoin="round" points={pts.map((q, i) => `${sx(i).toFixed(1)},${sy(q.eq).toFixed(1)}`).join(' ')} />
+    </svg>
+  );
+}
+
+type LabOut = { kind: 'setup'; r: BtResult; label: string } | { kind: 'sim'; r: SimOut; label: string };
+
+function StrategyLab() {
+  const S = useS();
+  const ai = useAi();
+  const [pair, setPair] = useState(S.selected);
+  const [strat, setStrat] = useState<'setup' | 'dca' | 'grid' | 'twap'>('setup');
+  const [equity, setEquity] = useState('1000'); const [risk, setRisk] = useState('1'); const [grade, setGrade] = useState<'A' | 'B' | 'C'>('B');
+  const [dcaAmt, setDcaAmt] = useState('50'); const [dcaEvery, setDcaEvery] = useState('24');
+  const [lo, setLo] = useState(''); const [hi, setHi] = useState(''); const [lv, setLv] = useState('10'); const [budget, setBudget] = useState('1000');
+  const [twTotal, setTwTotal] = useState('500'); const [twHours, setTwHours] = useState('4'); const [twN, setTwN] = useState('8');
+  const [st, setSt] = useState<{ loading: boolean; err?: string; out?: LabOut }>({ loading: false });
+  const sym = S.symByName[pair]; const t = S.tickers[pair];
+  const livePx = t?.last ?? 0;
+  const spreadPct = t && t.bid > 0 && t.ask > 0 ? Math.max(0.02, ((t.ask - t.bid) / ((t.ask + t.bid) / 2)) * 100) : 0.1;
+  const builderPct = BUILDER_ID ? BUILDER_FEE / 1000 : 0;
+  useEffect(() => { setSt({ loading: false }); ai.reset(); if (livePx) { setLo((v) => v || String(Number((livePx * 0.92).toPrecision(5)))); setHi((v) => v || String(Number((livePx * 1.08).toPrecision(5)))); } }, [pair, strat]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { setLo(''); setHi(''); }, [pair]);
+  const tw = planTwap(Number(twTotal), Number(twHours), Number(twN), parseFloat(sym?.minNotional ?? '0') || 0);
+
+  const run = async () => {
+    if (!sym) return;
+    setSt({ loading: true }); ai.reset();
+    try {
+      const candles = await loadHistory(S.net, sym.name);
+      if (strat === 'setup') {
+        const r = runBacktest({ pair: sym.name, display: sym.display, base: sym.base, candles, takerFee: sym.taker, builderFeePct: builderPct, spreadPct, equity: Number(equity) || 1000, riskPct: Number(risk) || 1, minGrade: grade, minNotional: parseFloat(sym.minNotional) || 0, interval: '1h' });
+        setSt({ loading: false, out: { kind: 'setup', r, label: 'AI Setup rules' } });
+      } else if (strat === 'dca') {
+        const r = simulateDca({ candles, amountUsd: Number(dcaAmt), everyBars: Number(dcaEvery), takerFee: sym.taker, builderFeePct: builderPct, spreadPct });
+        if (!r) throw new Error('Enter an amount and how often to buy.');
+        setSt({ loading: false, out: { kind: 'sim', r, label: 'DCA' } });
+      } else {
+        const r = simulateGrid({ candles, lower: Number(lo), upper: Number(hi), levels: Number(lv), budgetUsd: Number(budget), makerFee: sym.maker, builderFeePct: builderPct });
+        if (!r) throw new Error('Check the range, number of lines and budget.');
+        setSt({ loading: false, out: { kind: 'sim', r, label: 'Grid' } });
+      }
+    } catch (e: any) { setSt({ loading: false, err: String(e?.message || 'Could not run the backtest.') }); }
+  };
+
+  const o = st.out;
+  const tile = (k: string, v: string, tone?: 'good' | 'bad') => <div key={k} className="rounded-xl border border-white/[0.07] bg-black/25 p-3"><div className="text-[11px] text-zinc-500">{k}</div><div className={cx('tnum mt-0.5 text-base font-bold', tone === 'good' ? 'text-emerald-300' : tone === 'bad' ? 'text-rose-300' : 'text-zinc-50')}>{v}</div></div>;
+  const tone = (n: number) => (n >= 0 ? 'good' : 'bad') as 'good' | 'bad';
+  const askAi = () => {
+    if (!o || !sym) return;
+    if (o.kind === 'setup') { const s = o.r.stats; ai.run('strategy-review', { strategy: 'AI Setup rules', pair: sym.display, interval: '1h', candles: s.bars, tradesTaken: s.trades, enoughTradesForConfidence: o.r.enough, winRatePct: +s.winRate.toFixed(1), netPct: +s.netPct.toFixed(2), maxDrawdownPct: +s.maxDrawdownPct.toFixed(2), buyAndHoldPct: +s.buyHoldPct.toFixed(2), avgR: +s.avgR.toFixed(2), feesPaidUsd: +s.feesPaid.toFixed(2), assumptions: o.r.assumptions.slice(0, 3) }); }
+    else { const s = o.r; ai.run('strategy-review', { strategy: o.label, pair: sym.display, interval: '1h', netPct: +s.netPct.toFixed(2), maxDrawdownPct: +s.maxDrawdownPct.toFixed(2), buyAndHoldPct: +s.buyHoldPct.toFixed(2), feesPaidUsd: +s.feesPaid.toFixed(2), trades: s.trades, notes: s.notes, assumptions: s.assumptions.slice(0, 3) }); }
+  };
+  return (
+    <Card className="mt-4 p-4">
+      <div className="flex items-start justify-between gap-3"><div><h2 className="text-base font-bold text-zinc-50">Strategy Lab</h2><p className="mt-0.5 text-[13px] text-zinc-400">Test a strategy on the pair&apos;s real past candles before you risk anything. It shows costs, drawdown and a buy-and-hold comparison.</p></div><span className="shrink-0 whitespace-nowrap"><Badge tone="amber">Past data</Badge></span></div>
+      <div className="mt-3 grid gap-3 sm:grid-cols-2">
+        <Field label="Pair"><PairSelect value={pair} onChange={setPair} /></Field>
+        <Field label="Strategy"><Segmented value={strat} onChange={setStrat} options={[{ value: 'setup', label: 'AI Setup' }, { value: 'dca', label: 'DCA' }, { value: 'grid', label: 'Grid' }, { value: 'twap', label: 'TWAP' }]} /></Field>
+      </div>
+      <div className="mt-3 grid gap-3 sm:grid-cols-3">
+        {strat === 'setup' && <><Field label="Account size"><AmountInput value={equity} onChange={setEquity} suffix="USDC" label="Account size" /></Field><Field label="Risk per trade"><AmountInput value={risk} onChange={setRisk} suffix="%" label="Risk percent" /></Field><Field label="Minimum grade"><Segmented value={grade} onChange={setGrade} options={[{ value: 'A', label: 'A' }, { value: 'B', label: 'B+' }, { value: 'C', label: 'C+' }]} /></Field></>}
+        {strat === 'dca' && <><Field label="Buy amount"><AmountInput value={dcaAmt} onChange={setDcaAmt} suffix="USDC" label="Buy amount" /></Field><Field label="Every" hint="1-hour candles"><AmountInput value={dcaEvery} onChange={setDcaEvery} suffix="hours" label="Every hours" /></Field></>}
+        {strat === 'grid' && <><Field label="Lower price"><AmountInput value={lo} onChange={setLo} label="Lower price" /></Field><Field label="Upper price"><AmountInput value={hi} onChange={setHi} label="Upper price" /></Field><Field label="Lines"><AmountInput value={lv} onChange={setLv} label="Grid lines" /></Field><Field label="Budget"><AmountInput value={budget} onChange={setBudget} suffix="USDC" label="Grid budget" /></Field>{Number(lo) > 0 && Number(hi) > Number(lo) && <div className="flex items-end pb-2 text-[12px] text-zinc-500">Each step is {gridCellPct(Number(lo), Number(hi), Number(lv)).toFixed(2)}% wide.</div>}</>}
+        {strat === 'twap' && <><Field label="Total"><AmountInput value={twTotal} onChange={setTwTotal} suffix="USDC" label="TWAP total" /></Field><Field label="Over"><AmountInput value={twHours} onChange={setTwHours} suffix="hours" label="TWAP hours" /></Field><Field label="Slices"><AmountInput value={twN} onChange={setTwN} label="TWAP slices" /></Field></>}
+      </div>
+      {strat === 'twap' ? (
+        <div className="mt-3">{tw.ok ? <Notice tone="info">{tw.slices} buys of about {usd(tw.sliceUsd, 2)}, one every {tw.everyMin < 90 ? `${tw.everyMin.toFixed(0)} min` : `${(tw.everyMin / 60).toFixed(1)} h`}. Splitting an order can reduce price impact on a thin book, but it does not predict price. SoSwapDEX does not send the slices for you; you place each one.</Notice> : <Notice tone="warn">{tw.problems[0]}</Notice>}</div>
+      ) : (
+        <div className="mt-3 flex flex-wrap items-center gap-3"><Button variant="primary" onClick={run} loading={st.loading} disabled={!sym || (strat === 'grid' && !(Number(hi) > Number(lo)))}>Run on past candles</Button><span className="text-[12px] text-zinc-500">Assumed spread {spreadPct.toFixed(2)}% (from the live book).</span></div>
+      )}
+      {st.err && <div className="mt-3"><Notice tone="error">{st.err}</Notice></div>}
+      {o && (
+        <div className="ss-fade mt-4">
+          <div className="mb-2 flex items-baseline justify-between gap-3"><h3 className="text-sm font-semibold text-zinc-100">{o.label} on {sym?.display}</h3><span className="text-[11px] text-zinc-500">{o.kind === 'setup' ? `${o.r.stats.bars} candles` : ''}{o.kind === 'setup' && o.r.from ? ` · ${new Date(o.r.from).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} to ${new Date(o.r.to).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}` : ''}</span></div>
+          {o.kind === 'setup' ? (
+            <>
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">{[tile('Net result', `${o.r.stats.netPct >= 0 ? '+' : ''}${o.r.stats.netPct.toFixed(2)}%`, tone(o.r.stats.netPct)), tile('Trades', `${o.r.stats.trades} · ${o.r.stats.winRate.toFixed(0)}% won`), tile('Worst drop', `${o.r.stats.maxDrawdownPct.toFixed(1)}%`), tile('Buy and hold', `${o.r.stats.buyHoldPct >= 0 ? '+' : ''}${o.r.stats.buyHoldPct.toFixed(1)}%`), tile('Fees paid', usd(o.r.stats.feesPaid, 2))]}</div>
+              {!o.r.enough && <div className="mt-2"><Notice tone="warn">{o.r.stats.trades === 0 ? 'The rules found no trade in this window. That is a result too: the engine skips setups that fail its checks.' : `Only ${o.r.stats.trades} trade${o.r.stats.trades === 1 ? '' : 's'} in this window. That is too few to draw a conclusion.`}</Notice></div>}
+              {o.r.curve.length > 1 && <div className="mt-2 rounded-xl border border-white/[0.07] bg-black/25 p-2"><MiniCurve points={o.r.curve} base={o.r.stats.startEquity} /></div>}
+              {o.r.trades.length > 0 && <div className="mt-2 overflow-x-auto"><table className="w-full min-w-[460px] text-[12px]"><thead><tr className="text-left text-[11px] text-zinc-500"><th className="py-1 pr-3 font-medium">Opened</th><th className="pr-3 font-medium">Grade</th><th className="pr-3 text-right font-medium">Entry</th><th className="pr-3 text-right font-medium">Exit</th><th className="pr-3 font-medium">Ended by</th><th className="text-right font-medium">P&L</th></tr></thead><tbody>{[...o.r.trades].reverse().slice(0, 8).map((x) => <tr key={x.entryIdx} className="border-t border-white/[0.05]"><td className="py-1 pr-3 text-zinc-400">{new Date(x.entryTime).toLocaleString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}</td><td className="pr-3 text-zinc-300">{x.grade}</td><td className="tnum pr-3 text-right text-zinc-300">{px(x.entry)}</td><td className="tnum pr-3 text-right text-zinc-300">{px(x.exit)}</td><td className="pr-3 text-zinc-400">{x.reason === 'target' ? 'Target' : x.reason === 'stop' ? 'Stop' : x.reason === 'end' ? 'Data ended' : 'Time limit'}</td><td className={cx('tnum text-right', x.pnl >= 0 ? 'text-emerald-300' : 'text-rose-300')}>{usd(x.pnl, 2)}</td></tr>)}</tbody></table></div>}
+            </>
+          ) : (
+            <>
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">{[tile('Net result', `${o.r.netPct >= 0 ? '+' : ''}${o.r.netPct.toFixed(2)}%`, tone(o.r.netPct)), tile('Invested', usd(o.r.invested, 0)), tile('Worst drop', `${o.r.maxDrawdownPct.toFixed(1)}%`), tile('Buy and hold', `${o.r.buyHoldPct >= 0 ? '+' : ''}${o.r.buyHoldPct.toFixed(1)}%`), tile('Fees paid', usd(o.r.feesPaid, 2))]}</div>
+              <ul className="mt-2 space-y-1 text-[13px] text-zinc-300">{o.r.notes.map((n) => <li key={n}>{n}</li>)}</ul>
+              <div className="mt-2 rounded-xl border border-white/[0.07] bg-black/25 p-2"><MiniCurve points={o.r.curve} base={o.r.kind === 'dca' ? 0 : o.r.invested} /></div>
+            </>
+          )}
+          <details className="mt-3 rounded-xl border border-white/[0.07] bg-black/20 p-3 text-[12px] text-zinc-400"><summary className="cursor-pointer font-semibold text-zinc-300">What this test assumes</summary><ul className="mt-2 list-disc space-y-1 pl-5">{(o.kind === 'setup' ? o.r.assumptions : o.r.assumptions).map((a) => <li key={a}>{a}</li>)}</ul></details>
+          <div className="mt-3"><AiButton ai={ai} label="Have the AI review this test" onClick={askAi} /></div>
+          <AiBox ai={ai} />
+        </div>
+      )}
+    </Card>
+  );
+}
+
+function PaperCard() {
+  const S = useS();
+  const P = usePaper();
+  const st = paperStats(P.closed);
+  if (!P.open.length && !P.closed.length) return (
+    <Card className="mt-4 p-4"><div className="flex items-start justify-between gap-3"><div><h2 className="text-base font-bold text-zinc-50">Paper trades</h2><p className="mt-0.5 text-[13px] text-zinc-400">When an armed setup becomes ready, SoSwapDEX can follow it on paper at live prices so you build a track record with no money at risk. No order is ever sent.</p></div>
+      <label className="flex shrink-0 cursor-pointer items-center gap-2 text-[12px] text-zinc-300"><input type="checkbox" checked={P.auto} onChange={(e) => P.setAuto(e.target.checked)} className="h-4 w-4 accent-orange-500" />Auto</label></div></Card>
+  );
+  return (
+    <Card className="mt-4 p-4">
+      <div className="flex items-start justify-between gap-3"><div><h2 className="text-base font-bold text-zinc-50">Paper trades</h2><p className="mt-0.5 text-[12px] text-zinc-500">Simulated at live prices. Nothing was ordered.</p></div>
+        <div className="flex items-center gap-3"><label className="flex cursor-pointer items-center gap-2 text-[12px] text-zinc-300"><input type="checkbox" checked={P.auto} onChange={(e) => P.setAuto(e.target.checked)} className="h-4 w-4 accent-orange-500" />Auto-record ready setups</label><Button size="sm" onClick={P.clear}>Clear</Button></div></div>
+      {st.n > 0 && <div className="mt-3 grid grid-cols-3 gap-2"><div className="rounded-xl border border-white/[0.07] bg-black/25 p-3"><div className="text-[11px] text-zinc-500">Closed</div><div className="tnum text-base font-bold text-zinc-50">{st.n}</div></div><div className="rounded-xl border border-white/[0.07] bg-black/25 p-3"><div className="text-[11px] text-zinc-500">Winners</div><div className="tnum text-base font-bold text-zinc-50">{st.winRate.toFixed(0)}%</div></div><div className="rounded-xl border border-white/[0.07] bg-black/25 p-3"><div className="text-[11px] text-zinc-500">Net</div><div className={cx('tnum text-base font-bold', st.net >= 0 ? 'text-emerald-300' : 'text-rose-300')}>{usd(st.net, 2)}</div></div></div>}
+      <ul className="mt-3 divide-y divide-white/[0.05]">
+        {P.open.map((p) => { const last = S.tickers[p.pair]?.last ?? 0; const live = last > 0 ? (last - p.entry) * p.qty : null; return (
+          <li key={p.id} className="flex items-center justify-between gap-3 py-2 text-[13px]"><span className="min-w-0 text-zinc-200">{p.display} <Badge tone="amber">Open</Badge><span className="ml-2 text-[11px] text-zinc-500">in {px(p.entry)} · stop {px(p.stop)} · target {px(p.tp1)}</span></span><span className={cx('tnum', live == null ? 'text-zinc-500' : live >= 0 ? 'text-emerald-300' : 'text-rose-300')}>{live == null ? '–' : usd(live, 2)}</span></li>); })}
+        {[...P.closed].reverse().slice(0, 8).map((p) => (
+          <li key={p.id} className="flex items-center justify-between gap-3 py-2 text-[13px]"><span className="min-w-0 text-zinc-300">{p.display} <span className="text-[11px] text-zinc-500">{p.reason === 'target' ? 'hit target' : p.reason === 'stop' ? 'hit stop' : 'time limit'} · {px(p.entry)} to {px(p.exit)}</span></span><span className={cx('tnum', p.pnl >= 0 ? 'text-emerald-300' : 'text-rose-300')}>{usd(p.pnl, 2)} <span className="text-[11px] opacity-70">{p.pnlPct >= 0 ? '+' : ''}{p.pnlPct.toFixed(2)}%</span></span></li>
+        ))}
+      </ul>
+    </Card>
+  );
+}
+
 function BotsView() {
   const S = useS();
   const [cfg, setCfgState] = useState<BotCfg>(BOT_DEFAULT);
@@ -4900,6 +5079,8 @@ function BotsView() {
         right={<span className="rounded-lg border border-indigo-400/30 bg-indigo-500/20 px-3 py-2 text-xs font-semibold text-indigo-200">Draft Mode</span>} />
       <ArmedCard />
       <SetupBuilder cfg={cfg} setCfg={setCfg} />
+      <StrategyLab />
+      <PaperCard />
       <div className="mt-4 space-y-3">
         {bots.map((b, bi) => {
           const c = cfg[b.kind];
@@ -5666,5 +5847,5 @@ function Shell() {
 
 export default function SoSwapPage() {
   const store = useSoSwapStore();
-  return <Ctx.Provider value={store}><AlertsHost><ArmHost><Shell /><MoveToSpotModal /></ArmHost></AlertsHost></Ctx.Provider>;
+  return <Ctx.Provider value={store}><AlertsHost><PaperHost><ArmHost><Shell /><MoveToSpotModal /></ArmHost></PaperHost></AlertsHost></Ctx.Provider>;
 }
