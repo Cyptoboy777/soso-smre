@@ -1,11 +1,17 @@
 import { NextResponse } from 'next/server';
+import { rateLimit } from '@/lib/rate-limit';
 import { getNormalizedStatus } from '@/lib/routes/quote';
+import { FRIENDLY_RATE } from '@/lib/routes/types';
 import { validateRequestId, validateTxHash } from '@/lib/routes/validate';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 export async function GET(req: Request) {
+  // Every call can spend the Relay API key quota, so cap it per visitor (the page polls with backoff, well under this).
+  if (await rateLimit(req, 'route-status', 40)) {
+    return NextResponse.json({ error: FRIENDLY_RATE }, { status: 429 });
+  }
   const url = new URL(req.url);
   const provider = url.searchParams.get('provider');
   const requestId = url.searchParams.get('requestId');

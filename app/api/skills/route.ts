@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { blockedAi, limited, sodexSnapshot, sosoSnapshot } from "@/lib/server";
+import { aiGate, tooLarge } from "@/lib/rate-limit";
+import { blockedAi, sodexSnapshot, sosoSnapshot } from "@/lib/server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -52,8 +53,9 @@ export async function POST(request: NextRequest) {
   const model = (process.env.GEMINI_MODEL || "gemini-2.5-flash").replace(/[^a-zA-Z0-9._-]/g, "");
   if (!key) return NextResponse.json({ error: "AI explanations are not available right now." }, { status: 503 });
 
-  const ip = (request.headers.get("x-forwarded-for") ?? "unknown").split(",")[0].trim();
-  if (limited(`skills:${ip}`, 12, 60_000)) return NextResponse.json({ error: "Too many requests. Please wait a minute." }, { status: 429 });
+  const gated = await aiGate(request, "skills", { perMinute: 8, perDay: 100 });
+  if (gated) return NextResponse.json({ error: gated.error }, { status: gated.status });
+  if (tooLarge(request, 24_000)) return NextResponse.json({ error: "Input too large." }, { status: 413 });
 
   let body: { skill?: string; data?: unknown; note?: string };
   try { body = await request.json(); } catch { return NextResponse.json({ error: "Invalid request body." }, { status: 400 }); }

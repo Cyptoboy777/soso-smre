@@ -48,6 +48,7 @@ import { computeSetup, pickBest, assetAliases, etfAssetFor, MAX_SPREAD_PCT, MAX_
 import TradeGuardCard from '@/components/TradeGuardCard';
 import SmartExitCard from '@/components/SmartExitCard';
 import MoveNewsLine from '@/components/MoveNewsLine';
+import { safeHttpUrl } from '@/lib/safe-url';
 import AskSoSwap from '@/components/AskSoSwap';
 import {
   bookMetrics, computeGuard, computeSafeSize, pickMoveNews, suggestExit,
@@ -3441,7 +3442,7 @@ async function fetchNews(): Promise<NewsItem[]> {
       const source = String(x.source_name ?? x.source ?? x.publisher ?? '').trim();
       return {
         id: String(x.id ?? x.source_link ?? `${x.title}-${x.release_time ?? x.time ?? ''}`),
-        title: String(x.title ?? '').trim(), url: String(x.source_link ?? x.url ?? ''),
+        title: String(x.title ?? '').trim(), url: safeHttpUrl(x.source_link ?? x.url) ?? '',
         time: toMs(x.release_time ?? x.time), summary: String(x.content ?? '').replace(/<[^>]+>/g, '').trim(),
         ...(source ? { source } : {}),
       };
@@ -3669,7 +3670,7 @@ function NewsRow({ n, big }: { n: NewsItem; big?: boolean }) {
   const cls = 'flex gap-3 rounded-xl p-2 transition hover:bg-white/[0.04]';
   return (
     <div className="rounded-xl">
-      {n.url ? <a href={n.url} target="_blank" rel="noreferrer" className={cls}>{inner}</a> : <div className={cls}>{inner}</div>}
+      {safeHttpUrl(n.url) ? <a href={safeHttpUrl(n.url)} target="_blank" rel="noopener noreferrer nofollow" className={cls}>{inner}</a> : <div className={cls}>{inner}</div>}
       {pair && display && (
         <div className="flex justify-end px-2 pb-2">
           <button type="button" onClick={() => goToTradeCheck(S, pair)}
@@ -3931,9 +3932,11 @@ function MoveToSpotModal() {
   const [loadErr, setLoadErr] = useState('');
   const [phase, setPhase] = useState<'idle' | 'busy' | 'done' | 'error'>('idle');
   const [msg, setMsg] = useState('');
+  // Two steps: fill in the amount, then a separate review screen right before the wallet opens.
+  const [step, setStep] = useState<'form' | 'review'>('form');
   useEffect(() => {
     if (!target || !S.wallet) return;
-    setAmount(''); setPhase('idle'); setMsg(''); setLoadErr('');
+    setAmount(''); setPhase('idle'); setMsg(''); setLoadErr(''); setStep('form');
     setAvail(target.available);
     setPrecision(null);
     let stop = false;
@@ -3958,7 +3961,7 @@ function MoveToSpotModal() {
   const label = target ? coinLabel(target.coin) : '';
   const ready = !!check && check.ok && phase !== 'busy' && !loadErr;
   const go = async () => {
-    if (!ready) return;
+    if (!ready || step !== 'review') return;
     setPhase('busy'); setMsg('Waiting for your wallet signature…');
     try {
       const r = await S.submitMoveToSpot(amount);
@@ -3980,6 +3983,7 @@ function MoveToSpotModal() {
               <div className="tnum text-[12px] text-zinc-500">Total {num(target.total, 8)} · available to move {max ?? '—'}</div>
             </div>
           </div>
+          {step === 'form' && <>
           <Field label="Amount" hint={<button type="button" className="font-semibold text-orange-300 hover:text-orange-200 disabled:text-zinc-600" disabled={!max || max === '0' || phase === 'busy' || phase === 'done'} onClick={() => max && setAmount(max)}>MAX</button>}>
             <AmountInput value={amount} onChange={setAmount} label="Amount to move" suffix={label} />
           </Field>
@@ -3994,12 +3998,28 @@ function MoveToSpotModal() {
           </div>
           <p className="text-[12px] leading-relaxed text-zinc-400">From Margin & Futures to Spot, amount {check && check.ok ? check.amount : '—'} {label}, no app fee.</p>
           <Notice tone="warn">Moving margin can affect open perps positions on SoDEX.</Notice>
+          <Button variant="primary" size="lg" className="w-full" disabled={!ready} onClick={() => setStep('review')}>Review move to Spot</Button>
+          </>}
+          {step === 'review' && <>
+          <Notice tone="warn">Check this before you sign. Your wallet will show only a technical hash for this request, not the amount or where it goes, so this screen is your only readable check.</Notice>
+          <div className="space-y-2.5 rounded-2xl border border-orange-400/30 bg-black/30 p-4">
+            <Row k="You are moving" v={check && check.ok ? `${check.amount} ${label}` : '—'} />
+            <Row k="From" v={`Margin & Futures${S.wallet ? ` · ${short(S.wallet.address)}` : ''}`} />
+            <Row k="To" v={`Your Spot account${S.wallet ? ` · ${short(S.wallet.address)}` : ''}`} />
+            <Row k="Network" v={S.net === 'mainnet' ? 'SoDEX mainnet' : 'SoDEX testnet'} />
+            <Row k="App fee" v="No app fee" />
+          </div>
+          <p className="text-[12px] leading-relaxed text-zinc-400">Only sign if the amount and destination above are exactly what you expect. If anything looks wrong, go back or close this window.</p>
           {phase === 'busy' && <Notice tone="info"><span className="inline-flex items-center gap-2"><Spinner className="h-3.5 w-3.5" />{msg}</span></Notice>}
           {phase === 'done' && <SuccessMark title="Moved to Spot" sub={msg} />}
           {phase === 'error' && <Notice tone="error">{msg}</Notice>}
           {phase === 'done'
             ? <Button className="w-full" size="lg" onClick={S.closeMoveToSpot}>Close</Button>
-            : <Button variant="primary" size="lg" className="w-full" loading={phase === 'busy'} disabled={!ready} onClick={go}>{phase === 'error' ? 'Try again' : 'Confirm move to Spot'}</Button>}
+            : <div className="flex gap-2">
+                <Button size="lg" className="flex-1" disabled={phase === 'busy'} onClick={() => { setPhase('idle'); setMsg(''); setStep('form'); }}>Back</Button>
+                <Button variant="primary" size="lg" className="flex-[2]" loading={phase === 'busy'} disabled={!ready} onClick={go}>{phase === 'error' ? 'Try again' : 'Sign in wallet'}</Button>
+              </div>}
+          </>}
           <p className="text-center text-[12px] text-zinc-500">You can also move it on <a href={SODEX_SITE} target="_blank" rel="noreferrer" className="text-orange-300 hover:text-orange-200">sodex.com</a>.</p>
         </div>
       )}
@@ -6401,7 +6421,7 @@ function DailyBrief() {
         </div>
         {brief.headlines.length > 0 && (
           <div className="mt-4 border-t border-white/[0.06] pt-3"><div className="mb-1 text-[11px] font-medium text-zinc-500">Headlines from SoSoValue</div>
-            <ul className="space-y-1.5">{brief.headlines.map((h) => <li key={h.id} className="text-[13px] leading-snug">{h.url ? <a href={h.url} target="_blank" rel="noopener noreferrer" className="text-zinc-200 transition hover:text-orange-300">{h.title}</a> : <span className="text-zinc-200">{h.title}</span>}{h.source && <span className="ml-1.5 text-[11px] text-zinc-600">{h.source}</span>}</li>)}</ul></div>
+            <ul className="space-y-1.5">{brief.headlines.map((h) => <li key={h.id} className="text-[13px] leading-snug">{safeHttpUrl(h.url) ? <a href={safeHttpUrl(h.url)} target="_blank" rel="noopener noreferrer nofollow" className="text-zinc-200 transition hover:text-orange-300">{h.title}</a> : <span className="text-zinc-200">{h.title}</span>}{h.source && <span className="ml-1.5 text-[11px] text-zinc-600">{h.source}</span>}</li>)}</ul></div>
         )}
       </Card>
     </Reveal>

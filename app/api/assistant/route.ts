@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { blockedAi, limited, sodexSnapshot, sosoSnapshot } from "@/lib/server";
+import { aiGate, tooLarge } from "@/lib/rate-limit";
+import { blockedAi, sodexSnapshot, sosoSnapshot } from "@/lib/server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -29,8 +30,9 @@ export async function POST(request: NextRequest) {
   if (!apiKey || !model) {
     return NextResponse.json({ error: "The AI assistant is not configured on this deployment yet." }, { status: 503 });
   }
-  const ip = (request.headers.get("x-forwarded-for") ?? "unknown").split(",")[0].trim();
-  if (limited(ip)) return NextResponse.json({ error: "Too many messages. Please wait a minute and try again." }, { status: 429 });
+  const gated = await aiGate(request, "assistant", { perMinute: 8, perDay: 80 });
+  if (gated) return NextResponse.json({ error: gated.error }, { status: gated.status });
+  if (tooLarge(request, 160_000)) return NextResponse.json({ error: "Request is too large." }, { status: 413 });
 
   let body: { messages?: ChatMessage[] };
   try { body = await request.json(); } catch { return NextResponse.json({ error: "Invalid request body." }, { status: 400 }); }

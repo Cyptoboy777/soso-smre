@@ -8,6 +8,8 @@ const wcFrame = WC ? `frame-src ${ytFrame} https://verify.walletconnect.com http
 const csp = [
   "default-src 'self'",
   `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ''}`,
+  // React attaches handlers from code, so inline on*="" attributes (a classic injection route) are never needed
+  "script-src-attr 'none'",
   "style-src 'self' 'unsafe-inline'",
   // token logos load from these public CDNs; wallet icons arrive as data: URIs
   `img-src 'self' data: blob: https://assets.coincap.io https://assets.parqet.com https://raw.githubusercontent.com https://cdn.jsdelivr.net https://assets.coingecko.com${wcImg}`,
