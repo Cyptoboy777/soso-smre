@@ -28,7 +28,10 @@ import HeroOrbit from '@/components/motion/HeroOrbit';
 import SuccessMark from '@/components/motion/SuccessMark';
 import QuoteRefreshRing from '@/components/motion/QuoteRefreshRing';
 import PendingOrdersPill, { type FlightRow } from '@/components/motion/PendingOrdersPill';
-import { drawShareCard, canvasToBlob, SHARE_W, SHARE_H, type ShareData } from '@/components/shareCard';
+import { drawShareCard, drawWinCard, canvasToBlob, SHARE_W, SHARE_H, type ShareData } from '@/components/shareCard';
+import { mergeFills, buildTrades, weeklyInsight, isShareable, shareText, recordSnapshot, portfolioChange, normSide, type JFill as JournalFill, type JTrade, type Insight, type PortfolioSnap } from '@/lib/journal';
+import { evaluateWatch, readSettings, readSeen, DEFAULT_WATCH, EMPTY_SEEN, type WatchSettings, type WatchSeen, type WatchItem } from '@/lib/watch-alerts';
+import { buildBrief, briefIsEmpty } from '@/lib/daily-brief';
 import { WC_PROJECT_ID, connectWalletConnect, restoreWalletConnect } from '@/components/walletconnect';
 import { InstallButton } from '@/components/Pwa';
 import { WalletGlyph, OfficialMark, resolveWalletKind } from '@/components/WalletLogos';
@@ -2641,7 +2644,7 @@ function SwapPanel() {
   const [shareData, setShareData] = useState<ShareData | null>(null);
   const runTracked = async (progress: (s: string) => void): Promise<string> => {
     setExec('pending');
-    try { const snap = q && receipt ? { pay: `${amount} ${fromKey}`, get: `${num(q.out, 6)} ${toKey}`, costPct: receipt.pct, netLabel: NETS[S.net].label } : null; const r = await runSwap(progress); const ok = !/fill pending/.test(r); if (ok) { lsSet('soswap.swapped', true); const next = pushRecentPair(readRecentPairs(lsGet<unknown>(RECENT_PAIRS_KEY, [])), fromKey, toKey); lsSet(RECENT_PAIRS_KEY, next); setRecent(next); if (snap) setShareData(snap); } setExec(ok ? 'success' : 'idle'); return r; }
+    try { const snap = q && receipt ? { pay: `${amount} ${fromKey}`, get: `${num(q.out, 6)} ${toKey}`, costPct: receipt.pct, netLabel: NETS[S.net].label } : null; const r = await runSwap(progress); const ok = !/fill pending/.test(r); if (ok) { try { window.dispatchEvent(new Event('soswap-fills-changed')); } catch { /* ignore */ } lsSet('soswap.swapped', true); const next = pushRecentPair(readRecentPairs(lsGet<unknown>(RECENT_PAIRS_KEY, [])), fromKey, toKey); lsSet(RECENT_PAIRS_KEY, next); setRecent(next); if (snap) setShareData(snap); } setExec(ok ? 'success' : 'idle'); return r; }
     catch (e) { setExec('error'); throw e; }
   };
   const swapStatus = exec !== 'idle' ? exec : q && !q.loading && q.out && !q.short && !q.belowMin ? 'preview' : 'idle';
@@ -3430,6 +3433,8 @@ function HomeView() {
           <HeroOrbit><Logo size={150} /></HeroOrbit>
         </motion.div>
       </div>
+
+      <DailyBrief />
 
       <Reveal className="mt-8">
         <div className="mb-3 flex items-baseline justify-between gap-3">
@@ -5660,10 +5665,11 @@ function JournalCard() {
     } catch (e: any) { setSt({ loading: false, err: String(e?.message || 'Could not load your fills.') }); }
   }, [S.wallet, S.net, S.accountID]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { load(); }, [load]);
-  if (!S.wallet) return <Card><Empty icon={<Wallet className="h-6 w-6" />} title="Connect a wallet to see your journal" body="Your fills are read from SoDEX for your address. Nothing is stored by SoSwapDEX." action={<Button variant="primary" onClick={() => S.setUi('connect', true)}>Connect wallet</Button>} /></Card>;
+  if (!S.wallet) return <Card><Empty icon={<Wallet className="h-6 w-6" />} title="Connect a wallet to see your journal" body="Your fills are read from SoDEX for your address and saved only in this browser. Nothing is stored on a server." action={<Button variant="primary" onClick={() => S.setUi('connect', true)}>Connect wallet</Button>} /></Card>;
   const r = st.res;
   return (
     <Card className="p-4">
+      <JournalTrades />
       {st.loading && <div className="flex items-center gap-2 text-sm text-zinc-400"><Spinner />Loading your fills…</div>}
       {st.err && <Notice tone="error">{st.err}</Notice>}
       {r && r.trades === 0 && <Empty icon={<Coins className="h-6 w-6" />} title="No fills yet" body="Once you trade on SoDEX, your results show up here." />}
@@ -5685,6 +5691,333 @@ function JournalCard() {
       )}
       <AiBox ai={ai} />
     </Card>
+  );
+}
+
+/* ═════════════════════════ Auto PnL journal + win card ═════════════════════════
+ * Real fills only. Saved in this browser (localStorage). Nothing about the wallet is sent to any server. */
+
+type JournalCtxT = {
+  trades: JTrade[]; insight: Insight | null; ready: boolean; refresh: () => void; shareWin: (t: JTrade) => void;
+  portfolio: { change: number; pct: number | null; hours: number } | null; spotUsd: number | null;
+};
+const JournalCtx = createContext<JournalCtxT | null>(null);
+const useJournal = () => useContext(JournalCtx)!;
+
+function JournalHost({ children }: { children: React.ReactNode }) {
+  const S = useS();
+  const addr = S.wallet?.address.toLowerCase();
+  const jkey = addr ? `soswap.journal.v1:${S.net}:${addr}` : null;
+  const [fills, setFills] = useState<JournalFill[]>([]);
+  const [ready, setReady] = useState(false);
+  const [win, setWin] = useState<JTrade | null>(null);
+  const [modal, setModal] = useState<JTrade | null>(null);
+  const [snaps, setSnaps] = useState<PortfolioSnap[]>([]);
+  const [tick, setTick] = useState(0);
+  const symRef = useRef(S.symByName); symRef.current = S.symByName;
+
+  useEffect(() => { setFills(jkey ? lsGet<JournalFill[]>(jkey, []) : []); setSnaps(jkey ? lsGet<PortfolioSnap[]>(jkey.replace('journal', 'portfolio'), []) : []); setReady(false); setWin(null); setModal(null); }, [jkey]);
+
+  const refresh = useCallback(async () => {
+    if (!S.wallet || !jkey || S.accountID == null) return;
+    try {
+      const got = await fetchFills(S.net, S.wallet.address, { limit: 100, aid: S.accountID });
+      const mapped: JournalFill[] = got.flatMap((x) => {
+        const sym = symRef.current[x.symbol];
+        if (!sym) return [];
+        const feeCoin = x.feeCoin === QUOTE ? 'USDC' : x.feeCoin === sym.baseCoin ? sym.base : x.feeCoin;
+        return [{ id: `${S.net}:${x.tradeID}`, symbol: x.symbol, base: sym.base, quote: 'USDC', side: normSide(x.side), price: x.price, qty: x.qty, fee: x.fee, feeCoin, time: x.time, orderID: x.orderID }];
+      });
+      setFills((prev) => { const m = mergeFills(prev, mapped); lsSet(jkey, m); return m; });
+      setReady(true);
+    } catch { /* keep what is saved; try again on the next poll */ }
+  }, [S.wallet, S.net, S.accountID, jkey]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!jkey || S.accountID == null) return;
+    refresh();
+    const t = setInterval(() => { if (!document.hidden) refresh(); }, 60_000);
+    let a: ReturnType<typeof setTimeout>, b: ReturnType<typeof setTimeout>;
+    const onTrade = () => { clearTimeout(a); clearTimeout(b); a = setTimeout(refresh, 1500); b = setTimeout(refresh, 5000); };
+    window.addEventListener('soswap-fills-changed', onTrade);
+    return () => { clearInterval(t); clearTimeout(a); clearTimeout(b); window.removeEventListener('soswap-fills-changed', onTrade); };
+  }, [jkey, S.accountID, refresh]);
+
+  const trades = useMemo(() => buildTrades(fills), [fills]);
+  const insight = useMemo(() => weeklyInsight(trades, Date.now(), -new Date().getTimezoneOffset()), [trades]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // A win card is offered only for a trade that closed after this wallet was first seen, once.
+  useEffect(() => {
+    if (!jkey || !ready) return;
+    const shownKey = `${jkey}:shown`, initKey = `${jkey}:init`;
+    const shown = new Set(lsGet<string[]>(shownKey, []));
+    if (!lsGet<boolean>(initKey, false)) { trades.forEach((t) => shown.add(t.id)); lsSet(initKey, true); lsSet(shownKey, [...shown].slice(-300)); return; }
+    const fresh = trades.find((t) => isShareable(t) && !shown.has(t.id) && Date.now() - t.closedAt < 15 * 60_000);
+    const before = shown.size;
+    trades.forEach((t) => { if (!isShareable(t) || t.id === fresh?.id || Date.now() - t.closedAt >= 15 * 60_000) shown.add(t.id); });
+    if (fresh) { shown.add(fresh.id); setWin(fresh); }
+    if (shown.size !== before) lsSet(shownKey, [...shown].slice(-300));
+  }, [trades, ready, jkey]);
+
+  const spotUsd = useMemo(() => {
+    if (!S.wallet || S.accountID == null) return null;
+    let total = 0, known = false;
+    for (const b of S.balances) { if (!(b.total > 0)) continue; const p = S.priceOf(b.coin); if (p > 0) { total += b.total * p; known = true; } }
+    return known ? total : null;
+  }, [S.wallet, S.accountID, S.balances, S.priceOf]);
+  useEffect(() => {
+    if (!jkey || spotUsd == null) return;
+    setSnaps((prev) => { const n = recordSnapshot(prev, Date.now(), spotUsd); lsSet(jkey.replace('journal', 'portfolio'), n); return n; });
+  }, [spotUsd, jkey]);
+  useEffect(() => { const t = setInterval(() => setTick((x) => x + 1), 5 * 60_000); return () => clearInterval(t); }, []);
+  const portfolio = useMemo(() => (spotUsd == null ? null : portfolioChange(snaps, Date.now(), spotUsd)), [snaps, spotUsd, tick]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const ctx = useMemo<JournalCtxT>(() => ({ trades, insight, ready, refresh, shareWin: (t) => { setWin(null); setModal(t); }, portfolio, spotUsd }), [trades, insight, ready, refresh, portfolio, spotUsd]);
+  const display = (t: JTrade) => S.symByName[t.symbol]?.display ?? t.symbol;
+  return (
+    <JournalCtx.Provider value={ctx}>
+      {children}
+      <AnimatePresence>
+        {win && !modal && (
+          <motion.div key="win" initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 10, transition: { duration: 0.15 } }} transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
+            role="status" className="fixed bottom-24 left-3 right-3 z-40 mx-auto max-w-sm rounded-2xl border border-emerald-500/30 bg-[#07100c]/95 p-3 shadow-2xl sm:left-6 sm:right-auto sm:mx-0">
+            <div className="text-sm font-semibold text-zinc-50">{display(win)} closed {win.pnlPct != null ? `+${win.pnlPct.toFixed(2)}%` : ''}</div>
+            <p className="mt-0.5 text-[12px] text-zinc-400">Want a card to share? It shows only the pair and the gain.</p>
+            <div className="mt-2 flex gap-2"><Button size="sm" variant="primary" onClick={() => { setModal(win); setWin(null); }}>Make card</Button><Button size="sm" onClick={() => setWin(null)}>Not now</Button></div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+      <ShareWinModal trade={modal} display={modal ? display(modal) : ''} onClose={() => setModal(null)} />
+    </JournalCtx.Provider>
+  );
+}
+
+function ShareWinModal({ trade, display, onClose }: { trade: JTrade | null; display: string; onClose: () => void }) {
+  const ref = useRef<HTMLCanvasElement>(null);
+  const [showAmt, setShowAmt] = useState(false);
+  const [note, setNote] = useState('');
+  useEffect(() => { setShowAmt(false); setNote(''); }, [trade?.id]);
+  const label = trade && showAmt && trade.pnl != null ? `Profit ${usd(trade.pnl, 2)}` : undefined;
+  useEffect(() => { if (trade && trade.pnlPct != null) { const t = setTimeout(() => { if (ref.current) drawWinCard(ref.current, { pair: display, pct: trade.pnlPct as number, amountLabel: label }); }, 30); return () => clearTimeout(t); } }, [trade, display, label]);
+  const text = trade && trade.pnlPct != null ? shareText(display, trade.pnlPct) : '';
+  const blobFile = async () => { const b = ref.current ? await canvasToBlob(ref.current) : null; return b ? new File([b], 'soswap-win.png', { type: 'image/png' }) : null; };
+  const download = async () => { const f = await blobFile(); if (!f) return; const a = document.createElement('a'); a.href = URL.createObjectURL(f); a.download = 'soswap-win.png'; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 4000); setNote('Image saved. Attach it to your post.'); };
+  const share = async () => {
+    try {
+      const f = await blobFile(); const nav: any = navigator;
+      if (f && nav.canShare?.({ files: [f] })) { await nav.share({ files: [f], text }); return; }
+      if (nav.share) { await nav.share({ text }); return; }
+      await navigator.clipboard.writeText(text); setNote('Text copied. Paste it anywhere.');
+    } catch (e: any) { if (e?.name !== 'AbortError') setNote('Sharing is not available here. Use Download image.'); }
+  };
+  const toX = () => window.open(`https://x.com/intent/post?text=${encodeURIComponent(text)}`, '_blank', 'noopener,noreferrer');
+  return (
+    <Modal open={!!trade} onClose={onClose} title="Share your win">
+      <div className="space-y-3">
+        <canvas ref={ref} width={SHARE_W} height={SHARE_H} role="img" aria-label={`Trade card: ${display}`} className="w-full rounded-xl border border-white/10" />
+        <label className="flex cursor-pointer items-center gap-2.5 text-[13px] text-zinc-300"><input type="checkbox" checked={showAmt} onChange={(e) => setShowAmt(e.target.checked)} className="h-4 w-4 accent-orange-500" />Show my profit amount on the card</label>
+        <p className="text-[11px] leading-relaxed text-zinc-500">The card never shows your wallet address. It is drawn on your device and not uploaded. Past results do not predict future ones.</p>
+        <div className="grid grid-cols-3 gap-2"><Button size="sm" variant="primary" onClick={toX}>Post on X</Button><Button size="sm" onClick={share}>Share</Button><Button size="sm" onClick={download}>Download</Button></div>
+        {note && <p role="status" className="text-[11px] text-orange-300">{note}</p>}
+      </div>
+    </Modal>
+  );
+}
+
+/** Trades list and weekly insight, built from every fill this browser has seen. */
+function JournalTrades() {
+  const S = useS();
+  const J = useJournal();
+  const rows = J.trades.slice(0, 12);
+  if (!J.ready && !rows.length) return <div className="mb-4 space-y-2"><Skeleton className="h-16 w-full" /><Skeleton className="h-24 w-full" /></div>;
+  if (!rows.length) return null;
+  const d = (sym: string) => S.symByName[sym]?.display ?? sym;
+  return (
+    <div className="mb-5">
+      {J.insight && (
+        <div className="mb-4 rounded-2xl border border-orange-500/25 bg-orange-500/[0.05] p-3.5">
+          <div className="flex items-baseline justify-between gap-3"><h3 className="text-sm font-semibold text-zinc-100">This week</h3><span className="tnum text-[12px] text-zinc-400">{J.insight.count} closed · {J.insight.winRate.toFixed(0)}% winners · <span className={J.insight.net >= 0 ? 'text-emerald-300' : 'text-rose-300'}>{usd(J.insight.net, 2)}</span></span></div>
+          <ul className="mt-1.5 space-y-1 text-[13px] text-zinc-300">{J.insight.lines.map((l) => <li key={l}>{l}</li>)}</ul>
+        </div>
+      )}
+      <h3 className="mb-1.5 text-sm font-semibold text-zinc-100">Your closed trades</h3>
+      <div className="overflow-x-auto"><table className="w-full min-w-[560px] text-[13px]"><thead><tr className="text-left text-[11px] text-zinc-500"><th className="py-1.5 pr-3 font-medium">Pair</th><th className="pr-3 text-right font-medium">Entry</th><th className="pr-3 text-right font-medium">Exit</th><th className="pr-3 text-right font-medium">Fees</th><th className="pr-3 text-right font-medium">Realised P&L</th><th /></tr></thead>
+        <tbody>{rows.map((t) => (
+          <tr key={t.id} className="border-t border-white/[0.05]">
+            <td className="py-1.5 pr-3"><div className="text-zinc-200">{d(t.symbol)}</div><div className="text-[11px] text-zinc-600">{new Date(t.closedAt).toLocaleString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}</div></td>
+            <td className="tnum pr-3 text-right text-zinc-300">{t.entry != null ? px(t.entry) : <span className="text-zinc-600" title="Bought before this journal started">n/a</span>}</td>
+            <td className="tnum pr-3 text-right text-zinc-300">{px(t.exit)}</td>
+            <td className="tnum pr-3 text-right text-zinc-400">{usd(t.fees, 3)}</td>
+            <td className={cx('tnum pr-3 text-right', t.pnl == null ? 'text-zinc-600' : t.pnl >= 0 ? 'text-emerald-300' : 'text-rose-300')}>{t.pnl == null ? 'n/a' : <>{usd(t.pnl, 2)} <span className="text-[11px] opacity-70">{t.pnlPct != null ? `${t.pnlPct >= 0 ? '+' : ''}${t.pnlPct.toFixed(2)}%` : ''}</span></>}</td>
+            <td className="text-right">{isShareable(t) && <button onClick={() => J.shareWin(t)} className="rounded-md border border-white/10 px-2 py-1 text-[11px] text-zinc-400 transition hover:border-orange-500/50 hover:text-orange-300">Share</button>}</td>
+          </tr>))}</tbody></table></div>
+      <p className="mt-2 text-[11px] leading-relaxed text-zinc-500">Saved only in this browser. P&L uses average cost from fills this journal has seen, with fees included. Sells of coins bought earlier show n/a instead of a guess, and unrealised gains are not counted.</p>
+    </div>
+  );
+}
+
+/* ═════════════════════════ Watchlist alerts (price move · news · ETF flow) ═════════════════════════
+ * Starred pairs only. Checked while SoSwapDEX is open. Never trades. */
+
+const WATCH_KEY = 'soswap.watch.v1';
+const WATCH_SEEN_KEY = 'soswap.watch.seen.v1';
+
+async function pushNotice(title: string, body: string, pair: string) {
+  try {
+    if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
+    const opts = { body, icon: '/icons/icon-192.png', tag: `soswap-${pair}`, data: { pair } };
+    const reg = 'serviceWorker' in navigator ? await navigator.serviceWorker.getRegistration() : undefined;
+    if (reg) { await reg.showNotification(title, opts); return; }
+    const n = new Notification(title, opts);
+    n.onclick = () => { window.focus(); window.dispatchEvent(new CustomEvent('soswap-open-pair', { detail: pair })); n.close(); };
+  } catch { /* notifications unavailable */ }
+}
+
+function useWatchAlerts() {
+  const S = useS();
+  const [settings, setSettingsState] = useState<WatchSettings>(DEFAULT_WATCH);
+  const [perm, setPerm] = useState<string>('default');
+  const [pulled, setPulled] = useState(false);
+  const [data, setData] = useState<{ news: NewsItem[] | null; etf: Partial<Record<'BTC' | 'ETH', { date: string; inflow: number } | null>> | null }>({ news: null, etf: null });
+  const seen = useRef<WatchSeen>(EMPTY_SEEN);
+  useEffect(() => { setSettingsState(readSettings(lsGet<unknown>(WATCH_KEY, null))); seen.current = readSeen(lsGet<unknown>(WATCH_SEEN_KEY, null)); try { setPerm(typeof Notification === 'undefined' ? 'unsupported' : Notification.permission); } catch { setPerm('unsupported'); } }, []);
+  const setSettings = useCallback((p: Partial<WatchSettings>) => setSettingsState((c) => { const n = { ...c, ...p }; lsSet(WATCH_KEY, n); return n; }), []);
+  const items = useMemo<WatchItem[]>(() => S.favs.map((n) => S.symByName[n]).filter(Boolean).map((s) => ({ name: s.name, display: s.display, base: s.base, aliases: assetAliases(s.base), etfAsset: etfAssetFor(s.base) })), [S.favs, S.symByName]);
+  const etfKey = [...new Set(items.map((i) => i.etfAsset).filter(Boolean))].join(',');
+
+  useEffect(() => {
+    if (!settings.enabled || !items.length || !(settings.news || settings.etf)) { setPulled(false); return; }
+    let live = true;
+    const pull = async () => {
+      if (document.hidden && live) return;
+      const assets = (etfKey ? etfKey.split(',') : []) as ('BTC' | 'ETH')[];
+      const [n, ...e] = await Promise.allSettled([settings.news ? fetchNews() : Promise.resolve(null), ...assets.map((a) => (settings.etf ? fetchEtf(a) : Promise.resolve(null)))]);
+      if (!live) return;
+      const etf: Partial<Record<'BTC' | 'ETH', { date: string; inflow: number } | null>> = {};
+      assets.forEach((a, i) => { const r = e[i]; const days = r.status === 'fulfilled' ? (r.value as EtfDay[] | null) : null; etf[a] = days && days.length ? [...days].sort((x, y) => String(y.date).localeCompare(String(x.date)))[0] : null; });
+      setData({ news: n.status === 'fulfilled' ? (n.value as NewsItem[] | null) : null, etf });
+      setPulled(true);
+    };
+    pull();
+    const t = setInterval(pull, 5 * 60_000);
+    return () => { live = false; clearInterval(t); };
+  }, [settings.enabled, settings.news, settings.etf, items.length, etfKey]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!settings.enabled || !items.length) return;
+    if (!Object.keys(S.tickers).length) return;
+    if ((settings.news || settings.etf) && !pulled) return;
+    const d = new Date(); const day = `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
+    const r = evaluateWatch(settings, { items, tickers: S.tickers, news: data.news, etf: data.etf, now: Date.now(), day }, seen.current);
+    seen.current = r.seen; lsSet(WATCH_SEEN_KEY, r.seen);
+    for (const a of r.alerts.slice(0, 3)) { S.toast('info', a.title); pushNotice(a.title, a.body, a.pair); }
+  }, [S.tickers, settings, items, data, pulled]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const enable = async (on: boolean) => {
+    if (on && typeof Notification !== 'undefined' && Notification.permission === 'default') { try { setPerm(await Notification.requestPermission()); } catch { /* ignore */ } }
+    if (on) { seen.current = EMPTY_SEEN; lsSet(WATCH_SEEN_KEY, EMPTY_SEEN); }
+    setSettings({ enabled: on });
+  };
+  return { settings, setSettings, perm, enable, watching: items };
+}
+
+/** Opens Swap on a pair from a notification click (service worker message, in-page notification, or ?pair= link). */
+function useOpenPair() {
+  const S = useS();
+  const go = useCallback((pair: string) => { if (S.symByName[pair]) goToRoutePreview(S, pair, 'buy'); }, [S]);
+  const pending = useRef<string | null>(null);
+  useEffect(() => {
+    try { const q = new URLSearchParams(window.location.search).get('pair'); if (q) { pending.current = q; window.history.replaceState(null, '', window.location.pathname); } } catch { /* ignore */ }
+    const onMsg = (e: MessageEvent) => { if (e.data?.type === 'open-pair' && typeof e.data.pair === 'string') pending.current = e.data.pair; };
+    const onEvt = (e: Event) => { pending.current = String((e as CustomEvent).detail ?? ''); };
+    navigator.serviceWorker?.addEventListener('message', onMsg);
+    window.addEventListener('soswap-open-pair', onEvt);
+    return () => { navigator.serviceWorker?.removeEventListener('message', onMsg); window.removeEventListener('soswap-open-pair', onEvt); };
+  }, []);
+  useEffect(() => {
+    const t = setInterval(() => { const p = pending.current; if (p && S.symByName[p]) { pending.current = null; go(p); } }, 400);
+    return () => clearInterval(t);
+  }, [S.symByName, go]);
+}
+
+function WatchAlertsCard() {
+  const S = useS();
+  const { watch } = useContext(AlertsCtx)!;
+  const { settings, setSettings, perm, enable, watching } = watch;
+  return (
+    <Card className="mb-4 p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0"><h3 className="text-sm font-semibold text-zinc-100">Watchlist alerts</h3>
+          <p className="mt-1 text-[13px] text-zinc-400">Get a heads-up when a starred pair moves, when news mentions it, or when spot ETF flows are reported. Tapping the alert opens Swap on that pair. Nothing is ever traded for you.</p></div>
+        <button role="switch" aria-checked={settings.enabled} aria-label="Watchlist alerts" onClick={() => enable(!settings.enabled)}
+          className={cx('relative h-6 w-11 shrink-0 rounded-full border transition-colors', settings.enabled ? 'border-orange-500 bg-orange-500/80' : 'border-white/15 bg-white/[0.06]')}><span className={cx('absolute left-0.5 top-0.5 block rounded-full bg-white transition-transform duration-200', settings.enabled ? 'translate-x-5' : 'translate-x-0')} style={{ height: 18, width: 18 }} /></button>
+      </div>
+      {settings.enabled && (
+        <div className="ss-fade mt-3 space-y-3">
+          <div className="flex flex-wrap gap-x-5 gap-y-2 text-[13px] text-zinc-300">
+            {([['price', `Price moves of ${settings.movePct}% or more`], ['news', 'News'], ['etf', 'ETF flows (BTC, ETH)']] as const).map(([k, l]) => (
+              <label key={k} className="flex cursor-pointer items-center gap-2"><input type="checkbox" checked={settings[k]} onChange={(e) => setSettings({ [k]: e.target.checked })} className="h-4 w-4 accent-orange-500" />{l}</label>
+            ))}
+          </div>
+          {settings.price && <div className="flex items-center gap-2 text-[12px] text-zinc-400">Alert me at <Segmented value={String(settings.movePct)} onChange={(v) => setSettings({ movePct: Number(v) })} options={[{ value: '3', label: '3%' }, { value: '5', label: '5%' }, { value: '10', label: '10%' }]} /> in 24h</div>}
+          {watching.length === 0
+            ? <Notice tone="info" action={<Button size="sm" onClick={() => S.setView('markets')}>Open Markets</Button>}>Star a pair in Markets and it is watched here.</Notice>
+            : <p className="text-[12px] text-zinc-500">Watching {watching.map((w) => w.display).join(', ')}.</p>}
+          {perm === 'granted' && <p className="text-[12px] text-emerald-300/90">Browser notifications are on.</p>}
+          {perm === 'default' && <div className="flex items-center gap-2"><Button size="sm" onClick={async () => { try { await Notification.requestPermission(); } catch { /* ignore */ } await enable(true); }}>Allow browser notifications</Button><span className="text-[12px] text-zinc-500">Your browser asks once.</span></div>}
+          {perm === 'denied' && <Notice tone="warn">Browser notifications are blocked. You will still see alerts inside SoSwapDEX while it is open.</Notice>}
+          <p className="text-[11px] leading-relaxed text-zinc-500">Alerts are checked while SoSwapDEX is open in a tab or the installed app. They do not run when it is closed.</p>
+        </div>
+      )}
+    </Card>
+  );
+}
+
+/** Home: today's picture from live SoDEX markets and SoSoValue. Any part without data is left out. */
+function DailyBrief() {
+  const S = useS();
+  const J = useJournal();
+  const news = useFeed(fetchNews, []);
+  const btc = useFeed(() => fetchEtf('BTC'), []);
+  const eth = useFeed(() => fetchEtf('ETH'), []);
+  const latest = (a: 'BTC' | 'ETH', f: Feed<EtfDay[]>) => { const r = f.data && f.data.length ? [...f.data].sort((x, y) => String(y.date).localeCompare(String(x.date)))[0] : null; return r ? { asset: a, date: r.date, inflow: r.inflow } : null; };
+  const brief = useMemo(() => buildBrief(
+    S.syms.map((sy) => { const t = S.tickers[sy.name]; return t ? { name: sy.name, display: sy.display, base: sy.base, halted: sy.halted, changePct: t.changePct, quoteVol: t.quoteVol, last: t.last } : null; }).filter((x): x is NonNullable<typeof x> => !!x),
+    news.data, [latest('BTC', btc), latest('ETH', eth)]),
+  [S.syms, S.tickers, news.data, btc.data, eth.data]); // eslint-disable-line react-hooks/exhaustive-deps
+  const port = S.wallet && J.portfolio && J.spotUsd != null ? J.portfolio : null;
+  if (S.marketLoading && !S.syms.length) return <Skeleton className="mt-6 h-40 w-full rounded-2xl" />;
+  if (briefIsEmpty(brief) && !port) return null;
+  const col = (n: number) => (n >= 0 ? 'text-emerald-400' : 'text-rose-400');
+  const MoverList = ({ title, rows }: { title: string; rows: { name: string; display: string; base: string; changePct: number; last: number }[] }) => rows.length === 0 ? null : (
+    <div><div className="mb-1 text-[11px] font-medium text-zinc-500">{title}</div>
+      <ul>{rows.map((m) => (
+        <li key={m.name}><button onClick={() => { S.setSelected(m.name); S.setView('swap'); }} className="ss-row flex w-full items-center gap-2.5 rounded-lg py-1.5 text-left hover:bg-white/[0.04]">
+          <span className="ss-row-ico"><TokenIcon name={m.base} size={22} /></span><span className="min-w-0 flex-1 truncate text-[13px] font-medium text-zinc-100">{m.display}</span>
+          <span className="tnum text-[12px] text-zinc-500">{px(m.last)}</span><span className={cx('tnum w-16 text-right text-[13px] font-semibold', col(m.changePct))}>{m.changePct >= 0 ? '+' : ''}{m.changePct.toFixed(2)}%</span></button></li>))}</ul></div>
+  );
+  return (
+    <Reveal className="mt-6">
+      <Card className="p-4 sm:p-5">
+        <div className="mb-3 flex items-baseline justify-between gap-3"><h2 className="text-base font-semibold text-zinc-100">Today on SoDEX</h2><span className="text-[12px] text-zinc-500">{new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'short' })}</span></div>
+        <div className="grid gap-x-8 gap-y-4 md:grid-cols-2">
+          {brief.movers && <div className="space-y-3"><MoverList title="Top gainers, 24h" rows={brief.movers.gainers} /><MoverList title="Top losers, 24h" rows={brief.movers.losers} /></div>}
+          {(brief.etf.length > 0 || port) && (
+            <div className="space-y-4">
+              {brief.etf.length > 0 && <div><div className="mb-1 text-[11px] font-medium text-zinc-500">Spot ETF net flow (US)</div>
+                <ul className="space-y-1">{brief.etf.map((e) => <li key={e.asset} className="flex items-baseline justify-between text-[13px]"><span className="text-zinc-300">{e.asset} ETFs <span className="text-[11px] text-zinc-600">{e.date}</span></span><span className={cx('tnum font-semibold', col(e.inflow))}>{e.inflow >= 0 ? '+' : '-'}${compact(Math.abs(e.inflow))}</span></li>)}</ul></div>}
+              {port && J.spotUsd != null && <div><div className="mb-1 text-[11px] font-medium text-zinc-500">Your Spot portfolio, last ~{port.hours}h</div>
+                <div className="flex items-baseline gap-2"><span className="tnum text-lg font-bold text-zinc-50">{usd(J.spotUsd, 2)}</span><span className={cx('tnum text-[13px] font-semibold', col(port.change))}>{port.change >= 0 ? '+' : ''}{usd(port.change, 2)}{port.pct != null ? ` (${port.pct >= 0 ? '+' : ''}${port.pct.toFixed(2)}%)` : ''}</span></div>
+                <p className="mt-0.5 text-[11px] text-zinc-600">Includes deposits and withdrawals.</p></div>}
+            </div>
+          )}
+        </div>
+        {brief.headlines.length > 0 && (
+          <div className="mt-4 border-t border-white/[0.06] pt-3"><div className="mb-1 text-[11px] font-medium text-zinc-500">Headlines from SoSoValue</div>
+            <ul className="space-y-1.5">{brief.headlines.map((h) => <li key={h.id} className="text-[13px] leading-snug">{h.url ? <a href={h.url} target="_blank" rel="noopener noreferrer" className="text-zinc-200 transition hover:text-orange-300">{h.title}</a> : <span className="text-zinc-200">{h.title}</span>}{h.source && <span className="ml-1.5 text-[11px] text-zinc-600">{h.source}</span>}</li>)}</ul></div>
+        )}
+      </Card>
+    </Reveal>
   );
 }
 
@@ -5713,11 +6046,14 @@ function useAlerts() {
   return { list, add: (a: Omit<PriceAlert, 'id' | 'created'>) => setList((l) => [{ ...a, id: Math.random().toString(36).slice(2, 10), created: Date.now() }, ...l]), remove: (id: string) => setList((l) => l.filter((x) => x.id !== id)) };
 }
 
-const AlertsCtx = createContext<ReturnType<typeof useAlerts> | null>(null);
+const AlertsCtx = createContext<(ReturnType<typeof useAlerts> & { watch: ReturnType<typeof useWatchAlerts> }) | null>(null);
 /** Mounted once at app level so alerts keep firing on every tab, not only while the Alerts card is open. */
 function AlertsHost({ children }: { children: React.ReactNode }) {
   const a = useAlerts();
-  return <AlertsCtx.Provider value={a}>{children}</AlertsCtx.Provider>;
+  const watch = useWatchAlerts();
+  useOpenPair();
+  const value = useMemo(() => ({ ...a, watch }), [a, watch]);
+  return <AlertsCtx.Provider value={value}>{children}</AlertsCtx.Provider>;
 }
 
 function AlertsCard() {
@@ -5732,6 +6068,8 @@ function AlertsCard() {
   const p = parseFloat(price) || 0;
   const ask = async () => { try { setPerm(await Notification.requestPermission()); } catch { /* ignore */ } };
   return (
+    <>
+    <WatchAlertsCard />
     <Card className="p-4">
       <p className="mb-3 text-[13px] text-zinc-400">Set a price and walk away from the screen. Alerts help you avoid chasing a move: decide your level first, then act when it arrives.</p>
       <div className="grid gap-3 sm:grid-cols-3">
@@ -5759,6 +6097,7 @@ function AlertsCard() {
         </ul>
       )}
     </Card>
+    </>
   );
 }
 
@@ -6115,5 +6454,5 @@ function Shell() {
 
 export default function SoSwapPage() {
   const store = useSoSwapStore();
-  return <Ctx.Provider value={store}><AlertsHost><ArmHost><Shell /><MoveToSpotModal /></ArmHost></AlertsHost></Ctx.Provider>;
+  return <Ctx.Provider value={store}><AlertsHost><JournalHost><ArmHost><Shell /><MoveToSpotModal /></ArmHost></JournalHost></AlertsHost></Ctx.Provider>;
 }
