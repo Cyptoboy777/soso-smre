@@ -1168,7 +1168,7 @@ function useSoSwapStore(): Store {
     if (!BUILDER_ID) throw new Error('The app fee is not configured on this deployment.');
     try { await approveBuilderFee(net, { address: wallet.address, accountID: acc, builderID: BUILDER_ID, maxFeeRate: BUILDER_FEE, signTyped: walletSign }); }
     catch (e: any) {
-      if (e instanceof ApiError && e.raw) throw new Error(`SoDEX did not accept the fee approval. Nothing was charged. Please try again, and send us this code if it repeats: ${e.code}.`); // never show an order-balance message for a fee approval; the numeric code helps support
+      if (e instanceof ApiError && e.raw) throw new Error(`SoDEX did not accept the fee approval. Nothing was charged. Please try again, and send us this code if it repeats: ${e.code}.${typeof location !== 'undefined' && /[?&]debug\b/.test(location.search) ? ` Details for support: ${String(e.raw).replace(/https?:\/\/\S+/g, '').slice(0, 160)}` : ''}`); // never show an order-balance message for a fee approval; the numeric code helps support
       throw e;
     }
     setApprovedFee(await fetchBuilderApproval(net, wallet.address).catch(() => BUILDER_FEE));
