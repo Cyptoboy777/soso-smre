@@ -2,16 +2,7 @@
 const SODEX = "https://mainnet-gw.sodex.dev/api/v1";
 const SOSO = "https://openapi.sosovalue.com/openapi/v1";
 
-/* ───────── best-effort per-IP rate limit (in-memory; use Upstash/Vercel KV for strict limits) ───────── */
-const hits = new Map<string, number[]>();
-export function limited(ip: string, max = 15, windowMs = 60_000) {
-  const now = Date.now();
-  const recent = (hits.get(ip) ?? []).filter((t) => now - t < windowMs);
-  recent.push(now);
-  hits.set(ip, recent);
-  if (hits.size > 5000) for (const [k, v] of hits) if (!v.some((t) => now - t < windowMs)) hits.delete(k);
-  return recent.length > max;
-}
+/* Rate limiting and abuse guards live in lib/rate-limit.ts (shared counter, trusted IP). */
 
 /* ───────── live data gathered server-side; only what these APIs return reaches the model ───────── */
 export const num = (v: unknown) => { const n = Number(v); return Number.isFinite(n) ? n : 0; };

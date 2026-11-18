@@ -1,6 +1,7 @@
 "use client";
 
 import type { NewsHeadline } from "@/lib/trade-guard";
+import { safeHttpUrl } from "@/lib/safe-url";
 
 function ago(ms: number) {
   const s = Math.max(0, (Date.now() - ms) / 1000);
@@ -9,9 +10,10 @@ function ago(ms: number) {
 
 export default function MoveNewsLine({ item, compact }: { item: NewsHeadline; compact?: boolean }) {
   const meta = [item.source, item.time ? ago(item.time) : ""].filter(Boolean).join(" · ");
+  const href = safeHttpUrl(item.url);
   const title = (
-    item.url
-      ? <a href={item.url} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}>{item.title}</a>
+    href
+      ? <a href={href} target="_blank" rel="noopener noreferrer nofollow" onClick={(e) => e.stopPropagation()}>{item.title}</a>
       : <span className="font-semibold text-zinc-300">{item.title}</span>
   );
   return (

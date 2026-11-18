@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { limited } from "@/lib/server";
+import { aiGate, tooLarge } from "@/lib/rate-limit";
 import { etfAssetFor } from "@/lib/setup";
 import {
   bookMetrics,
@@ -94,10 +94,10 @@ async function chatExplain(system: string, question: string): Promise<string | n
 }
 
 export async function POST(request: NextRequest) {
-  const ip = (request.headers.get("x-forwarded-for") ?? "unknown").split(",")[0].trim();
-  if (limited(ip, 10, 60_000)) {
-    return NextResponse.json({ error: "Too many questions. Please wait a minute and try again." }, { status: 429 });
-  }
+  // Each question fans out to SoDEX, SoSoValue and an AI call, so it gets the tightest caps.
+  const blocked = await aiGate(request, "ask", { perMinute: 6, perDay: 60 });
+  if (blocked) return NextResponse.json({ error: blocked.error }, { status: blocked.status });
+  if (tooLarge(request, 4_096)) return NextResponse.json({ error: "Request is too large." }, { status: 413 });
 
   let body: { question?: unknown; address?: unknown };
   try { body = await request.json(); } catch { return NextResponse.json({ error: "Send a question to continue." }, { status: 400 }); }

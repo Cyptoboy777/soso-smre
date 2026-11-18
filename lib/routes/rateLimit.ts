@@ -15,13 +15,12 @@ export function allowRequest(ip: string, now = Date.now()): boolean {
   return true;
 }
 
+/** Client IP from headers a visitor cannot forge: the platform's own headers first, then the LAST x-forwarded-for entry (never the first, which the client controls). */
 export function clientIp(req: Request): string {
-  const xff = req.headers.get('x-forwarded-for');
-  if (xff) {
-    const first = xff.split(',')[0]?.trim();
-    if (first) return first.slice(0, 64);
-  }
-  return (req.headers.get('x-real-ip') ?? 'unknown').slice(0, 64);
+  const platform = req.headers.get('x-vercel-forwarded-for')?.split(',')[0]?.trim() || req.headers.get('x-real-ip')?.trim();
+  if (platform) return platform.slice(0, 64);
+  const parts = (req.headers.get('x-forwarded-for') ?? '').split(',').map((p) => p.trim()).filter(Boolean);
+  return (parts.length ? parts[parts.length - 1] : 'unknown').slice(0, 64);
 }
 
 /** Test-only: drop recorded hits. */

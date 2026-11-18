@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getNormalizedQuote, readFeeEnv } from '@/lib/routes/quote';
-import { allowRequest, clientIp } from '@/lib/routes/rateLimit';
+import { rateLimit } from '@/lib/rate-limit';
 import { FRIENDLY_RATE } from '@/lib/routes/types';
 import { validateQuoteBody } from '@/lib/routes/validate';
 
@@ -8,7 +8,7 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 export async function POST(req: Request) {
-  if (!allowRequest(clientIp(req))) {
+  if (await rateLimit(req, 'route-quote', 20)) {
     return NextResponse.json({ error: FRIENDLY_RATE }, { status: 429 });
   }
   let body: unknown;
