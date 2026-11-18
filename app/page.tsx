@@ -1166,7 +1166,11 @@ function useSoSwapStore(): Store {
     const acc = aid && aid > 0 ? aid : accountID;
     if (!acc) throw new Error('No SoDEX account found for this wallet. Deposit on sodex.com first.');
     if (!BUILDER_ID) throw new Error('The app fee is not configured on this deployment.');
-    await approveBuilderFee(net, { address: wallet.address, accountID: acc, builderID: BUILDER_ID, maxFeeRate: BUILDER_FEE, signTyped: walletSign });
+    try { await approveBuilderFee(net, { address: wallet.address, accountID: acc, builderID: BUILDER_ID, maxFeeRate: BUILDER_FEE, signTyped: walletSign }); }
+    catch (e: any) {
+      if (e instanceof ApiError && e.code !== -1) throw new Error('SoDEX did not accept the fee approval. Nothing was charged. Please try again in a moment.'); // never show an order-balance message for a fee approval
+      throw e;
+    }
     setApprovedFee(await fetchBuilderApproval(net, wallet.address).catch(() => BUILDER_FEE));
   }, [wallet, addr, accountID, net, walletSign]);
   const revokeBuilder = useCallback(async () => {
@@ -7306,7 +7310,7 @@ function Shell() {
         />
       </div>
 
-      <div className="pointer-events-none fixed bottom-24 right-4 z-[70] sm:bottom-4 flex w-[min(92vw,360px)] flex-col gap-2" aria-live="polite">
+      <div className="pointer-events-none fixed right-4 top-[8.5rem] z-[90] flex w-[min(92vw,360px)] flex-col gap-2 sm:bottom-4 sm:top-auto" aria-live="polite">
         <AnimatePresence initial={false}>
           {S.toasts.map((t) => (
             <motion.div key={t.id} layout="position" initial={{ opacity: 0, x: 28 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 28, transition: { duration: 0.18 } }} transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
