@@ -196,7 +196,8 @@ export function friendlySodexError(raw: string): string {
   if (/signature|sign/i.test(s) && /invalid|fail|mismatch|reject|recover/i.test(s)) {
     return 'The wallet signature was not accepted. Please try Enable trading again.';
   }
-  if (/insufficient|not enough|balance|margin/i.test(s)) {
+  // Only a real shortage message maps to this. A bare mention of "balance" or "margin" (account not found, margin mode, etc.) must not claim the user is short of funds.
+  if (/insufficient|not enough|exceeds? (available|balance|margin)|lack of (balance|margin|funds)/i.test(s)) {
     return 'Not enough balance on SoDEX for this order.';
   }
   if (/permission|not allowed|forbidden/i.test(s)) {

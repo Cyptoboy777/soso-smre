@@ -110,3 +110,10 @@ test('an account is at the 10-key cap when either engine is full', () => {
   assert.equal(keyListed({ spot: [{ name: 'soswap-ab' }], perps: [] }, 'soswap-ab'), true);
   assert.equal(keyListed({ spot: [], perps: [] }, 'soswap-ab'), false);
 });
+
+test('friendlySodexError: only real shortages claim a balance problem', () => {
+  assert.match(friendlySodexError('insufficient margin'), /Not enough balance/);
+  assert.match(friendlySodexError('order exceeds available balance'), /Not enough balance/);
+  assert.doesNotMatch(friendlySodexError('account balance record not found'), /Not enough balance/);
+  assert.doesNotMatch(friendlySodexError('margin mode cannot change'), /Not enough balance/);
+});
