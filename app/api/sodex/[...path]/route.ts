@@ -47,6 +47,13 @@ function cacheFor(path: string, method: string): string {
   return 'no-store'; // account data (spot + perps balances/state) is per-user
 }
 
+/** State-changing calls must come from this site. Browsers always send Origin on cross-site POST/DELETE, so another website cannot drive this proxy. No wildcard CORS headers are ever set. */
+function sameOrigin(req: NextRequest) {
+  const origin = req.headers.get('origin');
+  if (!origin) return req.method === 'GET'; // plain same-origin GETs may omit it; writes must carry it
+  try { return new URL(origin).host === (req.headers.get('x-forwarded-host') ?? req.headers.get('host')); } catch { return false; }
+}
+
 async function handle(req: NextRequest, ctx: { params: Promise<{ path: string[] }> }) {
   const [net, ...rest] = (await ctx.params).path;
   const host = HOSTS[net];
@@ -54,6 +61,8 @@ async function handle(req: NextRequest, ctx: { params: Promise<{ path: string[] 
   const method = req.method;
   const allowed = SPOT.test(path) || (method === 'GET' && PERPS_READ.test(path)) || (method === 'GET' && PERPS_COINS.test(path)) || (method === 'POST' && PERPS_TRANSFER.test(path)) || (method === 'GET' && PERPS_MARKET.test(path)) || ((method === 'POST' || method === 'DELETE') && PERPS_ORDERS.test(path)) || (method === 'POST' && PERPS_LEVERAGE.test(path)) || ((method === 'GET' || method === 'POST') && KEYREG.test(path)) || ((method === 'GET' || method === 'POST') && BUILDERS.test(path));
   if (!host || !allowed || path.includes('..')) return NextResponse.json({ error: 'Not found.' }, { status: 404 });
+
+  if (method !== 'GET' && !sameOrigin(req)) return NextResponse.json({ error: 'Not allowed.' }, { status: 403 });
 
   const ip = (req.headers.get('x-forwarded-for') ?? 'unknown').split(',')[0].trim();
   if (limited(ip, method === 'GET' ? 'r' : 'w', method === 'GET' ? 900 : 60)) return NextResponse.json({ error: 'Too many requests.' }, { status: 429 });
@@ -72,7 +81,7 @@ async function handle(req: NextRequest, ctx: { params: Promise<{ path: string[] 
     const text = await upstream.text();
     return new NextResponse(text, {
       status: upstream.status,
-      headers: { 'content-type': upstream.headers.get('content-type') ?? 'application/json', 'cache-control': upstream.ok ? cacheFor(path, method) : 'no-store' },
+      headers: { 'content-type': upstream.headers.get('content-type') ?? 'application/json', 'cross-origin-resource-policy': 'same-origin', 'cache-control': upstream.ok ? cacheFor(path, method) : 'no-store' },
     });
   } catch {
     return NextResponse.json({ code: -1, error: 'SoDEX gateway did not answer.' }, { status: 502 });

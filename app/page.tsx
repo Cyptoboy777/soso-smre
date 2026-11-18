@@ -432,7 +432,8 @@ class ApiError extends Error {
   constructor(message: string, code = -1, raw?: string) { super(message); this.code = code; this.raw = raw; }
 }
 
-const apiBase = (net: Net) => (DIRECT ? `${NETS[net].host}/api/v1` : `/api/sodex/${net}/api/v1`);
+// Perps and account/signing calls always use the same-origin proxy: the gateway sends no CORS headers for signed (X-API-*) requests, so a direct call would be blocked by the browser.
+const apiBase = (net: Net, path = '') => (DIRECT && !/^\/(perps|user)\//.test(path) ? `${NETS[net].host}/api/v1` : `/api/sodex/${net}/api/v1`);
 let clockOffset = 0; // server clock − local clock (ms); keeps nonces inside the accepted window
 const serverNow = () => Date.now() + clockOffset;
 let lastNonce = 0;
@@ -452,7 +453,7 @@ async function request<T>(net: Net, path: string, init: RequestInit & { timeoutM
     init.signal?.addEventListener('abort', onAbort);
     let res: Response;
     try {
-      res = await fetch(apiBase(net) + path, { ...init, signal: ctrl.signal });
+      res = await fetch(apiBase(net, path) + path, { ...init, signal: ctrl.signal });
     } catch (e: any) {
       if (init.signal?.aborted) throw e;
       lastErr = new ApiError(
@@ -806,7 +807,7 @@ type Store = {
   available: (coin: string) => number;
   flights: FlightOrder[]; orderInFlight: boolean; dismissFlights: () => void;
   priceOf: (coin: string) => number;
-  builder: { enabled: boolean; fee: number; approvedFee: number | undefined; active: boolean; approve: () => Promise<void>; revoke: () => Promise<void> };
+  builder: { enabled: boolean; fee: number; approvedFee: number | undefined; active: boolean; approve: (aid?: number) => Promise<void>; revoke: () => Promise<void> };
 };
 
 const Ctx = createContext<Store | null>(null);
@@ -1160,11 +1161,12 @@ function useSoSwapStore(): Store {
     return () => { stop = true; };
   }, [addr, accountID, net]);
   const fee = approvedFee ? Math.min(BUILDER_FEE, approvedFee) : 0;
-  const approveBuilder = useCallback(async () => {
+  const approveBuilder = useCallback(async (aid?: number) => {
     if (!wallet || !addr) throw new Error('Connect a wallet first.');
-    if (!accountID) throw new Error('No SoDEX account found for this wallet. Deposit on sodex.com first.');
+    const acc = aid && aid > 0 ? aid : accountID;
+    if (!acc) throw new Error('No SoDEX account found for this wallet. Deposit on sodex.com first.');
     if (!BUILDER_ID) throw new Error('The app fee is not configured on this deployment.');
-    await approveBuilderFee(net, { address: wallet.address, accountID, builderID: BUILDER_ID, maxFeeRate: BUILDER_FEE, signTyped: walletSign });
+    await approveBuilderFee(net, { address: wallet.address, accountID: acc, builderID: BUILDER_ID, maxFeeRate: BUILDER_FEE, signTyped: walletSign });
     setApprovedFee(await fetchBuilderApproval(net, wallet.address).catch(() => BUILDER_FEE));
   }, [wallet, addr, accountID, net, walletSign]);
   const revokeBuilder = useCallback(async () => {
@@ -1569,9 +1571,17 @@ const Field = ({ label, hint, children }: { label: string; hint?: React.ReactNod
 );
 
 const Row = ({ k, v, tone }: { k: React.ReactNode; v: React.ReactNode; tone?: 'good' | 'bad' | 'warn' }) => (
-  <div className="flex items-start justify-between gap-4 text-xs">
-    <span className="text-zinc-500">{k}</span>
-    <span className={cx('tnum text-right', tone === 'good' ? 'text-emerald-400' : tone === 'bad' ? 'text-rose-400' : tone === 'warn' ? 'text-orange-300' : 'text-zinc-200')}>{v}</span>
+  <div className="flex min-w-0 flex-wrap items-start justify-between gap-x-4 gap-y-0.5 text-xs">
+    <span className="min-w-0 text-zinc-500">{k}</span>
+    <span className={cx('tnum min-w-0 break-words text-right', tone === 'good' ? 'text-emerald-400' : tone === 'bad' ? 'text-rose-400' : tone === 'warn' ? 'text-orange-300' : 'text-zinc-200')}>{v}</span>
+  </div>
+);
+
+/** Label above value. Used in narrow grids (perps cards) where a side-by-side Row would collide with its neighbour. */
+const Stat = ({ k, v, tone }: { k: React.ReactNode; v: React.ReactNode; tone?: 'good' | 'bad' | 'warn' }) => (
+  <div className="min-w-0">
+    <div className="text-[11px] leading-tight text-zinc-500">{k}</div>
+    <div className={cx('tnum mt-0.5 break-words text-[13px] font-medium leading-tight', tone === 'good' ? 'text-emerald-400' : tone === 'bad' ? 'text-rose-400' : tone === 'warn' ? 'text-orange-300' : 'text-zinc-100')}>{v}</div>
   </div>
 );
 
@@ -6691,14 +6701,20 @@ function usePerpMarkets(net: Net) {
 function usePerpAcct(net: Net, address?: string) {
   const [acct, setAcct] = useState<PerpAcct | null>(null);
   const [builderFee, setBuilderFee] = useState(0);
+  const [builderLoaded, setBuilderLoaded] = useState(false);
+  const reloadBuilder = useCallback(async () => {
+    if (!BUILDER_ID || !address) return 0;
+    try { const f = await fetchPerpBuilderFee(net, address); setBuilderFee(f); setBuilderLoaded(true); return f; } catch { return 0; }
+  }, [net, address]);
   const load = useCallback(async () => { if (!address) { setAcct(null); return; } try { setAcct(await fetchPerpAcct(net, address)); } catch { /* keep last */ } }, [net, address]);
   useEffect(() => {
     if (!address) { setAcct(null); return; }
     load(); const id = setInterval(load, 6000);
-    if (BUILDER_ID) fetchPerpBuilderFee(net, address).then(setBuilderFee).catch(() => setBuilderFee(0));
+    setBuilderFee(0); setBuilderLoaded(false);
+    reloadBuilder();
     return () => clearInterval(id);
-  }, [net, address, load]);
-  return { acct, reload: load, builderFee };
+  }, [net, address, load, reloadBuilder]);
+  return { acct, reload: load, builderFee, builderLoaded, reloadBuilder };
 }
 
 /** Today's equity change, from a start-of-day snapshot kept in this browser. Used for the daily loss cap. */
@@ -6728,7 +6744,7 @@ function SpotPerpsSwitch({ value }: { value: 'spot' | 'perps' }) {
 function PerpsView() {
   const S = useS();
   const { syms, tks, err } = usePerpMarkets(S.net);
-  const { acct, reload, builderFee } = usePerpAcct(S.net, S.wallet?.address);
+  const { acct, reload, builderFee, builderLoaded, reloadBuilder } = usePerpAcct(S.net, S.wallet?.address);
   const [sel, setSel] = useState('BTC-USD');
   const [q, setQ] = useState('');
   const [risk, setRiskState] = useState<PerpRisk>(PERP_RISK_DEFAULT);
@@ -6791,7 +6807,7 @@ function PerpsView() {
           <PerpPaperCard paper={paper} tks={tks} onClear={() => setPaper({ open: [], closed: [] })} />
         </div>
         <div className="order-3 space-y-4">
-          {sym && <PerpOrderForm sym={sym} t={tk} acct={acct} form={form} setForm={setForm} risk={risk} setRisk={setRisk} reload={reload} builderFee={builderFee}
+          {sym && <PerpOrderForm sym={sym} t={tk} acct={acct} form={form} setForm={setForm} risk={risk} setRisk={setRisk} reload={reload} builderFee={builderFee} builderLoaded={builderLoaded} reloadBuilder={reloadBuilder}
             todayChange={risk.paper ? paperToday : todayChange} equity={equity}
             onPaper={(p) => { const pos = openPaper(p, Date.now(), (sym.taker + (BUILDER_ID && builderFee > 0 ? Math.min(BUILDER_FEE, builderFee) / 1e5 : 0)) * 100); if (!pos) { S.toast('err', 'Add a take-profit and stop-loss on the right sides to paper trade.'); return; } setPaper((P) => ({ ...P, open: [...P.open.filter((x) => x.pair !== pos.pair), pos] })); S.toast('ok', 'Paper trade opened. No order was sent.'); }} />}
         </div>
@@ -6812,23 +6828,25 @@ function PerpHeader({ sym, t }: { sym: PerpSym; t?: PerpTk }) {
     <AnimatedCard className="ss-card p-4">
       <div className="flex flex-wrap items-center gap-3">
         <TokenIcon name={sym.base} size={34} />
-        <div><div className="text-lg font-bold text-zinc-50">{sym.base} perpetual</div><div className="text-[12px] text-zinc-500">{sym.name} · up to {maxLeverageFor(sym.maxLev, sym.tiers)}x here</div></div>
+        <div className="min-w-0"><div className="text-lg font-bold text-zinc-50">{sym.base} perpetual</div><div className="text-[12px] text-zinc-500">{sym.name} · up to {maxLeverageFor(sym.maxLev, sym.tiers)}x here</div></div>
         <div className="ml-auto text-right"><div className="text-[11px] text-zinc-500">Mark price</div><div className="tnum text-2xl font-bold text-zinc-50"><Flash v={t?.mark}>{t?.mark ? <Num v={px(t.mark)} /> : '–'}</Flash></div></div>
       </div>
-      {stats.length > 0 && <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-5">{stats.map((x) => <div key={x.k} className="rounded-xl border border-white/[0.07] bg-black/25 px-3 py-2"><div className="text-[11px] text-zinc-500">{x.k}</div><div className="tnum text-[13px] font-semibold text-zinc-100">{x.v}</div></div>)}</div>}
+      {stats.length > 0 && <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">{stats.map((x) => <div key={x.k} className="min-w-0 rounded-xl border border-white/[0.07] bg-black/25 px-3 py-2"><div className="text-[11px] leading-tight text-zinc-500">{x.k}</div><div className="tnum break-words text-[13px] font-semibold text-zinc-100">{x.v}</div></div>)}</div>}
       {sym.halted && <div className="mt-3"><Notice tone="warn">Trading on this market is paused by SoDEX right now.</Notice></div>}
     </AnimatedCard>
   );
 }
 
-function PerpOrderForm({ sym, t, acct, form, setForm, risk, setRisk, reload, builderFee, onPaper, todayChange, equity }: {
+function PerpOrderForm({ sym, t, acct, form, setForm, risk, setRisk, reload, builderFee, builderLoaded, reloadBuilder, onPaper, todayChange, equity }: {
   sym: PerpSym; t?: PerpTk; acct: PerpAcct | null; form: PerpForm; setForm: React.Dispatch<React.SetStateAction<PerpForm>>; risk: PerpRisk; setRisk: (r: Partial<PerpRisk>) => void;
-  reload: () => Promise<void>; builderFee: number; todayChange?: number; equity?: number;
+  reload: () => Promise<void>; builderFee: number; builderLoaded: boolean; reloadBuilder: () => Promise<number>; todayChange?: number; equity?: number;
   onPaper: (p: { pair: string; display: string; grade: string; entry: number; stop: number; tp1: number; qty: number; side: PerpSide; lev: number }) => void;
 }) {
   const S = useS();
   const [confirm, setConfirm] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [feeBusy, setFeeBusy] = useState(false);
+  const [feeUnsupported, setFeeUnsupported] = useState(false); // approval was signed but SoDEX did not list it for perps: do not trap the user
   const set = (p: Partial<PerpForm>) => setForm((c) => ({ ...c, ...p }));
   const levMax = maxLeverageFor(sym.maxLev, sym.tiers);
   useEffect(() => { if (form.lev > levMax) set({ lev: levMax }); }, [levMax]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -6855,10 +6873,23 @@ function PerpOrderForm({ sym, t, acct, form, setForm, risk, setRisk, reload, bui
   if (dailyHit && !form.reduceOnly) issues.push(`Daily loss limit reached (${risk.dailyPct}%). Only closing trades are allowed today.`);
   if (tooMany) issues.push(`You already have ${openCount} open positions (your limit is ${risk.maxOpen}).`);
   if (form.tpsl && form.reduceOnly) issues.push('TP/SL cannot be attached to a reduce-only order.');
+  // The app fee must be approved (one signature, revocable) before the first live order. Status is read from SoDEX, never assumed.
+  const feeNeeded = BUILDER_ID > 0 && builderLoaded && builderFee <= 0 && !feeUnsupported;
+  const approveFee = async () => {
+    setFeeBusy(true);
+    try {
+      await S.builder.approve(acct?.aid ?? undefined);
+      const f = await reloadBuilder();
+      if (f > 0) S.toast('ok', 'SoSwapDEX fee approved. You can place your order now.');
+      else { setFeeUnsupported(true); S.toast('info', 'Approval sent, but SoDEX has not listed it for Perps yet. You can still trade.'); }
+    } catch (e: any) { S.toast('err', isUserRejected(e) ? 'Approval cancelled. Nothing was signed.' : userFacingError(e, 'Could not approve the fee. Please try again.')); }
+    finally { setFeeBusy(false); }
+  };
   const ready = qty > 0 && price > 0 && !issues.length && !sym.halted && (!form.tpsl || (sl > 0 || tp > 0));
 
   const submit = async () => {
     if (!S.wallet || !S.key || !acct?.aid) return;
+    if (feeNeeded) { setConfirm(false); return; }
     setBusy(true);
     try {
       const want = Math.max(1, Math.min(levMax, Math.round(form.lev)));
@@ -6932,12 +6963,18 @@ function PerpOrderForm({ sym, t, acct, form, setForm, risk, setRisk, reload, bui
         ) : needWallet ? <Button variant="primary" className="w-full" onClick={() => S.setUi('connect', true)}><Wallet className="h-4 w-4" />Connect wallet</Button>
           : noAcct ? <Notice tone="info">Fund your SoDEX Perps account first, then come back here.</Notice>
           : needKey ? <Button variant="primary" className="w-full" onClick={() => S.setUi('key', true)}><KeyRound className="h-4 w-4" />Enable trading</Button>
+          : feeNeeded ? (
+            <div className="space-y-2">
+              <Notice tone="info">SoSwapDEX charges up to {bpText(BUILDER_FEE)} of each filled order. You approve this once with a wallet signature, and you can revoke it any time in Settings. Nothing is charged until you trade.</Notice>
+              <Button variant="primary" size="lg" className="w-full" loading={feeBusy} onClick={approveFee}><ShieldCheck className="h-4 w-4" />Approve fee to trade Perps</Button>
+            </div>
+          )
           : <Button variant={isLong ? 'success' : 'danger'} size="lg" className="w-full" disabled={!ready} onClick={() => setConfirm(true)}>{isLong ? 'Review long' : 'Review short'}</Button>}
         {risk.paper && <p className="mt-2 text-[11px] text-zinc-500">Paper mode never sends an order. Add a TP and SL, then follow it with live prices.</p>}
       </div>
       <details className="mt-4 rounded-xl border border-white/[0.07] bg-black/20 p-3 text-[12px] text-zinc-400">
         <summary className="cursor-pointer text-zinc-300">Risk limits</summary>
-        <div className="mt-3 grid grid-cols-3 gap-2">
+        <div className="mt-3 grid grid-cols-1 gap-2 min-[480px]:grid-cols-3 lg:grid-cols-1">
           <Field label="Risk / trade %"><AmountInput value={String(risk.riskPct)} onChange={(v) => setRisk({ riskPct: Math.min(5, Math.max(0.1, Number(v) || DEFAULT_RISK_PCT)) })} /></Field>
           <Field label="Daily loss %"><AmountInput value={String(risk.dailyPct)} onChange={(v) => setRisk({ dailyPct: Math.min(20, Math.max(1, Number(v) || DEFAULT_DAILY_LOSS_PCT)) })} /></Field>
           <Field label="Max positions"><AmountInput value={String(risk.maxOpen)} onChange={(v) => setRisk({ maxOpen: Math.min(10, Math.max(1, Math.round(Number(v) || DEFAULT_MAX_OPEN))) })} /></Field>
@@ -6956,6 +6993,7 @@ function PerpOrderForm({ sym, t, acct, form, setForm, risk, setRisk, reload, bui
           {form.reduceOnly && <Row k="Reduce-only" v="Yes" />}
           <Row k="Est. fees" v={usd(pv.fees, 4)} />
         </div>}
+        {BUILDER_ID > 0 && builderFee > 0 && <p className="mt-2 text-[12px] text-zinc-400">SoSwapDEX fee: up to {bpText(Math.min(BUILDER_FEE, builderFee))} of each fill (already included in the estimate).</p>}
         <p className="mt-3 text-[12px] leading-relaxed text-zinc-400">Leverage can lose more than you expect in fast markets. Your session key signs this in your browser; SoSwapDEX never holds your keys.</p>
         <div className="mt-4 flex gap-2"><Button className="flex-1" onClick={() => setConfirm(false)} disabled={busy}>Back</Button><Button variant="primary" className="flex-1" loading={busy} onClick={submit}>Sign and send</Button></div>
       </Modal>
@@ -6996,7 +7034,7 @@ function PerpSetupCard({ sym, t, acct, equity, risk, todayChange, builderFee, on
     <AnimatedCard className="ss-card p-4">
       <div className="flex flex-wrap items-center gap-2">
         <h2 className="flex items-center gap-2 text-sm font-semibold text-zinc-100"><Sparkles className="h-4 w-4 text-orange-400" />AI trade setup</h2>
-        <div className="ml-auto"><Segmented value={want} onChange={setWant} options={[{ value: 'auto', label: 'Auto' }, { value: 'long', label: 'Long' }, { value: 'short', label: 'Short' }]} /></div>
+        <div className="ml-auto max-w-full"><Segmented value={want} onChange={setWant} options={[{ value: 'auto', label: 'Auto' }, { value: 'long', label: 'Long' }, { value: 'short', label: 'Short' }]} /></div>
       </div>
       <p className="mt-1 text-[12px] text-zinc-500">Code reads 1h and 4h trend, sets a 1.5x ATR stop and a 2:1 target, sizes it to {risk.riskPct}% risk and keeps liquidation at least 2x farther than the stop.</p>
       <div className="mt-3"><Button variant="primary" onClick={run} loading={st.loading}><Target className="h-4 w-4" />Get setup</Button></div>
@@ -7008,13 +7046,13 @@ function PerpSetupCard({ sym, t, acct, equity, risk, todayChange, builderFee, on
             {r.side && <Badge tone={r.side === 'long' ? 'emerald' : 'rose'}>{r.side === 'long' ? 'Long' : 'Short'}</Badge>}
             <span className="text-[12px] text-zinc-500">Trend 1h {r.trend1h} · 4h {r.trend4h}</span>
           </div>
-          {r.qty > 0 && <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1.5 text-[13px] sm:grid-cols-3">
-            <Row k="Entry" v={px(r.entry)} /><Row k="Stop" v={px(r.stop)} tone="bad" /><Row k="Target" v={px(r.target)} tone="good" />
-            <Row k="Size" v={`${r.qtyStr} ${sym.base}`} /><Row k="Leverage" v={`${r.leverage}x`} /><Row k="Margin" v={usd(r.margin)} />
-            {Number.isFinite(r.liq) && <Row k="Est. liquidation" v={r.liq > 0 ? px(r.liq) : 'None'} />}
-            <Row k="Loss at stop" v={usd(r.lossAtStop)} tone="bad" /><Row k="Gain at target" v={usd(r.gainAtTarget)} tone="good" />
-            {r.funding8hUsd != null && <Row k="Funding / 8h" v={`${r.funding8hUsd >= 0 ? 'pay ' : 'earn '}${usd(Math.abs(r.funding8hUsd), 4)}`} />}
-            <Row k="Fees in + out" v={usd(r.feesUsd, 4)} />
+          {r.qty > 0 && <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-3">
+            <Stat k="Entry" v={px(r.entry)} /><Stat k="Stop" v={px(r.stop)} tone="bad" /><Stat k="Target" v={px(r.target)} tone="good" />
+            <Stat k="Size" v={`${r.qtyStr} ${sym.base}`} /><Stat k="Leverage" v={`${r.leverage}x`} /><Stat k="Margin" v={usd(r.margin)} />
+            {Number.isFinite(r.liq) && <Stat k="Est. liquidation" v={r.liq > 0 ? px(r.liq) : 'None'} />}
+            <Stat k="Loss at stop" v={usd(r.lossAtStop)} tone="bad" /><Stat k="Gain at target" v={usd(r.gainAtTarget)} tone="good" />
+            {r.funding8hUsd != null && <Stat k="Funding / 8h" v={`${r.funding8hUsd >= 0 ? 'pay ' : 'earn '}${usd(Math.abs(r.funding8hUsd), 4)}`} />}
+            <Stat k="Fees in + out" v={usd(r.feesUsd, 4)} />
           </div>}
           {r.reasons.length > 0 && <ul className="mt-3 space-y-1 text-[13px] text-zinc-400">{r.reasons.map((x, i) => <li key={i} className="flex gap-2"><Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-orange-300" /><span>{x}</span></li>)}</ul>}
           {sample && <p className="mt-2 text-[12px] text-amber-300/90">Connect a wallet with Perps funds to size this for your real balance. These sizes use a 1,000 USDC example.</p>}
@@ -7075,9 +7113,9 @@ function PerpPositions({ syms, tks, acct, reload, builderFee }: { syms: PerpSym[
                 <li key={p.symbol} className="p-4 text-[13px]">
                   <div className="flex flex-wrap items-center gap-2"><span className="font-semibold text-zinc-100">{sym?.base ?? p.symbol}</span><Badge tone={long ? 'emerald' : 'rose'}>{long ? 'Long' : 'Short'} {p.lev > 0 ? `${p.lev}x` : ''}</Badge>{p.mode && <span className="text-[11px] text-zinc-500">{p.mode}</span>}
                     {upnl != null && <span className={cx('tnum ml-auto font-semibold', upnl >= 0 ? 'text-emerald-300' : 'text-rose-300')}><Num v={usd(upnl)} /></span>}</div>
-                  <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 sm:grid-cols-5">
-                    <Row k="Size" v={`${p.sizeStr}`} /><Row k="Entry" v={px(p.entry)} />{mark ? <Row k="Mark" v={px(mark)} /> : null}
-                    {p.liq != null && p.liq > 0 && <Row k="Liq." v={px(p.liq)} tone="warn" />}{margin != null && <Row k="Margin" v={usd(margin)} />}
+                  <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-3">
+                    <Stat k="Size" v={`${p.sizeStr}`} /><Stat k="Entry" v={px(p.entry)} />{mark ? <Stat k="Mark" v={px(mark)} /> : null}
+                    {p.liq != null && p.liq > 0 && <Stat k="Liq." v={px(p.liq)} tone="warn" />}{margin != null && <Stat k="Margin" v={usd(margin)} />}
                   </div>
                   <div className="mt-2 flex flex-wrap gap-2">
                     <Button size="sm" variant="danger" disabled={!canSign} loading={busy === p.symbol + ':1'} onClick={() => act(p.symbol + ':1', () => closePos(p, 1), 'Close sent.')}>Close</Button>
@@ -7091,11 +7129,11 @@ function PerpPositions({ syms, tks, acct, reload, builderFee }: { syms: PerpSym[
         )) : (ords.length === 0 ? <Empty icon={<History className="h-5 w-5" />} title="No open orders" body="Limit orders and untriggered TP/SL show up here." /> : (
           <ul className="divide-y divide-white/[0.05]">
             {ords.map((o) => (
-              <li key={o.orderID} className="flex flex-wrap items-center gap-2 px-4 py-3 text-[13px]">
+              <li key={o.orderID} className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1.5 px-4 py-3 text-[13px]">
                 <span className="font-semibold text-zinc-100">{symOf(o.symbol)?.base ?? o.symbol}</span>
                 <Badge tone={o.side === 'buy' ? 'emerald' : 'rose'}>{o.side === 'buy' ? 'Buy' : 'Sell'}</Badge>
                 <span className="text-zinc-400">{o.stopType ? (/TAKE/i.test(o.stopType) || o.stopType === '2' ? 'Take profit' : 'Stop loss') : o.type.toLowerCase()}{o.reduceOnly ? ' · reduce-only' : ''}</span>
-                <span className="tnum text-zinc-300">{o.qty != null ? o.qty : ''}{o.price ? ` @ ${px(o.price)}` : ''}{o.stopPrice ? ` · trigger ${px(o.stopPrice)}` : ''}</span>
+                <span className="tnum min-w-0 break-words text-zinc-300">{o.qty != null ? o.qty : ''}{o.price ? ` @ ${px(o.price)}` : ''}{o.stopPrice ? ` · trigger ${px(o.stopPrice)}` : ''}</span>
                 <Button size="sm" variant="danger" className="ml-auto" disabled={!canSign} loading={busy === 'o' + o.orderID} onClick={() => act('o' + o.orderID, () => cancel([o]), 'Order cancelled.')}>Cancel</Button>
               </li>
             ))}
