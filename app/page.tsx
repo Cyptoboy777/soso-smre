@@ -40,6 +40,10 @@ import { scanTrade, sizePosition, portfolioHealth, journalStats, type Grade, typ
 import { runBacktest, type BtResult } from '@/lib/backtest';
 import { simulateDca, simulateGrid, gridCellPct, planTwap, type SimOut } from '@/lib/strategies';
 import { openPaper, stepPaper, paperStats, readPaper, PAPER_CAP, type PaperPos, type PaperClosed } from '@/lib/paper';
+import {
+  parseTiers, computePerpSetup, orderPreview, maxLeverageFor, floorTo, roundTo, liqGuard, dailyLossHit, canOpenMore,
+  DEFAULT_LEVERAGE, DEFAULT_RISK_PCT, DEFAULT_DAILY_LOSS_PCT, DEFAULT_MAX_OPEN, type Tier, type PerpSide, type PerpSetupOut,
+} from '@/lib/perps';
 import { computeSetup, pickBest, assetAliases, etfAssetFor, MAX_SPREAD_PCT, MAX_IMPACT_PCT, type SetupOut, type SetupGrade } from '@/lib/setup';
 import TradeGuardCard from '@/components/TradeGuardCard';
 import SmartExitCard from '@/components/SmartExitCard';
@@ -602,11 +606,12 @@ type OrderIn = { symbolID: number; clOrdID: string; side: Side; type: 1 | 2; tif
 type OrderResult = { code: number; clOrdID: string; error?: string; orderID?: number };
 
 let onKeyGone: (() => void) | null = null;
-async function signedCall<T>(net: Net, key: TradeKey, method: 'POST' | 'DELETE', path: string, type: string, params: object): Promise<T> {
+type Engine = 'spot' | 'perps';
+async function signedCall<T>(net: Net, key: TradeKey, method: 'POST' | 'DELETE', path: string, type: string, params: object, engine: Engine = 'spot'): Promise<T> {
   // A freshly registered key can take a moment to activate on SoDEX; a rejected request placed nothing, so retrying it is safe.
   const fresh = Date.now() - (key.expiresAt - KEY_TTL_MS) < 60_000;
   for (let a = 0; ; a++) {
-    try { return await signedCallOnce<T>(net, key, method, path, type, params); }
+    try { return await signedCallOnce<T>(net, key, method, path, type, params, engine); }
     catch (e) {
       if (!isKeyGone(e)) throw e;
       if (fresh && a < 3) { await sleep(1500); continue; }
@@ -615,13 +620,14 @@ async function signedCall<T>(net: Net, key: TradeKey, method: 'POST' | 'DELETE',
     }
   }
 }
-async function signedCallOnce<T>(net: Net, key: TradeKey, method: 'POST' | 'DELETE', path: string, type: string, params: object): Promise<T> {
+async function signedCallOnce<T>(net: Net, key: TradeKey, method: 'POST' | 'DELETE', path: string, type: string, params: object, engine: Engine = 'spot'): Promise<T> {
   const body = JSON.stringify(params);
   const payloadJson = `{"type":${JSON.stringify(type)},"params":${body}}`; // key order = Go struct order, compact
   const nonce = nextNonce();
   const chainId = NETS[net].chainId;
-  const { header } = await signExchangeAction({ pk: key.pk, domain: 'spot', chainId, payloadJson, nonce });
-  return request<T>(net, `/spot${path}`, {
+  // Spot actions sign on the "spot" EIP-712 domain, perps actions on "futures" (docs.sodex.com authentication-and-signing).
+  const { header } = await signExchangeAction({ pk: key.pk, domain: engine === 'perps' ? 'futures' : 'spot', chainId, payloadJson, nonce });
+  return request<T>(net, `/${engine}${path}`, {
     method, body,
     headers: {
       'Content-Type': 'application/json', Accept: 'application/json',
@@ -774,7 +780,7 @@ function quoteBuy(asks: Level[], funds: number) {
 
 /* ═════════════════════════ app store (context) ═════════════════════════ */
 
-type View = 'home' | 'swap' | 'markets' | 'cross' | 'bots' | 'skills' | 'guide' | 'portfolio';
+type View = 'home' | 'swap' | 'perps' | 'markets' | 'cross' | 'bots' | 'skills' | 'guide' | 'portfolio';
 type ToastKind = 'ok' | 'err' | 'info';
 type WalletInfo = { id: string; name: string; icon?: string; provider: any };
 type Connected = { info: WalletInfo; address: string; chainId: number };
@@ -2989,7 +2995,7 @@ function SwapView() {
 
   return (
     <div className="mx-auto max-w-[920px]">
-      <PageTitle icon={<ArrowDownUp className="h-7 w-7" />} title="Swap" sub="Trade tokens on SoDEX mainnet with your own wallet." />
+      <PageTitle icon={<ArrowDownUp className="h-7 w-7" />} title="Swap" sub="Trade tokens on SoDEX mainnet with your own wallet." right={<SpotPerpsSwitch value="spot" />} />
       {moved && <div className="mb-4 rounded-2xl border border-white/[0.07] bg-black/30 px-4 py-3"><MoveNewsLine item={moved} /></div>}
       {!adv && <Card glow className="p-3 sm:p-4"><SwapPanel /></Card>}
       {!adv && <div className="mt-4"><Onboarding /></div>}
@@ -6573,9 +6579,558 @@ function SkillsView() {
 
 /* ═════════════════════════ app shell ═════════════════════════ */
 
+/* ═════════════════════════ futures (perps) ═════════════════════════
+ * Orders are signed locally with the same session trade key as spot, on the "futures" EIP-712 domain
+ * (docs.sodex.com authentication-and-signing; action names and field order from the official SoDEX Go and Python SDKs).
+ * The server never sees a key. Nothing is sent in tests. Anything the exchange did not report is left off the screen. */
+
+type PerpSym = {
+  id: number; name: string; base: string; tick: string; step: string; minQty: number; minNotional: number; maxQty: number;
+  maxLev: number; initLev: number; tiers: Tier[]; fundingHrs: number; maker: number; taker: number; halted: boolean;
+};
+type PerpTk = { symbol: string; last: number; open: number; mark: number; index: number; bid: number; ask: number; funding?: number; oi?: number; quoteVol: number; changePct?: number };
+type PerpPos = { symbol: string; size: number; sizeStr: string; entry: number; lev: number; margin?: number; liq?: number; upnl?: number; mode: 'isolated' | 'cross' | '' };
+type PerpOrd = { symbol: string; orderID: number; clOrdID: string; side: 'buy' | 'sell' | ''; type: string; price?: number; qty?: number; filled: number; stopPrice?: number; stopType: string; reduceOnly: boolean };
+type PerpAcct = { aid: number | null; av?: number; am?: number; ami?: number; wallet?: number; positions: PerpPos[]; orders: PerpOrd[]; cfg: Record<string, { lev: number; mode: 1 | 2 }> };
+
+const sideOf = (v: unknown): 'buy' | 'sell' | '' => { const s = String(v ?? '').toUpperCase(); return s === '1' || s === 'BUY' ? 'buy' : s === '2' || s === 'SELL' ? 'sell' : ''; };
+const optNum = (v: unknown) => { if (v == null || v === '') return undefined; const x = Number(v); return Number.isFinite(x) ? x : undefined; };
+const modeOf = (v: unknown): 'isolated' | 'cross' | '' => { const s = String(v ?? '').toUpperCase(); return s === '1' || s === 'ISOLATED' ? 'isolated' : s === '2' || s === 'CROSS' ? 'cross' : ''; };
+
+async function fetchPerpSymbols(net: Net): Promise<PerpSym[]> {
+  const raw = list<any>(await request(net, '/perps/markets/symbols'), 'symbols');
+  return raw.filter((s) => s && s.name && Number(s.id) > 0 && asNum(s.tickSize) > 0 && asNum(s.stepSize) > 0).map((s): PerpSym => ({
+    id: Number(s.id), name: String(s.name), base: String(s.baseCoin ?? String(s.name).split('-')[0]),
+    tick: String(s.tickSize), step: String(s.stepSize), minQty: asNum(s.minQuantity), minNotional: asNum(s.minNotional), maxQty: asNum(s.maxQuantity),
+    maxLev: asNum(s.maxLeverage), initLev: asNum(s.initLeverage), tiers: parseTiers(s.marginTiers), fundingHrs: asNum(s.fundingInterval) / 3600,
+    maker: asNum(s.makerFee), taker: asNum(s.takerFee), halted: s.status != null && String(s.status).toUpperCase() !== 'TRADING',
+  }));
+}
+async function fetchPerpTickers(net: Net): Promise<Record<string, PerpTk>> {
+  const out: Record<string, PerpTk> = {};
+  list<any>(await request(net, '/perps/markets/tickers'), 'tickers').forEach((t) => {
+    if (!t?.symbol) return;
+    out[String(t.symbol)] = {
+      symbol: String(t.symbol), last: asNum(t.lastPx), open: asNum(t.openPx), mark: asNum(t.markPrice), index: asNum(t.indexPrice),
+      bid: asNum(t.bidPx), ask: asNum(t.askPx), funding: optNum(t.fundingRate), oi: optNum(t.openInterest), quoteVol: asNum(t.quoteVolume), changePct: optNum(t.changePct),
+    };
+  });
+  return out;
+}
+async function fetchPerpKlines(net: Net, symbol: string, interval: '1h' | '4h', limit = 120): Promise<Candle[]> {
+  const raw = list<any>(await request(net, `/perps/markets/${encodeURIComponent(symbol)}/klines?interval=${interval}&limit=${limit}`), 'klines', 'candles');
+  return raw.map((c) => ({ t: asNum(c.t), o: asNum(c.o), h: asNum(c.h), l: asNum(c.l), c: asNum(c.c), v: asNum(c.v) })).filter((c) => c.c > 0).sort((a, b) => a.t - b.t);
+}
+/** One public read gives margin, positions, open orders and per-symbol leverage (WsPerpsState in the schema docs). */
+async function fetchPerpAcct(net: Net, address: string): Promise<PerpAcct> {
+  const d: any = await request(net, `/perps/accounts/${address}/state`);
+  const aid = Number(d?.aid);
+  const usdc = (Array.isArray(d?.B) ? d.B : []).find((b: any) => /USDC/i.test(String(b?.a ?? '')));
+  const positions = (Array.isArray(d?.P) ? d.P : []).map((p: any): PerpPos => ({
+    symbol: String(p.s ?? ''), size: asNum(p.sz), sizeStr: String(p.sz ?? '0').replace(/^-/, ''), entry: asNum(p.ep), lev: asNum(p.l),
+    margin: optNum(p.iw), liq: optNum(p.lp), upnl: optNum(p.ur), mode: modeOf(p.m),
+  })).filter((p: PerpPos) => p.symbol && p.size !== 0);
+  const orders = (Array.isArray(d?.O) ? d.O : []).map((o: any): PerpOrd => ({
+    symbol: String(o.s ?? ''), orderID: Number(o.i ?? 0), clOrdID: String(o.c ?? ''), side: sideOf(o.S), type: String(o.o ?? ''),
+    price: optNum(o.p), qty: optNum(o.q), filled: asNum(o.z), stopPrice: optNum(o.sp), stopType: String(o.st ?? ''), reduceOnly: Boolean(o.R),
+  })).filter((o: PerpOrd) => o.orderID > 0);
+  const cfg: PerpAcct['cfg'] = {};
+  (Array.isArray(d?.S) ? d.S : []).forEach((c: any) => { if (c?.s) cfg[String(c.s)] = { lev: asNum(c.l), mode: modeOf(c.m) === 'isolated' ? 1 : 2 }; });
+  return { aid: Number.isInteger(aid) && aid > 0 ? aid : null, av: optNum(d?.av), am: optNum(d?.am), ami: optNum(d?.ami), wallet: optNum(usdc?.wb), positions, orders, cfg };
+}
+async function fetchPerpBuilderFee(net: Net, address: string): Promise<number> {
+  const d: any = await request(net, `/user/${address}/builders`);
+  const mine = (Array.isArray(d?.perps) ? d.perps : []).find((b: any) => Number(b?.builderID) === BUILDER_ID);
+  return mine ? asNum(mine.feeRate) : 0;
+}
+
+/* Signed perps actions. Key order = Go struct order (sodex-go-sdk-public perps/types). Omit unset optional fields. */
+type PerpOrderIn = { clOrdID: string; modifier: 1 | 2 | 3 | 4; side: 1 | 2; type: 1 | 2; tif: 1 | 3 | 4; price?: string; quantity?: string; stopPrice?: string; stopType?: 1 | 2; triggerType?: 2; reduceOnly: boolean };
+const perpItem = (o: PerpOrderIn) => {
+  const x: Record<string, unknown> = { clOrdID: o.clOrdID, modifier: o.modifier, side: o.side, type: o.type, timeInForce: o.tif };
+  if (o.price !== undefined) x.price = o.price;
+  if (o.quantity !== undefined) x.quantity = o.quantity;
+  if (o.stopPrice !== undefined) x.stopPrice = o.stopPrice;
+  if (o.stopType !== undefined) x.stopType = o.stopType;
+  if (o.triggerType !== undefined) x.triggerType = o.triggerType;
+  x.reduceOnly = o.reduceOnly; x.positionSide = 1; // BOTH (one-way); the only value SoDEX accepts today
+  return x;
+};
+const placePerpOrders = (net: Net, key: TradeKey, aid: number, symbolID: number, orders: PerpOrderIn[], builder?: { id: number; fee: number }) => {
+  const params: Record<string, unknown> = { accountID: aid, symbolID, orders: orders.map(perpItem) };
+  if (builder) params.builder = { id: builder.id, fee: builder.fee };
+  return signedCall<OrderResult[]>(net, key, 'POST', '/trade/orders', 'newOrder', params, 'perps');
+};
+const cancelPerpOrders = (net: Net, key: TradeKey, aid: number, items: { symbolID: number; orderID: number }[]) =>
+  signedCall<OrderResult[]>(net, key, 'DELETE', '/trade/orders', 'cancelOrder', { accountID: aid, cancels: items.map((c) => ({ symbolID: c.symbolID, orderID: c.orderID })) }, 'perps');
+const updatePerpLeverage = (net: Net, key: TradeKey, aid: number, symbolID: number, leverage: number, marginMode: 1 | 2) =>
+  signedCall<unknown>(net, key, 'POST', '/trade/leverage', 'updateLeverage', { accountID: aid, symbolID, leverage, marginMode }, 'perps');
+
+const perpCid = (p: string) => `${p}${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`.slice(0, 30); // room for -tp / -sl
+const firstErr = (r: OrderResult[] | unknown) => (Array.isArray(r) ? r.find((x) => x && x.code !== 0) : undefined);
+
+const PERPS_RISK_KEY = 'soswap.perps.risk.v1';
+const PERPS_PAPER_KEY = 'soswap.perps.paper.v1';
+type PerpRisk = { riskPct: number; dailyPct: number; maxOpen: number; paper: boolean };
+const PERP_RISK_DEFAULT: PerpRisk = { riskPct: DEFAULT_RISK_PCT, dailyPct: DEFAULT_DAILY_LOSS_PCT, maxOpen: DEFAULT_MAX_OPEN, paper: false };
+type PerpForm = { side: PerpSide; type: 'market' | 'limit'; price: string; usd: string; lev: number; reduceOnly: boolean; postOnly: boolean; tpsl: boolean; tp: string; sl: string };
+
+function usePerpMarkets(net: Net) {
+  const [syms, setSyms] = useState<PerpSym[]>([]);
+  const [tks, setTks] = useState<Record<string, PerpTk>>({});
+  const [err, setErr] = useState<string | null>(null);
+  useEffect(() => {
+    let live = true;
+    fetchPerpSymbols(net).then((s) => { if (live) { setSyms(s); setErr(null); } }).catch(() => { if (live) setErr('Perps markets are not loading right now. Please try again shortly.'); });
+    const tick = () => fetchPerpTickers(net).then((t) => { if (live) setTks(t); }).catch(() => { /* keep last prices */ });
+    tick(); const id = setInterval(tick, 3000);
+    return () => { live = false; clearInterval(id); };
+  }, [net]);
+  return { syms, tks, err };
+}
+function usePerpAcct(net: Net, address?: string) {
+  const [acct, setAcct] = useState<PerpAcct | null>(null);
+  const [builderFee, setBuilderFee] = useState(0);
+  const load = useCallback(async () => { if (!address) { setAcct(null); return; } try { setAcct(await fetchPerpAcct(net, address)); } catch { /* keep last */ } }, [net, address]);
+  useEffect(() => {
+    if (!address) { setAcct(null); return; }
+    load(); const id = setInterval(load, 6000);
+    if (BUILDER_ID) fetchPerpBuilderFee(net, address).then(setBuilderFee).catch(() => setBuilderFee(0));
+    return () => clearInterval(id);
+  }, [net, address, load]);
+  return { acct, reload: load, builderFee };
+}
+
+/** Today's equity change, from a start-of-day snapshot kept in this browser. Used for the daily loss cap. */
+function useDayStart(address: string | undefined, equity: number | undefined) {
+  const [start, setStart] = useState<number | undefined>(undefined);
+  useEffect(() => {
+    if (!address || !(equity && equity > 0)) return;
+    const day = new Date().toISOString().slice(0, 10), k = `soswap.perps.day.${address.toLowerCase()}`;
+    const v = lsGet<{ day?: string; start?: number }>(k, {});
+    if (v.day === day && v.start && v.start > 0) setStart(v.start); else { lsSet(k, { day, start: equity }); setStart(equity); }
+  }, [address, equity]);
+  return start;
+}
+
+const VERDICT: Record<'go' | 'wait' | 'risky', { label: string; cls: string }> = {
+  go: { label: 'Good to go', cls: 'border-emerald-500/40 bg-emerald-500/15 text-emerald-300' },
+  wait: { label: 'Wait', cls: 'border-orange-500/40 bg-orange-500/15 text-orange-300' },
+  risky: { label: 'Risky', cls: 'border-rose-500/40 bg-rose-500/15 text-rose-300' },
+};
+const fundPct = (f?: number) => (f == null ? null : `${f >= 0 ? '+' : ''}${(f * 100).toFixed(4)}%`);
+
+function SpotPerpsSwitch({ value }: { value: 'spot' | 'perps' }) {
+  const S = useS();
+  return <Segmented value={value} onChange={(v) => S.setView(v === 'spot' ? 'swap' : 'perps')} options={[{ value: 'spot', label: 'Spot' }, { value: 'perps', label: 'Perps' }]} />;
+}
+
+function PerpsView() {
+  const S = useS();
+  const { syms, tks, err } = usePerpMarkets(S.net);
+  const { acct, reload, builderFee } = usePerpAcct(S.net, S.wallet?.address);
+  const [sel, setSel] = useState('BTC-USD');
+  const [q, setQ] = useState('');
+  const [risk, setRiskState] = useState<PerpRisk>(PERP_RISK_DEFAULT);
+  const [form, setForm] = useState<PerpForm>({ side: 'long', type: 'market', price: '', usd: '', lev: DEFAULT_LEVERAGE, reduceOnly: false, postOnly: false, tpsl: false, tp: '', sl: '' });
+  const [paper, setPaper] = useState<{ open: PaperPos[]; closed: PaperClosed[] }>({ open: [], closed: [] });
+  const paperLoaded = useRef(false);
+  useEffect(() => { setRiskState({ ...PERP_RISK_DEFAULT, ...lsGet<Partial<PerpRisk>>(PERPS_RISK_KEY, {}) }); const v = lsGet<{ open?: unknown; closed?: unknown }>(PERPS_PAPER_KEY, {}); setPaper({ open: readPaper<PaperPos>(v.open), closed: readPaper<PaperClosed>(v.closed) }); paperLoaded.current = true; }, []);
+  useEffect(() => { if (paperLoaded.current) lsSet(PERPS_PAPER_KEY, paper); }, [paper]);
+  const setRisk = (r: Partial<PerpRisk>) => setRiskState((c) => { const n = { ...c, ...r }; lsSet(PERPS_RISK_KEY, n); return n; });
+  // Paper positions follow the live mark price.
+  useEffect(() => {
+    if (!paper.open.length) return;
+    const now = Date.now(); const done: PaperClosed[] = [];
+    for (const p of paper.open) { const t = tks[p.pair]; const c = t && t.mark > 0 ? stepPaper(p, t.mark, now) : null; if (c) done.push(c); }
+    if (done.length) setPaper((P) => ({ open: P.open.filter((p) => !done.some((d) => d.id === p.id)), closed: [...P.closed, ...done].slice(-PAPER_CAP) }));
+  }, [tks]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const sym = syms.find((s) => s.name === sel) ?? syms[0];
+  const tk = sym ? tks[sym.name] : undefined;
+  useEffect(() => { if (syms.length && !syms.some((s) => s.name === sel)) setSel(syms[0].name); }, [syms]); // eslint-disable-line react-hooks/exhaustive-deps
+  const rows = useMemo(() => {
+    const k = q.trim().toUpperCase();
+    return syms.filter((s) => !k || s.name.includes(k)).map((s) => ({ s, t: tks[s.name] }))
+      .sort((a, b) => (b.t?.quoteVol ?? 0) - (a.t?.quoteVol ?? 0));
+  }, [syms, tks, q]);
+  const equity = acct?.av && acct.av > 0 ? acct.av : acct?.wallet;
+  const dayStart = useDayStart(S.wallet?.address, equity);
+  const todayChange = equity != null && dayStart != null ? equity - dayStart : undefined;
+  const paperToday = paper.closed.filter((p) => new Date(p.closedAt).toDateString() === new Date().toDateString()).reduce((s, p) => s + p.pnl, 0);
+
+  return (
+    <div className="mx-auto max-w-[1180px]">
+      <PageTitle icon={<TrendingUp className="h-7 w-7" />} title="Perps" sub="Long or short SoDEX perpetuals with a risk-first setup. You sign every order." right={<SpotPerpsSwitch value="perps" />} />
+      {err && <div className="mb-4"><Notice tone="error">{err}</Notice></div>}
+      <div className="grid gap-4 lg:grid-cols-[300px_minmax(0,1fr)_360px]">
+        <Card className="order-2 lg:order-1">
+          <CardHead title="Markets" icon={<BarChart3 className="h-4 w-4 text-orange-400" />} />
+          <div className="p-3"><input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search BTC, ETH, SOL…" aria-label="Search perps markets" className={selCls} /></div>
+          <ul className="max-h-[300px] overflow-y-auto px-1 pb-2 lg:max-h-[640px]">
+            {!syms.length && !err && Array.from({ length: 6 }).map((_, i) => <li key={i} className="px-3 py-1.5"><Skeleton className="h-8" /></li>)}
+            {rows.map(({ s, t }) => {
+              const ch = t?.changePct ?? (t && t.open > 0 ? ((t.last - t.open) / t.open) * 100 : undefined);
+              return (
+                <li key={s.name}><button onClick={() => setSel(s.name)} aria-current={sym?.name === s.name ? 'true' : undefined}
+                  className={cx('ss-row flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-[13px] hover:bg-white/[0.04]', sym?.name === s.name && 'bg-orange-500/[0.08]')}>
+                  <TokenIcon name={s.base} size={22} />
+                  <span className="min-w-0 flex-1"><span className="block font-semibold text-zinc-100">{s.base}<span className="ml-1 text-[11px] font-normal text-zinc-500">{s.maxLev > 0 ? `${s.maxLev}x` : ''}</span></span>{s.halted && <span className="text-[11px] text-orange-300">Paused</span>}</span>
+                  <span className="text-right"><span className="tnum block text-zinc-100">{t?.mark ? px(t.mark) : '–'}</span>{ch != null && <span className={cx('tnum text-[11px]', ch >= 0 ? 'text-emerald-300' : 'text-rose-300')}>{ch >= 0 ? '+' : ''}{ch.toFixed(2)}%</span>}</span>
+                </button></li>
+              );
+            })}
+          </ul>
+        </Card>
+        <div className="order-1 space-y-4 lg:order-2">
+          {sym && <PerpHeader sym={sym} t={tk} />}
+          {sym && <PerpSetupCard sym={sym} t={tk} acct={acct} equity={equity} risk={risk} todayChange={risk.paper ? paperToday : todayChange} builderFee={builderFee}
+            onUse={(f) => { setForm((c) => ({ ...c, ...f })); requestAnimationFrame(() => document.getElementById('perp-order')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })); S.toast('info', 'Setup copied into the order form. Review it, then sign.'); }}
+            onPaper={(p) => { const pos = openPaper(p, Date.now(), (sym.taker + (BUILDER_ID && builderFee > 0 ? Math.min(BUILDER_FEE, builderFee) / 1e5 : 0)) * 100); if (!pos) { S.toast('err', 'This setup cannot be paper traded.'); return; } setPaper((P) => ({ ...P, open: [...P.open.filter((x) => x.pair !== pos.pair), pos] })); S.toast('ok', 'Paper trade opened. No order was sent.'); }} />}
+          <PerpPositions syms={syms} tks={tks} acct={acct} reload={reload} builderFee={builderFee} />
+          <PerpPaperCard paper={paper} tks={tks} onClear={() => setPaper({ open: [], closed: [] })} />
+        </div>
+        <div className="order-3 space-y-4">
+          {sym && <PerpOrderForm sym={sym} t={tk} acct={acct} form={form} setForm={setForm} risk={risk} setRisk={setRisk} reload={reload} builderFee={builderFee}
+            todayChange={risk.paper ? paperToday : todayChange} equity={equity}
+            onPaper={(p) => { const pos = openPaper(p, Date.now(), (sym.taker + (BUILDER_ID && builderFee > 0 ? Math.min(BUILDER_FEE, builderFee) / 1e5 : 0)) * 100); if (!pos) { S.toast('err', 'Add a take-profit and stop-loss on the right sides to paper trade.'); return; } setPaper((P) => ({ ...P, open: [...P.open.filter((x) => x.pair !== pos.pair), pos] })); S.toast('ok', 'Paper trade opened. No order was sent.'); }} />}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PerpHeader({ sym, t }: { sym: PerpSym; t?: PerpTk }) {
+  const ch = t?.changePct ?? (t && t.open > 0 ? ((t.last - t.open) / t.open) * 100 : undefined);
+  const stats: { k: string; v: React.ReactNode }[] = [];
+  if (t?.index) stats.push({ k: 'Index', v: px(t.index) });
+  if (t?.funding != null) stats.push({ k: `Funding / ${sym.fundingHrs > 0 ? `${sym.fundingHrs}h` : 'interval'}`, v: <span className={t.funding >= 0 ? 'text-emerald-300' : 'text-rose-300'}>{fundPct(t.funding)}</span> });
+  if (ch != null) stats.push({ k: '24h', v: <span className={ch >= 0 ? 'text-emerald-300' : 'text-rose-300'}>{ch >= 0 ? '+' : ''}{ch.toFixed(2)}%</span> });
+  if (t?.oi != null && t.mark > 0) stats.push({ k: 'Open interest', v: '$' + compact(t.oi * t.mark) });
+  if (t?.quoteVol) stats.push({ k: '24h volume', v: '$' + compact(t.quoteVol) });
+  return (
+    <AnimatedCard className="ss-card p-4">
+      <div className="flex flex-wrap items-center gap-3">
+        <TokenIcon name={sym.base} size={34} />
+        <div><div className="text-lg font-bold text-zinc-50">{sym.base} perpetual</div><div className="text-[12px] text-zinc-500">{sym.name} · up to {maxLeverageFor(sym.maxLev, sym.tiers)}x here</div></div>
+        <div className="ml-auto text-right"><div className="text-[11px] text-zinc-500">Mark price</div><div className="tnum text-2xl font-bold text-zinc-50"><Flash v={t?.mark}>{t?.mark ? <Num v={px(t.mark)} /> : '–'}</Flash></div></div>
+      </div>
+      {stats.length > 0 && <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-5">{stats.map((x) => <div key={x.k} className="rounded-xl border border-white/[0.07] bg-black/25 px-3 py-2"><div className="text-[11px] text-zinc-500">{x.k}</div><div className="tnum text-[13px] font-semibold text-zinc-100">{x.v}</div></div>)}</div>}
+      {sym.halted && <div className="mt-3"><Notice tone="warn">Trading on this market is paused by SoDEX right now.</Notice></div>}
+    </AnimatedCard>
+  );
+}
+
+function PerpOrderForm({ sym, t, acct, form, setForm, risk, setRisk, reload, builderFee, onPaper, todayChange, equity }: {
+  sym: PerpSym; t?: PerpTk; acct: PerpAcct | null; form: PerpForm; setForm: React.Dispatch<React.SetStateAction<PerpForm>>; risk: PerpRisk; setRisk: (r: Partial<PerpRisk>) => void;
+  reload: () => Promise<void>; builderFee: number; todayChange?: number; equity?: number;
+  onPaper: (p: { pair: string; display: string; grade: string; entry: number; stop: number; tp1: number; qty: number; side: PerpSide; lev: number }) => void;
+}) {
+  const S = useS();
+  const [confirm, setConfirm] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const set = (p: Partial<PerpForm>) => setForm((c) => ({ ...c, ...p }));
+  const levMax = maxLeverageFor(sym.maxLev, sym.tiers);
+  useEffect(() => { if (form.lev > levMax) set({ lev: levMax }); }, [levMax]); // eslint-disable-line react-hooks/exhaustive-deps
+  const ref = form.side === 'long' ? (t?.ask || t?.mark || 0) : (t?.bid || t?.mark || 0);
+  const price = form.type === 'limit' ? Number(form.price) || 0 : ref;
+  const usdN = Number(form.usd) || 0;
+  const qtyStr = price > 0 && usdN > 0 ? floorTo(usdN / price, sym.step) : '0';
+  const qty = Number(qtyStr);
+  const fee = (form.type === 'limit' && form.postOnly ? sym.maker : sym.taker) + (BUILDER_ID && builderFee > 0 ? Math.min(BUILDER_FEE, builderFee) / 1e5 : 0);
+  const sl = form.tpsl ? Number(form.sl) || 0 : 0, tp = form.tpsl ? Number(form.tp) || 0 : 0;
+  const pv = price > 0 && qty > 0 ? orderPreview({ side: form.side, price, qty, leverage: form.lev, feeRate: fee, tiers: sym.tiers, maxLev: sym.maxLev, stop: sl || undefined }) : null;
+  const isLong = form.side === 'long';
+  const slBad = form.tpsl && sl > 0 && (isLong ? sl >= price : sl <= price);
+  const tpBad = form.tpsl && tp > 0 && (isLong ? tp <= price : tp >= price);
+  const openCount = (acct?.positions.length ?? 0);
+  const dailyHit = equity != null && todayChange != null && dailyLossHit(todayChange, equity + (todayChange < 0 ? -todayChange : 0), risk.dailyPct);
+  const tooMany = !form.reduceOnly && !acct?.positions.some((p) => p.symbol === sym.name) && !canOpenMore(openCount, risk.maxOpen);
+  const issues: string[] = [];
+  if (qty > 0 && (qty < sym.minQty || price * qty < sym.minNotional) && !form.reduceOnly) issues.push(`Minimum order is ${sym.minNotional} USDC on this market.`);
+  if (pv && acct?.am != null && !form.reduceOnly && pv.margin > acct.am) issues.push('Not enough available margin. Lower the size or add funds to Perps.');
+  if (slBad) issues.push(`The stop-loss must be ${isLong ? 'below' : 'above'} the entry.`);
+  if (tpBad) issues.push(`The take-profit must be ${isLong ? 'above' : 'below'} the entry.`);
+  if (pv?.guard && !pv.guard.ok && !form.reduceOnly) issues.push(pv.guard.reason ?? 'Liquidation is too close to your stop.');
+  if (dailyHit && !form.reduceOnly) issues.push(`Daily loss limit reached (${risk.dailyPct}%). Only closing trades are allowed today.`);
+  if (tooMany) issues.push(`You already have ${openCount} open positions (your limit is ${risk.maxOpen}).`);
+  if (form.tpsl && form.reduceOnly) issues.push('TP/SL cannot be attached to a reduce-only order.');
+  const ready = qty > 0 && price > 0 && !issues.length && !sym.halted && (!form.tpsl || (sl > 0 || tp > 0));
+
+  const submit = async () => {
+    if (!S.wallet || !S.key || !acct?.aid) return;
+    setBusy(true);
+    try {
+      const want = Math.max(1, Math.min(levMax, Math.round(form.lev)));
+      const cur = acct.cfg[sym.name];
+      const curLev = cur?.lev || sym.initLev || sym.maxLev;
+      if (!form.reduceOnly && curLev !== want) await updatePerpLeverage(S.net, S.key, acct.aid, sym.id, want, cur?.mode ?? 2);
+      const sideN: 1 | 2 = isLong ? 1 : 2, exitSide: 1 | 2 = isLong ? 2 : 1;
+      const cid = perpCid('sp');
+      const market = form.type === 'market';
+      // Market orders carry a 1% price bound as slippage protection (docs: price is optional on market orders).
+      const bound = market ? roundTo(ref * (isLong ? 1.01 : 0.99), sym.tick) : roundTo(price, sym.tick);
+      const hasExits = form.tpsl && (sl > 0 || tp > 0);
+      const orders: PerpOrderIn[] = [{ clOrdID: cid, modifier: hasExits ? 3 : 1, side: sideN, type: market ? 2 : 1, tif: market ? 3 : form.postOnly ? 4 : 1, price: bound, quantity: qtyStr, reduceOnly: form.reduceOnly }];
+      // Attached exits (official Python SDK): opposite side, MARKET + IOC, same quantity, reduce-only, MARK_PRICE trigger. TP first, then SL.
+      if (hasExits && tp > 0) orders.push({ clOrdID: cid + '-tp', modifier: 4, side: exitSide, type: 2, tif: 3, quantity: qtyStr, stopPrice: roundTo(tp, sym.tick), stopType: 2, triggerType: 2, reduceOnly: true });
+      if (hasExits && sl > 0) orders.push({ clOrdID: cid + '-sl', modifier: 4, side: exitSide, type: 2, tif: 3, quantity: qtyStr, stopPrice: roundTo(sl, sym.tick), stopType: 1, triggerType: 2, reduceOnly: true });
+      const fee10 = BUILDER_ID && builderFee > 0 ? Math.min(BUILDER_FEE, builderFee) : 0;
+      const res = await placePerpOrders(S.net, S.key, acct.aid, sym.id, orders, fee10 > 0 ? { id: BUILDER_ID, fee: fee10 } : undefined);
+      const bad = firstErr(res);
+      if (bad) throw new Error(friendlySodexError(String(bad.error ?? 'SoDEX did not accept this order.')));
+      setConfirm(false);
+      S.toast('ok', market ? 'Order sent. Your position updates in a few seconds.' : 'Limit order placed.');
+      set({ usd: '', tp: '', sl: '' });
+      setTimeout(() => { reload(); }, 1200);
+    } catch (e: any) {
+      S.toast('err', userFacingError(e, 'Could not place the order. Nothing was sent.'));
+    } finally { setBusy(false); }
+  };
+
+  const needWallet = !S.wallet, needKey = !!S.wallet && !S.keyValid, noAcct = !!S.wallet && acct != null && !acct.aid;
+  return (
+    <Card glow className="p-4">
+      <div id="perp-order" className="mb-3 flex items-center justify-between gap-2">
+        <h2 className="text-sm font-semibold text-zinc-100">Order</h2>
+        <label className="flex cursor-pointer items-center gap-2 text-xs text-zinc-400"><input type="checkbox" className="accent-orange-500" checked={risk.paper} onChange={(e) => setRisk({ paper: e.target.checked })} />Paper mode</label>
+      </div>
+      <div className="grid grid-cols-2 gap-2">
+        <button onClick={() => set({ side: 'long' })} className={cx('h-10 rounded-xl text-sm font-semibold transition', isLong ? 'bg-emerald-500 text-black' : 'border border-white/10 text-zinc-300 hover:border-emerald-500/50')}>Long</button>
+        <button onClick={() => set({ side: 'short' })} className={cx('h-10 rounded-xl text-sm font-semibold transition', !isLong ? 'bg-rose-500 text-black' : 'border border-white/10 text-zinc-300 hover:border-rose-500/50')}>Short</button>
+      </div>
+      <div className="mt-3"><Segmented value={form.type} onChange={(v) => set({ type: v, price: v === 'limit' && !form.price && ref > 0 ? roundTo(ref, sym.tick) : form.price })} options={[{ value: 'market', label: 'Market' }, { value: 'limit', label: 'Limit' }]} /></div>
+      <div className="mt-3 space-y-3">
+        {form.type === 'limit' && <Field label="Limit price (USDC)"><AmountInput value={form.price} onChange={(v) => set({ price: v })} suffix="USDC" /></Field>}
+        <Field label="Size (USDC)" hint={qty > 0 ? <>≈ {qtyStr} {sym.base}</> : undefined}><AmountInput value={form.usd} onChange={(v) => set({ usd: v })} suffix="USDC" /></Field>
+        <div>
+          <div className="mb-1 flex items-center justify-between text-[12px] text-zinc-400"><span>Leverage</span><span className="tnum font-semibold text-zinc-100">{form.lev}x</span></div>
+          <input type="range" min={1} max={levMax} step={1} value={form.lev} onChange={(e) => set({ lev: Number(e.target.value) })} aria-label="Leverage" className="w-full accent-orange-500" />
+          <div className="flex justify-between text-[10px] text-zinc-500"><span>1x</span><span>Safe default 2x</span><span>{levMax}x</span></div>
+        </div>
+        <div className="flex flex-wrap gap-x-4 gap-y-2 text-xs text-zinc-300">
+          <label className="flex cursor-pointer items-center gap-2"><input type="checkbox" className="accent-orange-500" checked={form.reduceOnly} onChange={(e) => set({ reduceOnly: e.target.checked })} />Reduce-only</label>
+          {form.type === 'limit' && <label className="flex cursor-pointer items-center gap-2"><input type="checkbox" className="accent-orange-500" checked={form.postOnly} onChange={(e) => set({ postOnly: e.target.checked })} />Post-only (lower fee)</label>}
+          <label className="flex cursor-pointer items-center gap-2"><input type="checkbox" className="accent-orange-500" checked={form.tpsl} onChange={(e) => set({ tpsl: e.target.checked })} />TP / SL</label>
+        </div>
+        {form.tpsl && <div className="grid grid-cols-2 gap-2"><Field label="Take profit"><AmountInput value={form.tp} onChange={(v) => set({ tp: v })} /></Field><Field label="Stop loss"><AmountInput value={form.sl} onChange={(v) => set({ sl: v })} /></Field></div>}
+      </div>
+      {pv && (
+        <div className="mt-3 space-y-1.5 rounded-xl border border-white/[0.07] bg-black/25 p-3 text-[13px]">
+          <Row k="Position size" v={usd(pv.notional)} />
+          <Row k="Margin needed" v={usd(pv.margin)} />
+          {Number.isFinite(pv.liq) && <Row k="Est. liquidation" v={pv.liq > 0 ? px(pv.liq) : 'None at this leverage'} tone={pv.guard && !pv.guard.ok ? 'bad' : undefined} />}
+          <Row k={`Fees (${form.type === 'limit' && form.postOnly ? 'maker' : 'taker'})`} v={usd(pv.fees, 4)} />
+          {acct?.am != null && <Row k="Available margin" v={usd(acct.am)} />}
+          <p className="pt-1 text-[11px] text-zinc-500">Liquidation is an estimate for this position's own margin. In cross mode your whole balance backs it, so the real level is usually farther.</p>
+        </div>
+      )}
+      {issues.length > 0 && <ul className="mt-3 space-y-1">{issues.map((x) => <li key={x} className="flex gap-2 text-[12px] text-orange-300"><AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />{x}</li>)}</ul>}
+      <div className="mt-4">
+        {risk.paper ? (
+          <Button variant="primary" className="w-full" disabled={!(qty > 0 && price > 0 && sl > 0 && tp > 0) || slBad || tpBad} onClick={() => onPaper({ pair: sym.name, display: `${sym.base} ${isLong ? 'long' : 'short'}`, grade: 'manual', entry: price, stop: sl, tp1: tp, qty, side: form.side, lev: form.lev })}>Open paper trade</Button>
+        ) : needWallet ? <Button variant="primary" className="w-full" onClick={() => S.setUi('connect', true)}><Wallet className="h-4 w-4" />Connect wallet</Button>
+          : noAcct ? <Notice tone="info">Fund your SoDEX Perps account first, then come back here.</Notice>
+          : needKey ? <Button variant="primary" className="w-full" onClick={() => S.setUi('key', true)}><KeyRound className="h-4 w-4" />Enable trading</Button>
+          : <Button variant={isLong ? 'success' : 'danger'} size="lg" className="w-full" disabled={!ready} onClick={() => setConfirm(true)}>{isLong ? 'Review long' : 'Review short'}</Button>}
+        {risk.paper && <p className="mt-2 text-[11px] text-zinc-500">Paper mode never sends an order. Add a TP and SL, then follow it with live prices.</p>}
+      </div>
+      <details className="mt-4 rounded-xl border border-white/[0.07] bg-black/20 p-3 text-[12px] text-zinc-400">
+        <summary className="cursor-pointer text-zinc-300">Risk limits</summary>
+        <div className="mt-3 grid grid-cols-3 gap-2">
+          <Field label="Risk / trade %"><AmountInput value={String(risk.riskPct)} onChange={(v) => setRisk({ riskPct: Math.min(5, Math.max(0.1, Number(v) || DEFAULT_RISK_PCT)) })} /></Field>
+          <Field label="Daily loss %"><AmountInput value={String(risk.dailyPct)} onChange={(v) => setRisk({ dailyPct: Math.min(20, Math.max(1, Number(v) || DEFAULT_DAILY_LOSS_PCT)) })} /></Field>
+          <Field label="Max positions"><AmountInput value={String(risk.maxOpen)} onChange={(v) => setRisk({ maxOpen: Math.min(10, Math.max(1, Math.round(Number(v) || DEFAULT_MAX_OPEN))) })} /></Field>
+        </div>
+        <p className="mt-2">Saved in this browser. The AI setup sizes every trade so a stop-out loses at most your risk %.</p>
+      </details>
+      <Modal open={confirm} onClose={() => !busy && setConfirm(false)} title={`Confirm ${isLong ? 'long' : 'short'} ${sym.base}`}>
+        {pv && <div className="space-y-1.5 text-[13px]">
+          <Row k="Type" v={form.type === 'market' ? 'Market (max 1% slippage)' : `Limit at ${form.price}${form.postOnly ? ', post-only' : ''}`} />
+          <Row k="Size" v={`${qtyStr} ${sym.base} (${usd(pv.notional)})`} />
+          <Row k="Leverage" v={`${form.lev}x`} />
+          <Row k="Margin" v={usd(pv.margin)} />
+          {Number.isFinite(pv.liq) && pv.liq > 0 && <Row k="Est. liquidation" v={px(pv.liq)} />}
+          {form.tpsl && tp > 0 && <Row k="Take profit" v={form.tp} />}
+          {form.tpsl && sl > 0 && <Row k="Stop loss" v={form.sl} />}
+          {form.reduceOnly && <Row k="Reduce-only" v="Yes" />}
+          <Row k="Est. fees" v={usd(pv.fees, 4)} />
+        </div>}
+        <p className="mt-3 text-[12px] leading-relaxed text-zinc-400">Leverage can lose more than you expect in fast markets. Your session key signs this in your browser; SoSwapDEX never holds your keys.</p>
+        <div className="mt-4 flex gap-2"><Button className="flex-1" onClick={() => setConfirm(false)} disabled={busy}>Back</Button><Button variant="primary" className="flex-1" loading={busy} onClick={submit}>Sign and send</Button></div>
+      </Modal>
+    </Card>
+  );
+}
+
+function PerpSetupCard({ sym, t, acct, equity, risk, todayChange, builderFee, onUse, onPaper }: {
+  sym: PerpSym; t?: PerpTk; acct: PerpAcct | null; equity?: number; risk: PerpRisk; todayChange?: number; builderFee: number;
+  onUse: (f: Partial<PerpForm>) => void;
+  onPaper: (p: { pair: string; display: string; grade: string; entry: number; stop: number; tp1: number; qty: number; side: PerpSide; lev: number }) => void;
+}) {
+  const S = useS();
+  const ai = useAi();
+  const [want, setWant] = useState<'auto' | PerpSide>('auto');
+  const [st, setSt] = useState<{ loading: boolean; err?: string; r?: PerpSetupOut; for?: string }>({ loading: false });
+  useEffect(() => { setSt({ loading: false }); ai.reset(); }, [sym.name]); // eslint-disable-line react-hooks/exhaustive-deps
+  const bal = equity && equity > 0 ? equity : 0;
+  const run = async () => {
+    setSt({ loading: true }); ai.reset();
+    try {
+      const [c1h, c4h] = await Promise.all([fetchPerpKlines(S.net, sym.name, '1h', 120), fetchPerpKlines(S.net, sym.name, '4h', 120)]);
+      const eq = bal > 0 ? bal : 0;
+      const r = computePerpSetup({
+        c1h, c4h, mark: t?.mark ?? 0, bid: t?.bid ?? 0, ask: t?.ask ?? 0, funding: t?.funding, fundingHrs: sym.fundingHrs,
+        takerFee: sym.taker, builderFeeRate: BUILDER_ID && builderFee > 0 ? Math.min(BUILDER_FEE, builderFee) / 1e5 : 0,
+        tiers: sym.tiers, symbolMaxLev: sym.maxLev, step: sym.step, tick: sym.tick, minQty: sym.minQty, minNotional: sym.minNotional, maxQty: sym.maxQty,
+        equity: eq > 0 ? eq : 1000, available: acct?.am ?? (eq > 0 ? eq : 1000), riskPct: risk.riskPct, leverage: DEFAULT_LEVERAGE, side: want === 'auto' ? undefined : want,
+        openPositions: acct?.positions.filter((p) => p.symbol !== sym.name).length ?? 0, maxOpen: risk.maxOpen,
+        realizedToday: todayChange, dailyCapPct: risk.dailyPct,
+      });
+      setSt({ loading: false, r, for: sym.name });
+    } catch (e: any) { setSt({ loading: false, err: userFacingError(e, 'Could not read price history for this market. Please try again.') }); }
+  };
+  const r = st.r;
+  const sample = !(bal > 0);
+  return (
+    <AnimatedCard className="ss-card p-4">
+      <div className="flex flex-wrap items-center gap-2">
+        <h2 className="flex items-center gap-2 text-sm font-semibold text-zinc-100"><Sparkles className="h-4 w-4 text-orange-400" />AI trade setup</h2>
+        <div className="ml-auto"><Segmented value={want} onChange={setWant} options={[{ value: 'auto', label: 'Auto' }, { value: 'long', label: 'Long' }, { value: 'short', label: 'Short' }]} /></div>
+      </div>
+      <p className="mt-1 text-[12px] text-zinc-500">Code reads 1h and 4h trend, sets a 1.5x ATR stop and a 2:1 target, sizes it to {risk.riskPct}% risk and keeps liquidation at least 2x farther than the stop.</p>
+      <div className="mt-3"><Button variant="primary" onClick={run} loading={st.loading}><Target className="h-4 w-4" />Get setup</Button></div>
+      {st.err && <div className="mt-3"><Notice tone="error">{st.err}</Notice></div>}
+      {r && (
+        <div className="ss-fade mt-3 rounded-xl border border-white/[0.07] bg-black/25 p-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className={cx('rounded-lg border px-2.5 py-1 text-xs font-bold', VERDICT[r.verdict].cls)}>{VERDICT[r.verdict].label}</span>
+            {r.side && <Badge tone={r.side === 'long' ? 'emerald' : 'rose'}>{r.side === 'long' ? 'Long' : 'Short'}</Badge>}
+            <span className="text-[12px] text-zinc-500">Trend 1h {r.trend1h} · 4h {r.trend4h}</span>
+          </div>
+          {r.qty > 0 && <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1.5 text-[13px] sm:grid-cols-3">
+            <Row k="Entry" v={px(r.entry)} /><Row k="Stop" v={px(r.stop)} tone="bad" /><Row k="Target" v={px(r.target)} tone="good" />
+            <Row k="Size" v={`${r.qtyStr} ${sym.base}`} /><Row k="Leverage" v={`${r.leverage}x`} /><Row k="Margin" v={usd(r.margin)} />
+            {Number.isFinite(r.liq) && <Row k="Est. liquidation" v={r.liq > 0 ? px(r.liq) : 'None'} />}
+            <Row k="Loss at stop" v={usd(r.lossAtStop)} tone="bad" /><Row k="Gain at target" v={usd(r.gainAtTarget)} tone="good" />
+            {r.funding8hUsd != null && <Row k="Funding / 8h" v={`${r.funding8hUsd >= 0 ? 'pay ' : 'earn '}${usd(Math.abs(r.funding8hUsd), 4)}`} />}
+            <Row k="Fees in + out" v={usd(r.feesUsd, 4)} />
+          </div>}
+          {r.reasons.length > 0 && <ul className="mt-3 space-y-1 text-[13px] text-zinc-400">{r.reasons.map((x, i) => <li key={i} className="flex gap-2"><Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-orange-300" /><span>{x}</span></li>)}</ul>}
+          {sample && <p className="mt-2 text-[12px] text-amber-300/90">Connect a wallet with Perps funds to size this for your real balance. These sizes use a 1,000 USDC example.</p>}
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Button size="md" variant="primary" disabled={!r.side || !(r.qty > 0) || r.blocked} onClick={() => onUse({ side: r.side!, type: 'market', usd: String(Math.floor(r.notional * 100) / 100), lev: r.leverage, tpsl: true, tp: r.targetStr, sl: r.stopStr, reduceOnly: false })}>Use this setup</Button>
+            <Button size="md" disabled={!r.side || !(r.qty > 0)} onClick={() => onPaper({ pair: sym.name, display: `${sym.base} ${r.side}`, grade: r.verdict, entry: r.entry, stop: r.stop, tp1: r.target, qty: r.qty, side: r.side!, lev: r.leverage })}>Paper trade it</Button>
+            <AiButton ai={ai} label="Explain with AI" onClick={() => ai.run('perps-setup', { market: sym.name, asset: sym.base, verdict: VERDICT[r.verdict].label, side: r.side, trend1h: r.trend1h, trend4h: r.trend4h, entry: r.entry, stop: r.stop, target: r.target, leverage: r.leverage, sizeBase: r.qtyStr, notionalUsd: Math.round(r.notional * 100) / 100, marginUsd: Math.round(r.margin * 100) / 100, estLiquidation: Number.isFinite(r.liq) ? r.liq : null, lossAtStopUsd: Math.round(r.lossAtStop * 100) / 100, gainAtTargetUsd: Math.round(r.gainAtTarget * 100) / 100, riskPct: risk.riskPct, fundingRate: t?.funding ?? null, fundingIntervalHours: sym.fundingHrs, spreadPct: Math.round(r.spreadPct * 1000) / 1000, reasons: r.reasons })} />
+          </div>
+          <AiBox ai={ai} />
+          <p className="mt-3 text-[11px] leading-relaxed text-zinc-500">Not financial advice. "Use this setup" only fills the order form. Nothing is placed until you review and sign.</p>
+        </div>
+      )}
+    </AnimatedCard>
+  );
+}
+
+function PerpPositions({ syms, tks, acct, reload, builderFee }: { syms: PerpSym[]; tks: Record<string, PerpTk>; acct: PerpAcct | null; reload: () => Promise<void>; builderFee: number }) {
+  const S = useS();
+  const [tab, setTab] = useState<'pos' | 'ord'>('pos');
+  const [busy, setBusy] = useState<string | null>(null);
+  const [confirmAll, setConfirmAll] = useState<null | 'close' | 'cancel'>(null);
+  const symOf = (n: string) => syms.find((s) => s.name === n);
+  const canSign = !!(S.wallet && S.keyValid && S.key && acct?.aid);
+  const fee10 = BUILDER_ID && builderFee > 0 ? Math.min(BUILDER_FEE, builderFee) : 0;
+  const closePos = async (p: PerpPos, frac: number) => {
+    const sym = symOf(p.symbol); if (!sym || !S.key || !acct?.aid) return;
+    const qtyStr = floorTo(Math.abs(p.size) * Math.min(1, frac), sym.step);
+    if (!(Number(qtyStr) > 0)) { S.toast('err', 'This position is too small to split.'); return; }
+    const long = p.size > 0, mark = tks[p.symbol]?.mark || p.entry;
+    const res = await placePerpOrders(S.net, S.key, acct.aid, sym.id, [{ clOrdID: perpCid('cl'), modifier: 1, side: long ? 2 : 1, type: 2, tif: 3, price: roundTo(mark * (long ? 0.99 : 1.01), sym.tick), quantity: qtyStr, reduceOnly: true }], fee10 > 0 ? { id: BUILDER_ID, fee: fee10 } : undefined);
+    const bad = firstErr(res); if (bad) throw new Error(friendlySodexError(String(bad.error ?? 'SoDEX did not accept the close.')));
+  };
+  const act = async (id: string, fn: () => Promise<void>, ok: string) => {
+    setBusy(id);
+    try { await fn(); S.toast('ok', ok); setTimeout(() => { reload(); }, 1200); }
+    catch (e: any) { S.toast('err', userFacingError(e, 'Could not complete this. Nothing changed.')); }
+    finally { setBusy(null); }
+  };
+  const cancel = (items: PerpOrd[]) => { const list = items.map((o) => ({ symbolID: symOf(o.symbol)?.id ?? 0, orderID: o.orderID })).filter((x) => x.symbolID > 0); return cancelPerpOrders(S.net, S.key!, acct!.aid!, list).then((r) => { const bad = firstErr(r); if (bad) throw new Error(friendlySodexError(String(bad.error ?? 'Cancel was not accepted.'))); }); };
+  const pos = acct?.positions ?? [], ords = acct?.orders ?? [];
+  if (!S.wallet) return null;
+  return (
+    <Card>
+      <CardHead title={<span className="flex items-center gap-3"><button onClick={() => setTab('pos')} className={tab === 'pos' ? 'text-orange-300' : 'text-zinc-400'}>Positions ({pos.length})</button><button onClick={() => setTab('ord')} className={tab === 'ord' ? 'text-orange-300' : 'text-zinc-400'}>Open orders ({ords.length})</button></span>}
+        right={<div className="flex gap-2">
+          {tab === 'pos' && pos.length > 0 && <Button size="sm" variant="danger" disabled={!canSign} onClick={() => setConfirmAll('close')}>Close all</Button>}
+          {tab === 'ord' && ords.length > 0 && <Button size="sm" variant="danger" disabled={!canSign} onClick={() => setConfirmAll('cancel')}>Cancel all</Button>}
+          <Button size="sm" variant="ghost" aria-label="Refresh" onClick={() => reload()}><RefreshCw className="h-3.5 w-3.5" /></Button>
+        </div>} />
+      {acct == null ? <div className="space-y-2 p-4"><Skeleton className="h-9" /><Skeleton className="h-9" /></div>
+        : tab === 'pos' ? (pos.length === 0 ? <Empty icon={<TrendingUp className="h-5 w-5" />} title="No open positions" body="Positions you open on SoDEX Perps show up here." /> : (
+          <ul className="divide-y divide-white/[0.05]">
+            {pos.map((p) => {
+              const mark = tks[p.symbol]?.mark; const sym = symOf(p.symbol); const long = p.size > 0;
+              const upnl = p.upnl ?? (mark ? (mark - p.entry) * p.size : undefined);
+              const margin = p.margin ?? (p.lev > 0 ? (Math.abs(p.size) * (mark || p.entry)) / p.lev : undefined);
+              return (
+                <li key={p.symbol} className="p-4 text-[13px]">
+                  <div className="flex flex-wrap items-center gap-2"><span className="font-semibold text-zinc-100">{sym?.base ?? p.symbol}</span><Badge tone={long ? 'emerald' : 'rose'}>{long ? 'Long' : 'Short'} {p.lev > 0 ? `${p.lev}x` : ''}</Badge>{p.mode && <span className="text-[11px] text-zinc-500">{p.mode}</span>}
+                    {upnl != null && <span className={cx('tnum ml-auto font-semibold', upnl >= 0 ? 'text-emerald-300' : 'text-rose-300')}><Num v={usd(upnl)} /></span>}</div>
+                  <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 sm:grid-cols-5">
+                    <Row k="Size" v={`${p.sizeStr}`} /><Row k="Entry" v={px(p.entry)} />{mark ? <Row k="Mark" v={px(mark)} /> : null}
+                    {p.liq != null && p.liq > 0 && <Row k="Liq." v={px(p.liq)} tone="warn" />}{margin != null && <Row k="Margin" v={usd(margin)} />}
+                  </div>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <Button size="sm" variant="danger" disabled={!canSign} loading={busy === p.symbol + ':1'} onClick={() => act(p.symbol + ':1', () => closePos(p, 1), 'Close sent.')}>Close</Button>
+                    <Button size="sm" disabled={!canSign} loading={busy === p.symbol + ':.5'} onClick={() => act(p.symbol + ':.5', () => closePos(p, 0.5), 'Half close sent.')}>Close 50%</Button>
+                    <Button size="sm" disabled title="Coming soon">Edit TP/SL · Coming soon</Button>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        )) : (ords.length === 0 ? <Empty icon={<History className="h-5 w-5" />} title="No open orders" body="Limit orders and untriggered TP/SL show up here." /> : (
+          <ul className="divide-y divide-white/[0.05]">
+            {ords.map((o) => (
+              <li key={o.orderID} className="flex flex-wrap items-center gap-2 px-4 py-3 text-[13px]">
+                <span className="font-semibold text-zinc-100">{symOf(o.symbol)?.base ?? o.symbol}</span>
+                <Badge tone={o.side === 'buy' ? 'emerald' : 'rose'}>{o.side === 'buy' ? 'Buy' : 'Sell'}</Badge>
+                <span className="text-zinc-400">{o.stopType ? (/TAKE/i.test(o.stopType) || o.stopType === '2' ? 'Take profit' : 'Stop loss') : o.type.toLowerCase()}{o.reduceOnly ? ' · reduce-only' : ''}</span>
+                <span className="tnum text-zinc-300">{o.qty != null ? o.qty : ''}{o.price ? ` @ ${px(o.price)}` : ''}{o.stopPrice ? ` · trigger ${px(o.stopPrice)}` : ''}</span>
+                <Button size="sm" variant="danger" className="ml-auto" disabled={!canSign} loading={busy === 'o' + o.orderID} onClick={() => act('o' + o.orderID, () => cancel([o]), 'Order cancelled.')}>Cancel</Button>
+              </li>
+            ))}
+          </ul>
+        ))}
+      {S.wallet && !S.keyValid && (pos.length > 0 || ords.length > 0) && <div className="px-4 pb-4"><Notice tone="info" action={<Button size="sm" variant="primary" onClick={() => S.setUi('key', true)}>Enable trading</Button>}>Enable trading to close positions or cancel orders here.</Notice></div>}
+      <Modal open={confirmAll != null} onClose={() => !busy && setConfirmAll(null)} title={confirmAll === 'close' ? 'Close all positions?' : 'Cancel all open orders?'}>
+        <p className="text-[13px] text-zinc-300">{confirmAll === 'close' ? `This sends a reduce-only market order for each of your ${pos.length} positions (max 1% slippage).` : `This cancels all ${ords.length} open perps orders, including untriggered TP/SL.`}</p>
+        <div className="mt-4 flex gap-2"><Button className="flex-1" onClick={() => setConfirmAll(null)}>Back</Button>
+          <Button variant="danger" className="flex-1" loading={busy === 'all'} onClick={() => act('all', async () => { if (confirmAll === 'close') { for (const p of pos) await closePos(p, 1); } else await cancel(ords); setConfirmAll(null); }, confirmAll === 'close' ? 'Close orders sent.' : 'Orders cancelled.')}>Confirm</Button></div>
+      </Modal>
+    </Card>
+  );
+}
+
+function PerpPaperCard({ paper, tks, onClear }: { paper: { open: PaperPos[]; closed: PaperClosed[] }; tks: Record<string, PerpTk>; onClear: () => void }) {
+  if (!paper.open.length && !paper.closed.length) return null;
+  const st = paperStats(paper.closed);
+  return (
+    <Card className="p-4">
+      <div className="flex items-center justify-between gap-2"><h2 className="text-sm font-semibold text-zinc-100">Paper trades</h2><Button size="sm" variant="ghost" onClick={onClear}>Clear</Button></div>
+      <p className="mt-1 text-[12px] text-zinc-500">Followed with the live mark price. No order is ever sent. Kept in this browser.</p>
+      {st.n > 0 && <div className="mt-3 grid grid-cols-3 gap-2 text-center"><div className="rounded-xl bg-black/25 p-2"><div className="text-[11px] text-zinc-500">Closed</div><div className="tnum font-bold text-zinc-50">{st.n}</div></div><div className="rounded-xl bg-black/25 p-2"><div className="text-[11px] text-zinc-500">Winners</div><div className="tnum font-bold text-zinc-50">{st.winRate.toFixed(0)}%</div></div><div className="rounded-xl bg-black/25 p-2"><div className="text-[11px] text-zinc-500">Net</div><div className={cx('tnum font-bold', st.net >= 0 ? 'text-emerald-300' : 'text-rose-300')}>{usd(st.net)}</div></div></div>}
+      <ul className="mt-3 divide-y divide-white/[0.05] text-[13px]">
+        {paper.open.map((p) => { const m = tks[p.pair]?.mark ?? 0; const live = m > 0 ? (p.side === 'short' ? p.entry - m : m - p.entry) * p.qty : null; return <li key={p.id} className="flex items-center justify-between gap-2 py-2"><span className="text-zinc-200">{p.display} <Badge tone="amber">Open</Badge><span className="ml-1 text-[11px] text-zinc-500">in {px(p.entry)} · stop {px(p.stop)} · target {px(p.tp1)}</span></span><span className={cx('tnum', live == null ? 'text-zinc-500' : live >= 0 ? 'text-emerald-300' : 'text-rose-300')}>{live == null ? '–' : usd(live)}</span></li>; })}
+        {[...paper.closed].reverse().slice(0, 6).map((p) => <li key={p.id} className="flex items-center justify-between gap-2 py-2"><span className="text-zinc-300">{p.display} <span className="text-[11px] text-zinc-500">{p.reason === 'target' ? 'hit target' : p.reason === 'stop' ? 'hit stop' : 'time limit'}</span></span><span className={cx('tnum', p.pnl >= 0 ? 'text-emerald-300' : 'text-rose-300')}>{usd(p.pnl)}</span></li>)}
+      </ul>
+    </Card>
+  );
+}
+
 const NAV: { id: View; label: string; icon: React.ReactNode }[] = [
   { id: 'home', label: 'Home', icon: <Home className="h-[18px] w-[18px]" /> },
   { id: 'swap', label: 'Swap', icon: <ArrowDownUp className="h-[18px] w-[18px]" /> },
+  { id: 'perps', label: 'Perps', icon: <TrendingUp className="h-[18px] w-[18px]" /> },
   { id: 'markets', label: 'Markets', icon: <BarChart3 className="h-[18px] w-[18px]" /> },
   { id: 'cross', label: 'Cross-Chain', icon: <Link2 className="h-[18px] w-[18px]" /> },
   { id: 'bots', label: 'Bots', icon: <Bot className="h-[18px] w-[18px]" /> },
@@ -6624,7 +7179,7 @@ function Shell() {
     document.documentElement.dataset.soswapView = view;
     return () => { delete document.documentElement.dataset.soswapView; };
   }, [view]);
-  const Page = { home: HomeView, swap: SwapView, markets: MarketsHub, cross: CrossChainView, bots: BotsView, skills: SkillsView, guide: GuideView, portfolio: PortfolioView }[view];
+  const Page = { home: HomeView, swap: SwapView, perps: PerpsView, markets: MarketsHub, cross: CrossChainView, bots: BotsView, skills: SkillsView, guide: GuideView, portfolio: PortfolioView }[view];
   return (
     <div className="relative min-h-screen overflow-x-hidden font-sans text-zinc-200">
       <div aria-hidden className="ss-bg"><div className="ss-bg-grid" /><div className="ss-bg-grain" /></div>

@@ -23,6 +23,9 @@ const setup = nodeTest(join(d, 'setup.test.ts'));
 const guard = nodeTest(join(d, 'trade-guard.test.ts'));
 const grid = nodeTest(join(d, 'grid-bot.test.ts'));
 const bt = nodeTest(join(d, 'backtest.test.ts'));
+writeFileSync(join(d, 'perps.ts'), readFileSync('lib/perps.ts', 'utf8').replaceAll("from './setup'", "from './setup.ts'"));
+writeFileSync(join(d, 'perps.test.ts'), readFileSync('tests/perps.test.ts', 'utf8').replaceAll("'../lib/", "'./"));
+const perps = nodeTest(join(d, 'perps.test.ts'));
 const keys = nodeTest('tests/api-key.test.ts');
 const balances = nodeTest('tests/sodex-balances.test.ts');
 const transfer = nodeTest('tests/sodex-transfer.test.ts');
@@ -52,4 +55,4 @@ writeFileSync(join(r, 'tests', 'route-quote.test.ts'), readFileSync('tests/route
 const cfg = nodeTest(join(r, 'tests', 'sodex-config.test.ts'));
 const routes = nodeTest(join(r, 'tests', 'route-quote.test.ts'));
 
-process.exit((setup.status ?? 1) || (guard.status ?? 1) || (grid.status ?? 1) || (bt.status ?? 1) || (keys.status ?? 1) || (balances.status ?? 1) || (transfer.status ?? 1) || (swapUx.status ?? 1) || (journal.status ?? 1) || (watch.status ?? 1) || (brief.status ?? 1) || (cfg.status ?? 1) || (routes.status ?? 1));
+process.exit((setup.status ?? 1) || (guard.status ?? 1) || (grid.status ?? 1) || (bt.status ?? 1) || (perps.status ?? 1) || (keys.status ?? 1) || (balances.status ?? 1) || (transfer.status ?? 1) || (swapUx.status ?? 1) || (journal.status ?? 1) || (watch.status ?? 1) || (brief.status ?? 1) || (cfg.status ?? 1) || (routes.status ?? 1));
