@@ -88,6 +88,7 @@ import {
   SWAP_QUOTE_POLL_MS, RECENT_PAIRS_KEY, LEAVE_FEES_KEY,
   amountForPercent, priceMovePct, shouldWarnPriceMove, formatPriceMove,
   readRecentPairs, pushRecentPair, classifyOrderStatus,
+  sizeFromQuoteAmount, quoteFromSize, isLimitPriceFarFromMarket,
   type RecentPair, type FlightStatus,
 } from '@/lib/swap-ux';
 import React, { createContext, useCallback, useContext, useEffect, useId, useMemo, useRef, useState } from 'react';
@@ -2801,31 +2802,75 @@ function LimitPanel({ sym, book, pickedPrice }: { sym?: Sym; book?: { bids: Leve
   const [side, setSide] = useState<'buy' | 'sell'>('buy');
   const [price, setPrice] = useState('');
   const [qty, setQty] = useState('');
+  const [quoteAmt, setQuoteAmt] = useState('');
   const [post, setPost] = useState(false);
   const [review, setReview] = useState(false);
-  useEffect(() => { if (pickedPrice) setPrice(roundTick(pickedPrice, sym?.tick ?? '0.01')); }, [pickedPrice]); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => { setPrice(''); setQty(''); }, [sym?.name]);
+  const priceTouched = useRef(false);
+  const prefilledFor = useRef('');
+  const lastEdit = useRef<'qty' | 'quote'>('quote');
+  const tick = sym?.tick ?? '0.01';
+  const bestBid = book?.bids[0]?.price, bestAsk = book?.asks[0]?.price;
+  const best = side === 'buy' ? bestBid : bestAsk;
+
+  useEffect(() => { if (pickedPrice) { priceTouched.current = true; setPrice(roundTick(pickedPrice, tick)); } }, [pickedPrice]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { priceTouched.current = false; prefilledFor.current = ''; setQty(''); setQuoteAmt(''); }, [sym?.name]);
+  useEffect(() => {
+    if (priceTouched.current || !best || !sym) return;
+    const key = `${sym.name}:${side}`;
+    if (prefilledFor.current === key) return;
+    setPrice(roundTick(best, tick));
+    prefilledFor.current = key;
+  }, [sym?.name, side, best, tick, sym]);
   useEffect(() => {
     const apply = () => {
       if (!limitPrefill.price || (limitPrefill.pair && sym && limitPrefill.pair !== sym.name)) return;
       if (limitPrefill.side) setSide(limitPrefill.side);
-      if (limitPrefill.price) setPrice(limitPrefill.price);
-      if (limitPrefill.qty) setQty(limitPrefill.qty);
+      if (limitPrefill.price) { priceTouched.current = true; setPrice(limitPrefill.price); }
+      if (limitPrefill.qty) { lastEdit.current = 'qty'; setQty(limitPrefill.qty); }
       setPost(false);
     };
     window.addEventListener('soswap-limit-prefill', apply);
     apply();
     return () => window.removeEventListener('soswap-limit-prefill', apply);
   }, [sym?.name]);
+  useEffect(() => {
+    const pn = parseFloat(price) || 0;
+    if (!(pn > 0) || !sym) return;
+    if (lastEdit.current === 'quote') {
+      const a = parseFloat(quoteAmt) || 0;
+      setQty(a > 0 ? sizeFromQuoteAmount(a, pn, sym.step) : '');
+    } else {
+      const qn0 = parseFloat(qty) || 0;
+      setQuoteAmt(qn0 > 0 ? quoteFromSize(qn0, pn) : '');
+    }
+  }, [price, sym?.step, sym]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const setPriceUser = (v: string) => { priceTouched.current = true; setPrice(v); };
+  const onQuoteChange = (v: string) => {
+    lastEdit.current = 'quote';
+    setQuoteAmt(v);
+    const pn = parseFloat(price) || 0;
+    const a = parseFloat(v) || 0;
+    if (pn > 0 && a > 0 && sym) setQty(sizeFromQuoteAmount(a, pn, sym.step));
+    else setQty('');
+  };
+  const onQtyChange = (v: string) => {
+    lastEdit.current = 'qty';
+    setQty(v);
+    const pn = parseFloat(price) || 0;
+    const qn0 = parseFloat(v) || 0;
+    if (pn > 0 && qn0 > 0) setQuoteAmt(quoteFromSize(qn0, pn));
+    else setQuoteAmt('');
+  };
 
   const p = parseFloat(price) || 0, qn = parseFloat(qty) || 0;
   const total = p * qn;
   const availQuote = S.available(QUOTE), availBase = sym ? S.available(sym.baseCoin) : 0;
-  const bestBid = book?.bids[0]?.price, bestAsk = book?.asks[0]?.price;
-  const best = side === 'buy' ? bestBid : bestAsk;
   const makerTxt = feePctText(sym?.maker);
   const takerTxt = feePctText(sym?.taker);
   const crosses = !!post && p > 0 && wouldTakeLiquidity(side, p, bestBid, bestAsk);
+  const market = (bestBid && bestAsk) ? (bestBid + bestAsk) / 2 : (best || 0);
+  const far = isLimitPriceFarFromMarket(p, market);
 
   let cta = `Place limit ${side}`, dis = false, act: () => void = () => setReview(true);
   if (!S.wallet) { cta = 'Connect wallet'; act = () => S.setUi('connect', true); }
@@ -2833,7 +2878,7 @@ function LimitPanel({ sym, book, pickedPrice }: { sym?: Sym; book?: { bids: Leve
   else if (!S.keyValid) { cta = 'Enable trading'; act = () => S.setUi('key', true); }
   else if (!sym) { cta = 'Select a pair'; dis = true; }
   else if (sym.halted) { cta = 'Market halted'; dis = true; }
-  else if (!p || !qn) { cta = 'Enter price and size'; dis = true; }
+  else if (!p || !qn) { cta = 'Enter an amount'; dis = true; }
   else if (total < Number(sym.minNotional)) { cta = `Minimum order $${sym.minNotional}`; dis = true; }
   else if (side === 'buy' && total > availQuote + 1e-9) { cta = 'Insufficient USDC'; dis = true; }
   else if (side === 'sell' && qn > availBase + 1e-12) { cta = `Insufficient ${sym.base}`; dis = true; }
@@ -2845,19 +2890,26 @@ function LimitPanel({ sym, book, pickedPrice }: { sym?: Sym; book?: { bids: Leve
     progress('Signing and placing order…');
     const [res] = await S.place([{ symbolID: sym.id, clOrdID: uid('lm'), side: side === 'buy' ? 1 : 2, type: OTYPE.LIMIT, tif: post ? TIF.GTX : TIF.GTC, price: priceStr, quantity: qtyStr }]);
     const e = orderError(res); if (e) throw new Error(e);
-    S.refreshAccount(); setQty('');
+    S.refreshAccount(); setQty(''); setQuoteAmt('');
     return `Limit ${side} ${qtyStr} ${sym.base} @ ${priceStr} placed${res.orderID ? ` (order #${res.orderID})` : ''}.`;
   };
 
   return (
     <div className="space-y-3">
       <Segmented value={side} onChange={setSide} className="w-full [&>button]:flex-1" options={[{ value: 'buy', label: 'Buy' }, { value: 'sell', label: 'Sell' }]} />
-      <Field label="Price (USDC)" hint={best ? <button className="hover:text-orange-400" onClick={() => setPrice(roundTick(best, sym?.tick ?? '0.01'))}>Best {side === 'buy' ? 'bid' : 'ask'} {px(best)}</button> : undefined}>
-        <AmountInput value={price} onChange={setPrice} suffix="USDC" label="Limit price" />
+      <Field label="Price (USDC)" hint={best ? <button type="button" className="hover:text-orange-400" onClick={() => setPriceUser(roundTick(best, tick))}>Best {side === 'buy' ? 'bid' : 'ask'} {px(best)}</button> : undefined}>
+        <AmountInput value={price} onChange={setPriceUser} suffix="USDC" label="Limit price" />
       </Field>
-      <Field label={`Size (${sym?.base ?? ''})`} hint={<button className="hover:text-orange-400" onClick={() => sym && setQty(side === 'sell' ? floorStep(availBase, sym.step) : p ? floorStep(availQuote / p, sym.step) : '')}>Max</button>}>
-        <AmountInput value={qty} onChange={setQty} suffix={sym?.base} label="Limit size" />
+      <Field label="Amount (USDC)">
+        <AmountInput value={quoteAmt} onChange={onQuoteChange} suffix="USDC" label="Amount in USDC" />
       </Field>
+      <Field label={`Size (${sym?.base ?? ''})`} hint={<button type="button" className="hover:text-orange-400" onClick={() => { if (!sym) return; const next = side === 'sell' ? floorStep(availBase, sym.step) : p ? sizeFromQuoteAmount(availQuote, p, sym.step) : ''; onQtyChange(next === '0' ? '' : next); }}>Max</button>}>
+        <AmountInput value={qty} onChange={onQtyChange} suffix={sym?.base} label="Limit size" />
+      </Field>
+      {qn > 0 && p > 0 && (
+        <p className="text-[12px] text-zinc-300">{side === 'buy' ? <>You get ≈ {num(qn, 6)} {sym?.base ?? ''}</> : <>You receive ≈ {usd(total)}</>}</p>
+      )}
+      {far && <p className="text-[11px] text-amber-300">This price is more than 20% away from the market. Check it before you sign.</p>}
       <div className="space-y-2 rounded-xl border border-white/[0.07] bg-black/20 p-3">
         <label className="flex cursor-pointer items-start gap-2.5">
           <input type="checkbox" checked={post} onChange={(e) => setPost(e.target.checked)} className="mt-0.5 accent-orange-500" />
@@ -2872,7 +2924,7 @@ function LimitPanel({ sym, book, pickedPrice }: { sym?: Sym; book?: { bids: Leve
           {post && makerTxt && takerTxt && (sym?.maker ?? 1) < (sym?.taker ?? 0) ? <span className="ss-grid__save">You pay the maker fee if this rests on the book</span> : null}
         </div>
         {crosses && (
-          <p className="text-[11px] text-amber-300">This price would take liquidity, so a post-only order may be rejected.{(side === 'buy' ? bestBid : bestAsk) ? <> <button type="button" className="underline hover:text-orange-300" onClick={() => setPrice(roundTick((side === 'buy' ? bestBid : bestAsk) as number, sym?.tick ?? '0.01'))}>Use the best {side === 'buy' ? 'bid' : 'ask'}</button> to rest on the book.</> : null}</p>
+          <p className="text-[11px] text-amber-300">This price would take liquidity, so a post-only order may be rejected.{(side === 'buy' ? bestBid : bestAsk) ? <> <button type="button" className="underline hover:text-orange-300" onClick={() => setPriceUser(roundTick((side === 'buy' ? bestBid : bestAsk) as number, tick))}>Use the best {side === 'buy' ? 'bid' : 'ask'}</button> to rest on the book.</> : null}</p>
         )}
         <div className="space-y-1.5 border-t border-white/[0.06] pt-2">
           <Row k="Total" v={total ? usd(total) : '–'} />
@@ -2885,8 +2937,6 @@ function LimitPanel({ sym, book, pickedPrice }: { sym?: Sym; book?: { bids: Leve
     </div>
   );
 }
-
-/* ───────── pair header + view ───────── */
 
 function PairHeader({ sym }: { sym?: Sym }) {
   const S = useS();
@@ -2914,6 +2964,8 @@ function SwapView() {
   const sym = S.symByName[S.selected] ?? S.syms[0];
   const [adv, setAdv] = useState(false);
   const [picked, setPicked] = useState<number | null>(null);
+  useEffect(() => { setAdv(lsGet<boolean>('soswap.showAdvanced', false)); }, []);
+  const setAdvanced = (on: boolean) => { setAdv(on); lsSet('soswap.showAdvanced', on); };
   useEffect(() => { if (!S.symByName[S.selected] && S.syms.length) S.setSelected(S.symByName['vBTC_vUSDC'] ? 'vBTC_vUSDC' : S.syms[0].name); }, [S.syms]); // eslint-disable-line react-hooks/exhaustive-deps
   const { books } = useBooks(adv && sym ? [sym.name] : [], 1500, 20);
   const book = sym ? books[sym.name] : undefined;
@@ -2924,7 +2976,7 @@ function SwapView() {
     const on = () => {
       if (!limitPrefill.pair) return;
       S.setSelected(limitPrefill.pair);
-      setAdv(true);
+      setAdvanced(true);
       requestAnimationFrame(() => document.getElementById('limit-order')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }));
     };
     window.addEventListener('soswap-limit-prefill', on);
@@ -2936,10 +2988,10 @@ function SwapView() {
     <div className="mx-auto max-w-[920px]">
       <PageTitle icon={<ArrowDownUp className="h-7 w-7" />} title="Swap" sub="Trade tokens on SoDEX mainnet with your own wallet." />
       {moved && <div className="mb-4 rounded-2xl border border-white/[0.07] bg-black/30 px-4 py-3"><MoveNewsLine item={moved} /></div>}
-      <Card glow className="p-3 sm:p-4"><SwapPanel /></Card>
-      <div className="mt-4"><Onboarding /></div>
-      <button onClick={() => setAdv((a) => !a)} className="mx-auto mt-6 flex items-center gap-2 rounded-full border border-white/10 px-4 py-2 text-xs font-medium text-zinc-300 transition hover:border-orange-500/50 hover:text-orange-300">
-        <LineChart className="h-3.5 w-3.5" />{adv ? 'Hide' : 'Show'} advanced: chart, order book & limit orders<ChevronDown className={cx('h-3.5 w-3.5 transition', adv && 'rotate-180')} />
+      {!adv && <Card glow className="p-3 sm:p-4"><SwapPanel /></Card>}
+      {!adv && <div className="mt-4"><Onboarding /></div>}
+      <button type="button" aria-expanded={adv} onClick={() => setAdvanced(!adv)} className="mx-auto mt-6 flex items-center gap-2 rounded-full border border-white/10 px-4 py-2 text-xs font-medium text-zinc-300 transition hover:border-orange-500/50 hover:text-orange-300">
+        <LineChart className="h-3.5 w-3.5" />{adv ? 'Hide advanced' : 'Show advanced'}<ChevronDown className={cx('h-3.5 w-3.5 transition', adv && 'rotate-180')} />
       </button>
       {adv && (
         <div className="ss-fade mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">

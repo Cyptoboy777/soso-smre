@@ -11,6 +11,9 @@ import {
   pushRecentPair,
   normalizeRecentPair,
   formatPriceMove,
+  sizeFromQuoteAmount,
+  quoteFromSize,
+  isLimitPriceFarFromMarket,
 } from '../lib/swap-ux.ts';
 
 test('25% and 50% of a base coin floor to the lot step', () => {
@@ -97,4 +100,28 @@ test('recent pairs storage rejects wallet addresses and drops extra fields', () 
   assert.ok(!blob.includes('0x'));
   assert.ok(!blob.includes('wallet'));
   assert.equal(pushRecentPair([], '0x0123456789abcdef0123456789abcdef01234567', 'BTC').length, 0);
+});
+
+test('USDC amount converts to size floored to the lot step', () => {
+  assert.equal(sizeFromQuoteAmount(100, 65000, '0.00001'), '0.00153');
+  assert.equal(sizeFromQuoteAmount(100, 65000, '0.000001'), '0.001538');
+  assert.equal(sizeFromQuoteAmount(0, 65000, '0.00001'), '0');
+  assert.equal(sizeFromQuoteAmount(100, 0, '0.00001'), '0');
+  assert.equal(sizeFromQuoteAmount(0.4, 65000, '0.00001'), '0'); // below one step
+});
+
+test('size converts to USDC floored to quote decimals', () => {
+  assert.equal(quoteFromSize(0.00153, 65000), '99.45');
+  assert.equal(quoteFromSize(0.001538, 65000), '99.97');
+  assert.equal(quoteFromSize(0, 65000), '0');
+  assert.equal(quoteFromSize(1, 0), '0');
+});
+
+test('warns when the limit price is more than 20% from the market', () => {
+  assert.equal(isLimitPriceFarFromMarket(80, 100), false); // exactly 20%
+  assert.equal(isLimitPriceFarFromMarket(120, 100), false);
+  assert.equal(isLimitPriceFarFromMarket(79, 100), true);
+  assert.equal(isLimitPriceFarFromMarket(121, 100), true);
+  assert.equal(isLimitPriceFarFromMarket(100, 0), false);
+  assert.equal(isLimitPriceFarFromMarket(0, 100), false);
 });

@@ -141,3 +141,25 @@ export function classifyOrderStatus(raw: string, executed: number, qty?: number)
   if (qty != null && qty > 0 && executed >= qty - 1e-12) return 'filled';
   return 'open';
 }
+
+export const LIMIT_PRICE_WARN_PCT = 20;
+
+/** Base size from a USDC amount at a limit price, floored to the lot step. */
+export function sizeFromQuoteAmount(quoteAmount: number, price: number, step: string): string {
+  if (!(quoteAmount > 0) || !(price > 0) || !isFinite(quoteAmount) || !isFinite(price)) return '0';
+  return floorStep(quoteAmount / price, step);
+}
+
+/** USDC total from a base size at a limit price, floored to quote decimals. */
+export function quoteFromSize(size: number, price: number, quoteDecimals = QUOTE_DECIMALS): string {
+  if (!(size > 0) || !(price > 0) || !isFinite(size) || !isFinite(price)) return '0';
+  const p = 10 ** quoteDecimals;
+  // 1e-6 absorbs binary float leftover so 0.00153 * 65000 floors to 99.45, not 99.449999.
+  return stripZeros((Math.floor(size * price * p + 1e-6) / p).toFixed(quoteDecimals));
+}
+
+/** True when the limit price is more than 20% away from the reference market price. */
+export function isLimitPriceFarFromMarket(price: number, market: number, warnPct = LIMIT_PRICE_WARN_PCT): boolean {
+  if (!(price > 0) || !(market > 0) || !isFinite(price) || !isFinite(market)) return false;
+  return (Math.abs(price - market) / market) * 100 > warnPct;
+}
