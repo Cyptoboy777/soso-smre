@@ -41,7 +41,7 @@ import { runBacktest, type BtResult } from '@/lib/backtest';
 import { simulateDca, simulateGrid, gridCellPct, planTwap, type SimOut } from '@/lib/strategies';
 import { openPaper, stepPaper, paperStats, readPaper, PAPER_CAP, type PaperPos, type PaperClosed } from '@/lib/paper';
 import {
-  parseTiers, computePerpSetup, orderPreview, maxLeverageFor, floorTo, roundTo, liqGuard, dailyLossHit, canOpenMore,
+  parseTiers, liqPrice, initialMargin, safestLeverage, LIQ_STOP_MULT, computePerpSetup, orderPreview, maxLeverageFor, floorTo, roundTo, liqGuard, dailyLossHit, canOpenMore,
   DEFAULT_LEVERAGE, DEFAULT_RISK_PCT, DEFAULT_DAILY_LOSS_PCT, DEFAULT_MAX_OPEN, type Tier, type PerpSide, type PerpSetupOut,
 } from '@/lib/perps';
 import { computeSetup, pickBest, assetAliases, etfAssetFor, MAX_SPREAD_PCT, MAX_IMPACT_PCT, type SetupOut, type SetupGrade } from '@/lib/setup';
@@ -5884,6 +5884,61 @@ function SizeCheck() {
   );
 }
 
+/** Futures what-if: where is liquidation, and is it safely beyond the stop? Pure maths on the published margin tiers; nothing is sent anywhere. */
+function LiquidationCheck() {
+  const S = useS();
+  const { syms, tks, err } = usePerpMarkets(S.net);
+  const [market, setMarket] = useState('BTC-USD');
+  const [side, setSide] = useState<PerpSide>('long');
+  const [lev, setLev] = useState(5);
+  const [value, setValue] = useState('1000');
+  const [entry, setEntry] = useState('');
+  const [stop, setStop] = useState('');
+  const sym = syms.find((m) => m.name === market) ?? syms[0];
+  const mark = sym ? tks[sym.name]?.mark || tks[sym.name]?.last || 0 : 0;
+  const entryN = parseFloat(entry) || mark, stopN = parseFloat(stop) || 0, valueN = parseFloat(value) || 0;
+  const maxLev = sym ? maxLeverageFor(sym.maxLev, sym.tiers, valueN) : 1;
+  const levN = Math.max(1, Math.min(lev, maxLev));
+  const out = useMemo(() => {
+    if (!sym || !(entryN > 0) || !(valueN > 0) || !sym.tiers.length) return null;
+    const size = valueN / entryN;
+    const liq = liqPrice({ side, entry: entryN, size, margin: initialMargin(valueN, levN), tiers: sym.tiers, maxLev: sym.maxLev });
+    const g = stopN > 0 ? liqGuard({ side, entry: entryN, stop: stopN, liq }) : null;
+    const safe = stopN > 0 ? safestLeverage({ side, entry: entryN, stop: stopN, size, tiers: sym.tiers, want: maxLev, maxLev: sym.maxLev }) : null;
+    return { size, liq, g, safe, margin: initialMargin(valueN, levN), liqPct: Number.isFinite(liq) ? (Math.abs(entryN - liq) / entryN) * 100 : null };
+  }, [sym, entryN, valueN, levN, side, stopN, maxLev]);
+  const dp = decimalsOf(sym?.tick ?? '0.01');
+  return (
+    <Card className="p-4">
+      <p className="mb-3 text-[13px] text-zinc-400">More leverage means liquidation sits closer to your entry. Pick a size and leverage, add your stop, and see how far away liquidation is. The rule used by the Perps page: liquidation must be at least {LIQ_STOP_MULT}x further away than your stop.</p>
+      {err && <div className="mb-3"><Notice tone="error">{err}</Notice></div>}
+      <div className="grid gap-3 sm:grid-cols-2">
+        <Field label="Market"><select aria-label="Market" value={sym?.name ?? ''} onChange={(e) => { setMarket(e.target.value); setEntry(''); }} className="h-11 w-full rounded-xl border border-white/10 bg-black/30 px-3 text-sm text-zinc-100 outline-none focus:border-orange-500/60">{syms.map((m) => <option key={m.name} value={m.name}>{m.name}</option>)}</select></Field>
+        <Field label="Direction"><Segmented value={side} onChange={setSide} options={[{ value: 'long', label: 'Long' }, { value: 'short', label: 'Short' }]} /></Field>
+        <Field label="Position value" hint="size x price"><AmountInput value={value} onChange={setValue} suffix="USDC" label="Position value" /></Field>
+        <Field label="Entry price" hint={mark ? 'blank = live mark price' : undefined}><AmountInput value={entry} onChange={setEntry} placeholder={mark ? String(mark) : '0'} label="Entry price" /></Field>
+        <Field label={`Leverage ${levN}x`} hint={`max ${maxLev}x here`}><input aria-label="Leverage" type="range" min={1} max={maxLev} step={1} value={levN} onChange={(e) => setLev(Number(e.target.value))} className="h-11 w-full accent-orange-500" /></Field>
+        <Field label="Stop price" hint="optional, enables the safety check"><AmountInput value={stop} onChange={setStop} placeholder="0" label="Stop price" /></Field>
+      </div>
+      {sym && !sym.tiers.length && <div className="mt-4"><Notice tone="info">Margin rules for this market are not available right now, so liquidation cannot be estimated.</Notice></div>}
+      {out ? (
+        <div className="ss-fade mt-4 rounded-xl border border-white/[0.07] bg-black/25 p-3.5">
+          <div className="grid gap-x-8 gap-y-1.5 sm:grid-cols-2">
+            <Row k="Margin you lock" v={usd(out.margin)} />
+            <Row k="Position size" v={`${out.size.toPrecision(5)} ${sym?.base ?? ''}`} />
+            <Row k="Est. liquidation price" v={Number.isFinite(out.liq) && out.liq > 0 ? px(Number(out.liq.toFixed(dp))) : 'none at this leverage'} tone={out.g && !out.g.ok ? 'bad' : undefined} />
+            {out.liqPct != null && out.liq > 0 && <Row k="Distance to liquidation" v={`${out.liqPct.toFixed(2)}% from entry`} />}
+            {out.g && <Row k="Your stop distance" v={`${((Math.abs(entryN - stopN) / entryN) * 100).toFixed(2)}% from entry`} />}
+            {out.g && <Row k="Highest safe leverage" v={out.safe ? `${out.safe}x` : 'none: widen the stop'} tone={out.safe ? 'good' : 'bad'} />}
+          </div>
+          {out.g && <div className="mt-3"><Notice tone={out.g.ok ? 'info' : 'warn'}>{out.g.ok ? `Safe gap: liquidation is at least ${LIQ_STOP_MULT}x further away than your stop.` : (out.g.reason ?? 'Liquidation is too close to your stop.')}</Notice></div>}
+          <p className="mt-3 text-[11px] text-zinc-500">An estimate from SoDEX's published margin tiers for an isolated position. The exchange decides the real price. Funding, fees and cross margin can move it.</p>
+        </div>
+      ) : <div className="mt-4"><Notice tone="info">Enter a position value to see where liquidation would be.</Notice></div>}
+    </Card>
+  );
+}
+
 function PortfolioCheck() {
   const S = useS();
   const ai = useAi();
@@ -6392,7 +6447,7 @@ function armLimitPrefill(p: { pair: string; side: 'buy' | 'sell'; price: string;
   limitPrefill.pair = p.pair; limitPrefill.side = p.side; limitPrefill.price = p.price; limitPrefill.qty = p.qty;
   if (typeof window !== 'undefined') window.dispatchEvent(new Event('soswap-limit-prefill'));
 }
-type SkillTab = 'trade' | 'size' | 'portfolio' | 'journal' | 'alerts' | 'brief' | 'news' | 'plan' | 'fund' | 'withdraw' | 'routecheck';
+type SkillTab = 'trade' | 'size' | 'liq' | 'portfolio' | 'journal' | 'alerts' | 'brief' | 'news' | 'plan' | 'fund' | 'withdraw' | 'routecheck';
 
 function goToTradeCheck(S: Store, pair: string) {
   S.setSelected(pair);
@@ -6547,6 +6602,7 @@ function SkillsView() {
   const tabs: { value: SkillTab; label: string; tag: 'code' | 'AI'; icon: (s: number) => React.ReactNode; blurb: string }[] = [
     { value: 'trade', label: 'Trade Check', tag: 'code', icon: (s) => <TradeCheckIcon size={s} />, blurb: 'Scan a trade against the live order book before you sign.' },
     { value: 'size', label: 'Position Size', tag: 'code', icon: (s) => <PositionIcon size={s} />, blurb: 'Turn "how much can I afford to lose" into an exact size.' },
+    { value: 'liq', label: 'Liquidation', tag: 'code', icon: (s) => <ShieldCheck size={s} />, blurb: 'See where a leveraged position would be liquidated, and the highest leverage that keeps a safe gap from your stop.' },
     { value: 'portfolio', label: 'Portfolio', tag: 'code', icon: (s) => <PortfolioIcon size={s} />, blurb: 'See concentration and your stablecoin cushion.' },
     { value: 'fund', label: 'Fund my SoDEX', tag: 'code', icon: (s) => <Coins size={s} />, blurb: 'Move tokens from another chain into your wallet, then deposit on SoDEX.' },
     { value: 'withdraw', label: 'Cheapest withdraw', tag: 'code', icon: (s) => <ArrowUpRight size={s} />, blurb: 'Compare official SoDEX withdrawal fees and minimums across chains.' },
@@ -6577,6 +6633,7 @@ function SkillsView() {
       <AnimatedTabs activeKey={tab}>
         {tab === 'trade' && <TradeCheck />}
         {tab === 'size' && <SizeCheck />}
+        {tab === 'liq' && <LiquidationCheck />}
         {tab === 'portfolio' && <PortfolioCheck />}
         {tab === 'fund' && <FundSkill />}
         {tab === 'withdraw' && <WithdrawSkill />}
