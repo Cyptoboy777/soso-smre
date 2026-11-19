@@ -1605,6 +1605,23 @@ const Chg = ({ pct }: { pct: number }) => (
   </span>
 );
 
+/** Optional income channels. Each one shows only when its public env value is set, so nothing fake is ever displayed. */
+const TIP_ADDRESS = /^0x[0-9a-fA-F]{40}$/.test(process.env.NEXT_PUBLIC_TIP_ADDRESS ?? '') ? (process.env.NEXT_PUBLIC_TIP_ADDRESS as string) : '';
+const REFERRAL_URL = /^https:\/\/[^\s]+$/.test(process.env.NEXT_PUBLIC_REFERRAL_URL ?? '') ? (process.env.NEXT_PUBLIC_REFERRAL_URL as string) : '';
+function SupportBox() {
+  if (!TIP_ADDRESS && !REFERRAL_URL) return null;
+  return (
+    <div className="mt-10 rounded-2xl border border-white/[0.07] bg-white/[0.02] p-4">
+      <p className="text-sm font-medium text-zinc-100">Enjoying SoSwapDEX?</p>
+      <p className="mt-1 text-[13px] text-zinc-400">The app is free and non-custodial. If it helps you, you can support it. This is optional and never affects your trades.</p>
+      <div className="mt-3 flex min-w-0 flex-wrap items-center gap-3">
+        {REFERRAL_URL && <a href={REFERRAL_URL} target="_blank" rel="noopener noreferrer" className="rounded-xl bg-orange-500 px-4 py-2 text-sm font-medium text-black transition hover:bg-orange-400">Join SoDEX with our link</a>}
+        {TIP_ADDRESS && <span className="flex min-w-0 items-center gap-1 rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-xs text-zinc-300"><span className="min-w-0 break-all">Tip (USDC): {TIP_ADDRESS}</span><CopyBtn text={TIP_ADDRESS} /></span>}
+      </div>
+    </div>
+  );
+}
+
 const CopyBtn = ({ text }: { text: string }) => {
   const [ok, setOk] = useState(false);
   return (
@@ -7358,6 +7375,7 @@ function Shell() {
 
       <main className="relative z-10 mx-auto min-h-[70vh] max-w-[1180px] px-4 pb-28 pt-6 sm:pb-10">
         <AnimatePresence mode="wait" initial={false}><MotionPage key={view}><Page /></MotionPage></AnimatePresence>
+        <SupportBox />
         <footer className="mt-12 border-t border-white/[0.06] pt-5 pr-0 text-[11px] max-[520px]:pr-20 leading-relaxed text-zinc-600">{DISCLAIMER}</footer>
       </main>
 
