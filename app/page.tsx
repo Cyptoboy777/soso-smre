@@ -129,10 +129,11 @@ const VALUECHAIN = {
   rpcUrls: ['https://mainnet.valuechain.xyz'], blockExplorerUrls: ['https://main-scan.valuechain.xyz'],
 };
 /* Builder code (SoDEX builder program, https://www.buildsoso.xyz): orders carry the app's builder id + fee; each user approves a max fee once.
+ * NEXT_PUBLIC_BUILDER_ENABLED = "1" turns the builder fee on. Off by default, so no fee prompt or fee line is shown.
  * NEXT_PUBLIC_BUILDER_ID  = this app's SoDEX account id (the builder id). Unset/0 disables the feature entirely.
  * NEXT_PUBLIC_BUILDER_FEE = requested fee in tenths of a basis point (10 = 1 bp = 0.01%). Spot cap is 2000. */
 const BUILDER_ID: number = (() => {
-  try { const n = Number(process.env.NEXT_PUBLIC_BUILDER_ID ?? 0); return Number.isInteger(n) && n > 0 ? n : 0; } catch { return 0; }
+  try { if (process.env.NEXT_PUBLIC_BUILDER_ENABLED !== '1') return 0; const n = Number(process.env.NEXT_PUBLIC_BUILDER_ID ?? 0); return Number.isInteger(n) && n > 0 ? n : 0; } catch { return 0; }
 })();
 const BUILDER_FEE: number = (() => {
   try { const n = Number(process.env.NEXT_PUBLIC_BUILDER_FEE ?? 30); return Number.isInteger(n) && n >= 1 && n <= 2000 ? n : 30; } catch { return 30; }
