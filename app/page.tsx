@@ -6889,7 +6889,10 @@ function PerpOrderForm({ sym, t, acct, form, setForm, risk, setRisk, reload, bui
       const f = await reloadBuilder();
       if (f > 0) S.toast('ok', 'SoSwapDEX fee approved. You can place your order now.');
       else { setFeeUnsupported(true); S.toast('info', 'Approval sent, but SoDEX has not listed it for Perps yet. You can still trade.'); }
-    } catch (e: any) { S.toast('err', isUserRejected(e) ? 'Approval cancelled. Nothing was signed.' : userFacingError(e, 'Could not approve the fee. Please try again.')); }
+    } catch (e: any) {
+      if (isUserRejected(e)) S.toast('err', 'Approval cancelled. Nothing was signed.');
+      else { setFeeUnsupported(true); S.toast('info', 'The fee approval is not available right now, so you can trade without it. Nothing was charged.'); } // a SoDEX-side refusal must never lock a user out of trading
+    }
     finally { setFeeBusy(false); }
   };
   const ready = qty > 0 && price > 0 && !issues.length && !sym.halted && (!form.tpsl || (sl > 0 || tp > 0));
