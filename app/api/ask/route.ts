@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { limited } from "@/lib/server";
+import { blockedAi, limited } from "@/lib/server";
 import { etfAssetFor } from "@/lib/setup";
 import {
   bookMetrics,
@@ -94,6 +94,8 @@ async function chatExplain(system: string, question: string): Promise<string | n
 }
 
 export async function POST(request: NextRequest) {
+  const blocked = blockedAi(request);
+  if (blocked) return NextResponse.json({ error: blocked }, { status: blocked === "Not allowed." ? 403 : 429 });
   const ip = (request.headers.get("x-forwarded-for") ?? "unknown").split(",")[0].trim();
   if (limited(ip, 10, 60_000)) {
     return NextResponse.json({ error: "Too many questions. Please wait a minute and try again." }, { status: 429 });

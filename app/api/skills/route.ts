@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { limited, sodexSnapshot, sosoSnapshot } from "@/lib/server";
+import { blockedAi, limited, sodexSnapshot, sosoSnapshot } from "@/lib/server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -46,6 +46,8 @@ const SCHEMA = {
 const clip = (v: unknown, n: number) => String(v ?? "").replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, "").slice(0, n);
 
 export async function POST(request: NextRequest) {
+  const blocked = blockedAi(request);
+  if (blocked) return NextResponse.json({ error: blocked }, { status: blocked === "Not allowed." ? 403 : 429 });
   const key = process.env.GEMINI_API_KEY;
   const model = (process.env.GEMINI_MODEL || "gemini-2.5-flash").replace(/[^a-zA-Z0-9._-]/g, "");
   if (!key) return NextResponse.json({ error: "AI explanations are not available right now." }, { status: 503 });

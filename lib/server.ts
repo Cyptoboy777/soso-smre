@@ -13,6 +13,18 @@ export function limited(ip: string, max = 15, windowMs = 60_000) {
   return recent.length > max;
 }
 
+/** AI routes cost quota: only this site's own pages may call them, and one global ceiling stops a flood from many IPs. */
+export function blockedAi(req: { headers: Headers }): string | null {
+  const origin = req.headers.get("origin");
+  if (origin) {
+    let ok = false;
+    try { ok = new URL(origin).host === (req.headers.get("x-forwarded-host") ?? req.headers.get("host")); } catch { ok = false; }
+    if (!ok) return "Not allowed.";
+  } else if (req.headers.get("sec-fetch-site") && req.headers.get("sec-fetch-site") !== "same-origin") return "Not allowed.";
+  if (limited("ai:all", 240, 60_000)) return "The AI is busy right now. Please try again in a minute.";
+  return null;
+}
+
 /* ───────── live data gathered server-side; only what these APIs return reaches the model ───────── */
 export const num = (v: unknown) => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
 export const fmt = (n: number) => (n >= 1000 ? n.toLocaleString("en-US", { maximumFractionDigits: 2 }) : n >= 1 ? n.toFixed(4) : n.toPrecision(4));

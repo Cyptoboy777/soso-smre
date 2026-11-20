@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { limited, sodexSnapshot, sosoSnapshot } from "@/lib/server";
+import { blockedAi, limited, sodexSnapshot, sosoSnapshot } from "@/lib/server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -18,6 +18,8 @@ Bots in SoSwapDEX are drafts (dry-run previews) and never send orders.
 Do not give personalised financial advice or promise profits; describe data neutrally. Reply in the user's language (including Telugu or Hinglish if they write that way).`;
 
 export async function POST(request: NextRequest) {
+  const blocked = blockedAi(request);
+  if (blocked) return NextResponse.json({ error: blocked }, { status: blocked === "Not allowed." ? 403 : 429 });
   // Uses AI_* when set; otherwise falls back to Gemini's OpenAI-compatible endpoint with GEMINI_API_KEY.
   const gemini = !process.env.AI_API_KEY && !!process.env.GEMINI_API_KEY;
   const apiKey = process.env.AI_API_KEY || process.env.GEMINI_API_KEY;
