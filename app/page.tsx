@@ -3151,6 +3151,30 @@ const ErrorBox = ({ msg, onRetry }: { msg: string; onRetry?: () => void }) => (
   <Notice tone="error" action={onRetry ? <Button size="sm" onClick={onRetry}><RefreshCw className="h-3.5 w-3.5" />Retry</Button> : undefined}>{msg}</Notice>
 );
 
+/** One-tap 24h market article. Totals are computed here from live tickers (no AI maths); the AI only writes the story around them. */
+function MarketArticle() {
+  const S = useS();
+  const ai = useAi();
+  const rows = useMemo(() => S.syms.map((s) => ({ pair: s.display, last: S.tickers[s.name]?.last ?? 0, chg: S.tickers[s.name]?.changePct, vol: S.tickers[s.name]?.quoteVol ?? 0 })).filter((r) => r.last > 0 && typeof r.chg === 'number'), [S.syms, S.tickers]);
+  const build = () => {
+    const f = (n: number) => Number(n.toFixed(2));
+    const byChg = [...rows].sort((a, b) => (b.chg as number) - (a.chg as number));
+    const byVol = [...rows].sort((a, b) => b.vol - a.vol);
+    const m = (r: (typeof rows)[number]) => ({ pair: r.pair, price: r.last, change24hPct: f(r.chg as number), volume24hUsd: Math.round(r.vol) });
+    return { pairs: rows.length, totalVolume24hUsd: Math.round(rows.reduce((a, r) => a + r.vol, 0)), pairsUp: rows.filter((r) => (r.chg as number) > 0).length, pairsDown: rows.filter((r) => (r.chg as number) < 0).length, topGainers: byChg.slice(0, 3).map(m), topLosers: byChg.slice(-3).reverse().map(m), mostTraded: byVol.slice(0, 5).map(m) };
+  };
+  return (
+    <Card className="mb-4 p-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="min-w-0"><h3 className="text-sm font-semibold text-zinc-100">Market story, last 24 hours</h3>
+          <p className="mt-1 text-[13px] text-zinc-400">A short article written from live SoDEX numbers, SoSoValue headlines and ETF flows. It explains what happened and makes no predictions.</p></div>
+        <AiButton ai={ai} label="Write today's article" disabled={rows.length < 3} onClick={() => ai.run('market-article', build())} />
+      </div>
+      <AiBox ai={ai} />
+    </Card>
+  );
+}
+
 function MarketsView() {
   const S = useS();
   const [q, setQ] = useState('');
@@ -3176,6 +3200,8 @@ function MarketsView() {
   );
 
   return (
+    <>
+    <MarketArticle />
     <Card>
       <div className="flex flex-wrap items-center gap-3 border-b border-white/[0.06] p-4">
         <div className="flex h-10 min-w-[200px] flex-1 items-center gap-2 rounded-xl border border-white/10 bg-black/30 px-3 focus-within:border-orange-500/60">
@@ -3234,6 +3260,7 @@ function MarketsView() {
         ))}
       </div>
     </Card>
+    </>
   );
 }
 
@@ -5820,7 +5847,7 @@ function GuideView() {
 
 /* ═════════════════════════ skills: code-checked risk tools + Gemini explanations ═════════════════════════ */
 
-type AiOut = { headline: string; summary: string; points: string[]; watch: string[] };
+type AiOut = { headline: string; summary: string; points: string[]; watch: string[]; article?: string };
 function useAi() {
   const [st, setSt] = useState<{ status: 'idle' | 'loading' | 'ok' | 'err'; out?: AiOut; err?: string }>({ status: 'idle' });
   const run = useCallback(async (skill: string, data?: unknown, note?: string) => {
@@ -5848,6 +5875,7 @@ function AiBox({ ai }: { ai: ReturnType<typeof useAi> }) {
       <div className="mb-1 flex items-center gap-1.5 text-[12px] font-semibold text-orange-300"><Sparkles className="h-3 w-3" />Explained by Gemini</div>
       <div className="text-sm font-semibold text-zinc-50">{o.headline}</div>
       <p className="mt-1 text-[13px] leading-relaxed text-zinc-300">{o.summary}</p>
+      {o.article && <div className="mt-3 space-y-2.5 border-l-2 border-orange-500/40 pl-3 text-[13.5px] leading-relaxed text-zinc-200">{o.article.split(/\n{2,}/).map((t, i) => <p key={i}>{t}</p>)}</div>}
       {o.points.length > 0 && <ul className="mt-2 list-disc space-y-1 pl-5 text-[13px] text-zinc-300">{o.points.map((p, i) => <li key={i}>{p}</li>)}</ul>}
       {o.watch.length > 0 && <div className="mt-2.5 rounded-lg bg-black/30 p-2.5 text-[12px] text-zinc-400"><b className="text-zinc-200">Double-check: </b>{o.watch.join(' · ')}</div>}
       <p className="mt-2 text-[10px] text-zinc-500">AI can be wrong and is not financial advice. It only explains the data above and cannot trade for you.</p>
