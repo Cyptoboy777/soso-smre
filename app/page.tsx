@@ -3193,7 +3193,7 @@ function DailyArticleCard() {
   return (
     <Card className="mb-4 overflow-hidden">
       <div className="border-b border-white/[0.06] bg-gradient-to-br from-orange-500/[0.12] to-transparent p-4">
-        <div className="flex flex-wrap items-center gap-2 text-[11px] text-zinc-400"><span className="rounded-full border border-orange-500/30 bg-orange-500/10 px-2 py-0.5 font-semibold text-orange-300">{d.sector}</span><span>Daily market story, {d.day}</span></div>
+        <div className="flex flex-wrap items-center gap-2 text-[11px] text-zinc-400"><span className="text-[13px] font-semibold text-zinc-100">SoSwap Market Story</span><span>{d.day}</span><span className="rounded-full border border-orange-500/30 bg-orange-500/10 px-2 py-0.5 font-semibold text-orange-300">Sector: {d.sector}</span></div>
         <h2 className="mt-2 text-lg font-semibold leading-snug text-zinc-50">{d.headline}</h2>
         <p className="mt-1 text-[13px] text-zinc-300">{d.summary}</p>
       </div>
