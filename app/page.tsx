@@ -3151,26 +3151,68 @@ const ErrorBox = ({ msg, onRetry }: { msg: string; onRetry?: () => void }) => (
   <Notice tone="error" action={onRetry ? <Button size="sm" onClick={onRetry}><RefreshCw className="h-3.5 w-3.5" />Retry</Button> : undefined}>{msg}</Notice>
 );
 
-/** One-tap 24h market article. Totals are computed here from live tickers (no AI maths); the AI only writes the story around them. */
-function MarketArticle() {
-  const S = useS();
-  const ai = useAi();
-  const rows = useMemo(() => S.syms.map((s) => ({ pair: s.display, last: S.tickers[s.name]?.last ?? 0, chg: S.tickers[s.name]?.changePct, vol: S.tickers[s.name]?.quoteVol ?? 0 })).filter((r) => r.last > 0 && typeof r.chg === 'number'), [S.syms, S.tickers]);
-  const build = () => {
-    const f = (n: number) => Number(n.toFixed(2));
-    const byChg = [...rows].sort((a, b) => (b.chg as number) - (a.chg as number));
-    const byVol = [...rows].sort((a, b) => b.vol - a.vol);
-    const m = (r: (typeof rows)[number]) => ({ pair: r.pair, price: r.last, change24hPct: f(r.chg as number), volume24hUsd: Math.round(r.vol) });
-    return { pairs: rows.length, totalVolume24hUsd: Math.round(rows.reduce((a, r) => a + r.vol, 0)), pairsUp: rows.filter((r) => (r.chg as number) > 0).length, pairsDown: rows.filter((r) => (r.chg as number) < 0).length, topGainers: byChg.slice(0, 3).map(m), topLosers: byChg.slice(-3).reverse().map(m), mostTraded: byVol.slice(0, 5).map(m) };
-  };
+type DailyArticle = { day: string; headline: string; summary: string; sector: string; article: string; tokens: { symbol: string; why: string; price: number; changePct: number; volume: number }[]; watch: string[]; sources: { title: string; source: string; url: string }[]; at: number };
+
+/** Bars of the 24h move for the tokens the article names. Values come from the SoDEX tickers at writing time, never from the AI. */
+function TokenChart({ tokens }: { tokens: DailyArticle['tokens'] }) {
+  const max = Math.max(1, ...tokens.map((t) => Math.abs(t.changePct)));
   return (
-    <Card className="mb-4 p-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="min-w-0"><h3 className="text-sm font-semibold text-zinc-100">Market story, last 24 hours</h3>
-          <p className="mt-1 text-[13px] text-zinc-400">A short article written from live SoDEX numbers, SoSoValue headlines and ETF flows. It explains what happened and makes no predictions.</p></div>
-        <AiButton ai={ai} label="Write today's article" disabled={rows.length < 3} onClick={() => ai.run('market-article', build())} />
+    <div role="img" aria-label={`24 hour change: ${tokens.map((t) => `${t.symbol} ${t.changePct}%`).join(', ')}`} className="space-y-2">
+      {tokens.map((t) => {
+        const w = Math.max(2, (Math.abs(t.changePct) / max) * 100);
+        const up = t.changePct >= 0;
+        return (
+          <div key={t.symbol} className="grid grid-cols-[3.5rem_1fr_4.5rem] items-center gap-2 text-xs">
+            <span className="font-semibold text-zinc-200">{t.symbol}</span>
+            <div className="h-3 overflow-hidden rounded-full bg-white/[0.05]"><div className={cx('h-full rounded-full', up ? 'bg-emerald-500/80' : 'bg-rose-500/80')} style={{ width: `${w}%` }} /></div>
+            <span className={cx('text-right tabular-nums', up ? 'text-emerald-400' : 'text-rose-400')}>{up ? '+' : ''}{t.changePct.toFixed(2)}%</span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/** One article per day for everyone. The server writes it once and caches it for 24 hours, so opening it costs no AI credits. */
+function DailyArticleCard() {
+  const S = useS();
+  const [st, setSt] = useState<{ s: 'loading' | 'ok' | 'err'; d?: DailyArticle }>({ s: 'loading' });
+  const load = useCallback(async () => {
+    setSt({ s: 'loading' });
+    try {
+      const r = await fetch('/api/daily-article');
+      const j = await r.json().catch(() => null);
+      if (!r.ok || !j || j.error || typeof j.article !== 'string') throw new Error('x');
+      setSt({ s: 'ok', d: j as DailyArticle });
+    } catch { setSt({ s: 'err' }); }
+  }, []);
+  useEffect(() => { void load(); }, [load]);
+  if (st.s === 'loading') return <Card className="mb-4 p-4"><Skeleton className="h-5 w-1/2" /><Skeleton className="mt-3 h-24" /></Card>;
+  if (st.s === 'err' || !st.d) return <Card className="mb-4 p-4"><div className="flex flex-wrap items-center justify-between gap-3"><p className="text-[13px] text-zinc-400">Today's market article is not ready yet. Please check back in a little while.</p><button onClick={() => void load()} className="rounded-lg border border-white/10 px-3 py-1.5 text-xs text-zinc-200 hover:bg-white/[0.06]">Try again</button></div></Card>;
+  const d = st.d;
+  return (
+    <Card className="mb-4 overflow-hidden">
+      <div className="border-b border-white/[0.06] bg-gradient-to-br from-orange-500/[0.12] to-transparent p-4">
+        <div className="flex flex-wrap items-center gap-2 text-[11px] text-zinc-400"><span className="rounded-full border border-orange-500/30 bg-orange-500/10 px-2 py-0.5 font-semibold text-orange-300">{d.sector}</span><span>Daily market story, {d.day}</span></div>
+        <h2 className="mt-2 text-lg font-semibold leading-snug text-zinc-50">{d.headline}</h2>
+        <p className="mt-1 text-[13px] text-zinc-300">{d.summary}</p>
       </div>
-      <AiBox ai={ai} />
+      <div className="grid gap-5 p-4 lg:grid-cols-[1.4fr_1fr]">
+        <div className="min-w-0 space-y-3 text-[13.5px] leading-relaxed text-zinc-200">{d.article.split(/\n{2,}/).map((t, i) => <p key={i}>{t}</p>)}</div>
+        {d.tokens.length > 0 && (
+          <div className="min-w-0 rounded-xl border border-white/[0.07] bg-black/25 p-3.5">
+            <div className="mb-2.5 text-xs font-semibold text-zinc-100">Tokens linked to this story</div>
+            <TokenChart tokens={d.tokens} />
+            <p className="mt-1.5 text-[10px] text-zinc-500">24h change on SoDEX when the article was written.</p>
+            <ul className="mt-3 space-y-2">{d.tokens.map((t) => (
+              <li key={t.symbol} className="text-[12px] text-zinc-400"><button onClick={() => { const s = S.syms.find((x) => x.display.split('/')[0] === t.symbol); if (s) { S.setSelected(s.name); S.setView('swap'); } }} className="font-semibold text-orange-300 hover:underline">{t.symbol}</button> {t.why}</li>
+            ))}</ul>
+          </div>
+        )}
+      </div>
+      {d.watch.length > 0 && <div className="mx-4 mb-3 rounded-lg bg-black/30 p-2.5 text-[12px] text-zinc-400"><b className="text-zinc-200">Double-check: </b>{d.watch.join(' · ')}</div>}
+      {d.sources.length > 0 && <div className="mx-4 mb-3 text-[11px] text-zinc-500">Sources (SoSoValue): {d.sources.map((x, i) => <span key={i}>{i > 0 && ' · '}<a href={x.url} target="_blank" rel="noopener noreferrer" className="underline hover:text-zinc-300">{x.source || 'Link'}</a></span>)}</div>}
+      <p className="border-t border-white/[0.06] px-4 py-2.5 text-[10px] text-zinc-500">Written by AI from SoSoValue news and SoDEX prices. It can be wrong and is not financial advice. Naming a token is not a suggestion to buy or sell it. Trading can lose money.</p>
     </Card>
   );
 }
@@ -3201,7 +3243,7 @@ function MarketsView() {
 
   return (
     <>
-    <MarketArticle />
+    <DailyArticleCard />
     <Card>
       <div className="flex flex-wrap items-center gap-3 border-b border-white/[0.06] p-4">
         <div className="flex h-10 min-w-[200px] flex-1 items-center gap-2 rounded-xl border border-white/10 bg-black/30 px-3 focus-within:border-orange-500/60">
@@ -5847,7 +5889,7 @@ function GuideView() {
 
 /* ═════════════════════════ skills: code-checked risk tools + Gemini explanations ═════════════════════════ */
 
-type AiOut = { headline: string; summary: string; points: string[]; watch: string[]; article?: string };
+type AiOut = { headline: string; summary: string; points: string[]; watch: string[] };
 function useAi() {
   const [st, setSt] = useState<{ status: 'idle' | 'loading' | 'ok' | 'err'; out?: AiOut; err?: string }>({ status: 'idle' });
   const run = useCallback(async (skill: string, data?: unknown, note?: string) => {
@@ -5875,7 +5917,6 @@ function AiBox({ ai }: { ai: ReturnType<typeof useAi> }) {
       <div className="mb-1 flex items-center gap-1.5 text-[12px] font-semibold text-orange-300"><Sparkles className="h-3 w-3" />Explained by Gemini</div>
       <div className="text-sm font-semibold text-zinc-50">{o.headline}</div>
       <p className="mt-1 text-[13px] leading-relaxed text-zinc-300">{o.summary}</p>
-      {o.article && <div className="mt-3 space-y-2.5 border-l-2 border-orange-500/40 pl-3 text-[13.5px] leading-relaxed text-zinc-200">{o.article.split(/\n{2,}/).map((t, i) => <p key={i}>{t}</p>)}</div>}
       {o.points.length > 0 && <ul className="mt-2 list-disc space-y-1 pl-5 text-[13px] text-zinc-300">{o.points.map((p, i) => <li key={i}>{p}</li>)}</ul>}
       {o.watch.length > 0 && <div className="mt-2.5 rounded-lg bg-black/30 p-2.5 text-[12px] text-zinc-400"><b className="text-zinc-200">Double-check: </b>{o.watch.join(' · ')}</div>}
       <p className="mt-2 text-[10px] text-zinc-500">AI can be wrong and is not financial advice. It only explains the data above and cannot trade for you.</p>
