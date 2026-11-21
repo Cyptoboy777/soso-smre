@@ -1,4 +1,5 @@
 // Server-only helpers shared by the AI routes (rate limit + live data snapshots).
+import { rateLimitLocal } from "./rate-limit";
 const SODEX = "https://mainnet-gw.sodex.dev/api/v1";
 const SOSO = "https://openapi.sosovalue.com/openapi/v1";
 
@@ -12,7 +13,8 @@ export function blockedAi(req: { headers: Headers }): string | null {
     try { ok = new URL(origin).host === (req.headers.get("x-forwarded-host") ?? req.headers.get("host")); } catch { ok = false; }
     if (!ok) return "Not allowed.";
   } else if (req.headers.get("sec-fetch-site") && req.headers.get("sec-fetch-site") !== "same-origin") return "Not allowed.";
-  if (limited("ai:all", 240, 60_000)) return "The AI is busy right now. Please try again in a minute.";
+  // One global per-minute ceiling for the whole app (the per-visitor and daily caps live in aiGate, lib/rate-limit.ts).
+  if (rateLimitLocal({ headers: { get: () => "all" } }, "ai-all", 240, 60_000)) return "The AI is busy right now. Please try again in a minute.";
   return null;
 }
 
