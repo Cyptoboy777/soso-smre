@@ -62,8 +62,10 @@ import {
 
 import {
   buildUserSignedAddApiKey, friendlySodexError, isKeyGone, isUnrecognizedChain, isUserRejected,
-  keyListed, keySlots, KEYS_AT_CAP, looksLikeRawSodex, REGISTER_KEY_FAILED, userFacingError, walletActionError,
+  keyListed, keySlots, looksLikeRawSodex, REGISTER_KEY_FAILED, userFacingError, walletActionError,
   wrapUniversalSignature,
+  FEE_APPROVAL_ALREADY, KeyCapError, feeAlreadyApproved, feeApprovalFailure, findListedKeyByAddress,
+  isKeyCapText, keyExpiryMs, keyRegistered, parseKeyCap, soswapKeyNames, storedKeyUsable,
 } from '@/lib/sodex-keys';
 import { parsePerpsBalances, parsePerpsState, marginUsd, type MarginBalance } from '@/lib/sodex-balances';
 import {
@@ -756,7 +758,9 @@ async function registerApiKey(net: Net, o: {
       body: JSON.stringify(built.body),
     });
   } catch (e: any) {
-    if (isKeyGone(e) || looksLikeRawSodex(String(e?.raw ?? e?.message ?? ''))) {
+    const rawText = String(e?.raw ?? e?.message ?? '');
+    if (isKeyCapText(rawText)) throw new KeyCapError(parseKeyCap(rawText));
+    if (isKeyGone(e) || looksLikeRawSodex(rawText)) {
       throw new ApiError(REGISTER_KEY_FAILED, e?.code ?? -1, e?.raw ?? e?.message);
     }
     throw e;
@@ -797,7 +801,7 @@ type Store = {
   refreshAccount: () => Promise<{ orders: OpenOrder[]; balances: Balance[] } | null>;
   moveTarget: MarginBalance | null; openMoveToSpot: (b: MarginBalance) => void; closeMoveToSpot: () => void;
   submitMoveToSpot: (amount: string) => Promise<string>;
-  key: TradeKey | null; keyValid: boolean; createKey: () => Promise<void>; importKey: (name: string, pk: string) => Promise<void>; forgetKey: () => void;
+  key: TradeKey | null; keyValid: boolean; canReuseKey: boolean; createKey: () => Promise<'created' | 'reused'>; importKey: (name: string, pk: string) => Promise<void>; forgetKey: () => void;
   selected: string; setSelected: (s: string) => void; favs: string[]; toggleFav: (s: string) => void;
   slippage: string; setSlippage: (s: string) => void;
   deadman: boolean; setDeadman: (b: boolean) => void;
@@ -808,7 +812,7 @@ type Store = {
   available: (coin: string) => number;
   flights: FlightOrder[]; orderInFlight: boolean; dismissFlights: () => void;
   priceOf: (coin: string) => number;
-  builder: { enabled: boolean; fee: number; approvedFee: number | undefined; active: boolean; approve: (aid?: number) => Promise<void>; revoke: () => Promise<void> };
+  builder: { enabled: boolean; fee: number; approvedFee: number | undefined; active: boolean; approve: (aid?: number, engine?: 'spot' | 'perps') => Promise<'approved' | 'already'>; revoke: () => Promise<void> };
 };
 
 const Ctx = createContext<Store | null>(null);
@@ -1051,6 +1055,12 @@ function useSoSwapStore(): Store {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [key, addr, net, accountID, clock],
   );
+  // A key already held in this tab for this wallet/network/account: Enable trading reuses it instead of registering another one.
+  const canReuseKey = useMemo(
+    () => storedKeyUsable(key, { owner: addr, net, accountID, now: serverNow() }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [key, addr, net, accountID, clock],
+  );
   const persistKey = (k: TradeKey | null) => { setKey(k); ssSet(KEY_STORE, k); };
   const forgetKey = useCallback(() => persistKey(null), []);
   useEffect(() => { onKeyGone = () => persistKey(null); return () => { onKeyGone = null; }; }, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -1115,41 +1125,71 @@ function useSoSwapStore(): Store {
     }
   }, [wallet, net]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const createKey = useCallback(async () => {
+  const createKey = useCallback(async (): Promise<'created' | 'reused'> => {
     if (!wallet || !addr) throw new Error('Connect a wallet first.');
     if (!accountID) throw new Error('No SoDEX account found for this wallet. Deposit on sodex.com first.');
-    try {
-      const listed = await fetchApiKeys(net, wallet.address, accountID);
-      if (keySlots(listed).full) throw new Error(KEYS_AT_CAP);
-    } catch (e: any) {
-      if (e?.message === KEYS_AT_CAP) throw e;
-      // Listing is best-effort: a failure must not block registration.
+    let listed: Awaited<ReturnType<typeof fetchApiKeys>> | null = null;
+    try { listed = await fetchApiKeys(net, wallet.address, accountID); } catch { /* listing is best-effort: a failure must not block enabling trading */ }
+    // 1) Reuse: a key we already hold for this wallet, network and account, still registered on SoDEX. No wallet signature, no new key.
+    if (key && storedKeyUsable(key, { owner: addr, net, accountID, now: serverNow() }) && keyRegistered(listed, key) !== false) {
+      persistKey(key);
+      return 'reused';
     }
+    // 2) At the SoDEX key limit and nothing to reuse: stop before asking the wallet to sign a registration SoDEX would refuse.
+    if (listed && keySlots(listed).full) throw new KeyCapError(keySlots(listed).used, soswapKeyNames(listed));
+    // 3) Only now create and register a new key.
     const signatureChainId = await readWalletChainId(wallet.info.provider, wallet.chainId);
     if (!signatureChainId) throw new Error('Could not read the wallet network. Reconnect the wallet and try again.');
     const pk = randomPrivateKey();
     const keyAddress = addressFromPrivateKey(pk);
     const name = `soswap-${Math.random().toString(36).slice(2, 10)}`;
     const expiresAt = serverNow() + KEY_TTL_MS;
-    await registerApiKey(net, { address: wallet.address, accountID, name, keyAddress, expiresAt, signatureChainId, signTyped: walletSign });
+    try {
+      await registerApiKey(net, { address: wallet.address, accountID, name, keyAddress, expiresAt, signatureChainId, signTyped: walletSign });
+    } catch (e) {
+      if (e instanceof KeyCapError) {
+        // The cap was only discovered by SoDEX's answer; list once more so the message can name the SoSwapDEX keys on the account.
+        const again = await fetchApiKeys(net, wallet.address, accountID).catch(() => null);
+        throw new KeyCapError(e.used, soswapKeyNames(again));
+      }
+      throw e;
+    }
     persistKey({ name, pk, address: keyAddress, accountID, expiresAt, net, owner: addr });
     for (let i = 0; i < 3; i++) {
       try {
-        const listed = await fetchApiKeys(net, wallet.address, accountID);
-        if (keyListed(listed, name)) break;
+        const after = await fetchApiKeys(net, wallet.address, accountID);
+        if (keyListed(after, name)) break;
       } catch { /* listing is best-effort */ }
       if (i < 2) await sleep(800);
     }
-  }, [wallet, addr, accountID, net, walletSign]);
+    return 'created';
+  }, [wallet, addr, accountID, net, walletSign, key]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const importKey = useCallback(async (name: string, pk: string) => {
-    if (!addr) throw new Error('Connect a wallet first.');
+    if (!addr || !wallet) throw new Error('Connect a wallet first.');
     if (!accountID) throw new Error('No SoDEX account found for this wallet.');
-    const n = name.trim(); const k = pk.trim().startsWith('0x') ? pk.trim() : '0x' + pk.trim();
-    if (!/^[0-9a-zA-Z_-]{1,36}$/.test(n)) throw new Error('Key name may only contain letters, numbers, _ and -.');
+    let n = name.trim(); const k = pk.trim().startsWith('0x') ? pk.trim() : '0x' + pk.trim();
+    if (n && !/^[0-9a-zA-Z_-]{1,36}$/.test(n)) throw new Error('Key name may only contain letters, numbers, _ and -.');
     if (!isValidPrivateKey(k)) throw new Error('That is not a valid 32-byte private key.');
-    persistKey({ name: n, pk: k, address: addressFromPrivateKey(k), accountID, expiresAt: serverNow() + 365 * 24 * 3600 * 1000, net, owner: addr });
-  }, [addr, accountID, net]);
+    const keyAddress = addressFromPrivateKey(k); // derived here; the private key is never sent anywhere
+    let expiresAt = serverNow() + 365 * 24 * 3600 * 1000;
+    let listed: Awaited<ReturnType<typeof fetchApiKeys>> | null = null;
+    try { listed = await fetchApiKeys(net, wallet.address, accountID); } catch { /* cannot verify right now; fall back to the typed name */ }
+    if (listed) {
+      const all = [...(listed.spot ?? []), ...(listed.perps ?? [])];
+      const hit = findListedKeyByAddress(listed, keyAddress) ?? (n ? all.find((x) => x.name === n && !x.publicKey) : undefined);
+      if (!hit && !n && all.length && !all.some((x) => x.publicKey)) throw new Error('Enter the key name as shown on sodex.com/apikeys.');
+      if (!hit) throw new Error('SoDEX does not list a key for this private key on this account (it may have expired or been removed, or it belongs to another account or network). Check the key and try again, or create a new one.');
+      n = hit.name;
+      const exp = keyExpiryMs(hit.expiresAt);
+      if (exp != null) {
+        if (exp <= serverNow() + 30_000) throw new Error('That key has expired on SoDEX. Create a new key instead.');
+        expiresAt = exp;
+      }
+    }
+    if (!n) throw new Error('Enter the key name as shown on sodex.com/apikeys.');
+    persistKey({ name: n, pk: k, address: keyAddress, accountID, expiresAt, net, owner: addr });
+  }, [addr, wallet, accountID, net]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /* ───── trading actions ───── */
   /* ───── builder fee approval ───── */
@@ -1162,17 +1202,32 @@ function useSoSwapStore(): Store {
     return () => { stop = true; };
   }, [addr, accountID, net]);
   const fee = approvedFee ? Math.min(BUILDER_FEE, approvedFee) : 0;
-  const approveBuilder = useCallback(async (aid?: number) => {
+  const feeInFlight = useRef(false);
+  const approveBuilder = useCallback(async (aid?: number, engine: 'spot' | 'perps' = 'spot'): Promise<'approved' | 'already'> => {
     if (!wallet || !addr) throw new Error('Connect a wallet first.');
     const acc = aid && aid > 0 ? aid : accountID;
     if (!acc) throw new Error('No SoDEX account found for this wallet. Deposit on sodex.com first.');
     if (!BUILDER_ID) throw new Error('The app fee is not configured on this deployment.');
-    try { await approveBuilderFee(net, { address: wallet.address, accountID: acc, builderID: BUILDER_ID, maxFeeRate: BUILDER_FEE, signTyped: walletSign }); }
-    catch (e: any) {
-      if (e instanceof ApiError && e.raw) throw new Error(`SoDEX did not accept the fee approval. Nothing was charged. Please try again, and send us this code if it repeats: ${e.code}.${typeof location !== 'undefined' && /[?&]debug\b/.test(location.search) ? ` Details for support: ${String(e.raw).replace(/https?:\/\/\S+/g, '').slice(0, 160)}` : ''}`); // never show an order-balance message for a fee approval; the numeric code helps support
+    if (feeInFlight.current) throw new Error('A fee approval is already waiting for your wallet. Finish or cancel it first.');
+    // Read the approval SoDEX currently holds for this engine before asking for another signature.
+    const current = () => (engine === 'perps' ? fetchPerpBuilderFee : fetchBuilderApproval)(net, wallet.address);
+    const markApproved = async () => { if (engine === 'spot') setApprovedFee(await fetchBuilderApproval(net, wallet.address).catch(() => BUILDER_FEE)); };
+    try { if (feeAlreadyApproved(await current(), BUILDER_FEE)) { await markApproved(); return 'already'; } } catch { /* status unreadable: continue and let SoDEX decide */ }
+    feeInFlight.current = true;
+    try {
+      await approveBuilderFee(net, { address: wallet.address, accountID: acc, builderID: BUILDER_ID, maxFeeRate: BUILDER_FEE, signTyped: walletSign });
+    } catch (e: any) {
+      if (e instanceof ApiError && e.raw) {
+        // SoDEX can answer with an error although the approval was recorded. Re-read the status before reporting a failure.
+        let rate = 0; try { rate = await current(); } catch { /* unreadable: treat as not approved */ }
+        if (feeAlreadyApproved(rate, BUILDER_FEE)) { await markApproved(); return 'approved'; }
+        // No automatic re-send: the wallet signature is bound to a one-time nonce, so a retry needs a fresh signature the user triggers.
+        throw new Error(feeApprovalFailure(e.code, e.raw, typeof location !== 'undefined' && /[?&]debug\b/.test(location.search)));
+      }
       throw e;
-    }
-    setApprovedFee(await fetchBuilderApproval(net, wallet.address).catch(() => BUILDER_FEE));
+    } finally { feeInFlight.current = false; }
+    await markApproved();
+    return 'approved';
   }, [wallet, addr, accountID, net, walletSign]);
   const revokeBuilder = useCallback(async () => {
     if (!wallet || !addr || !accountID || !BUILDER_ID) throw new Error('Connect a wallet first.');
@@ -1353,7 +1408,7 @@ function useSoSwapStore(): Store {
     wallets, wallet, connect, connectWC, wcEnabled: !!WC_PROJECT_ID, disconnect,
     accountID, balances, openOrders, accountErr, marginBalances, marginErr, marginLoaded, refreshAccount,
     moveTarget, openMoveToSpot, closeMoveToSpot, submitMoveToSpot,
-    key, keyValid, createKey, importKey, forgetKey, builder,
+    key, keyValid, canReuseKey, createKey, importKey, forgetKey, builder,
     selected, setSelected, favs, toggleFav, slippage, setSlippage, deadman, setDeadman,
     view, setView, ui, setUi, toast, toasts, place, cancel, available, priceOf,
     flights, orderInFlight, dismissFlights,
@@ -1639,8 +1694,8 @@ function BuilderBlock() {
   const [busy, setBusy] = useState(false);
   const run = async (fn: () => Promise<void>, ok: string) => {
     setBusy(true);
-    try { await fn(); S.toast('ok', ok); }
-    catch (e: any) { S.toast('err', userFacingError(e, 'Could not complete the request.')); }
+    try { await fn(); if (ok) S.toast('ok', ok); }
+    catch (e: any) { S.toast('err', isUserRejected(e) ? 'Approval cancelled. Nothing was signed.' : userFacingError(e, 'Could not complete the request.')); }
     finally { setBusy(false); }
   };
   const b = S.builder;
@@ -1653,7 +1708,7 @@ function BuilderBlock() {
       <p className="mb-2 text-[11px] leading-relaxed text-zinc-500">SoSwapDEX earns at most <b className="text-zinc-300">{bpText(b.fee)}</b> of each filled order, on top of SoDEX's own fees. You approve this once with a wallet signature (no gas, no funds move) and can revoke it any time.</p>
       {b.active
         ? <Button size="sm" variant="danger" loading={busy} onClick={() => run(b.revoke, 'SoSwapDEX fee approval revoked.')}>Revoke approval</Button>
-        : <Button size="sm" variant="primary" loading={busy} disabled={!S.accountID} onClick={() => run(b.approve, 'SoSwapDEX fee approved.')}>Approve SoSwapDEX fee</Button>}
+        : <Button size="sm" variant="primary" loading={busy} disabled={!S.accountID} onClick={() => run(async () => { const r = await b.approve(); S.toast('ok', r === 'already' ? FEE_APPROVAL_ALREADY : 'SoSwapDEX fee approved.'); }, '')}>Approve SoSwapDEX fee</Button>}
     </div>
   );
 }
@@ -1835,11 +1890,16 @@ function KeyModal() {
   const go = async () => {
     setBusy(true); setErr(null);
     try {
-      if (mode === 'create') await S.createKey(); else await S.importKey(name, pk);
-      S.toast('ok', 'Trading enabled for this tab.');
+      let r: 'created' | 'reused' | 'imported' = 'imported';
+      if (mode === 'create') r = await S.createKey(); else await S.importKey(name, pk);
+      S.toast('ok', r === 'reused' ? 'Using your existing trading key. No new key was created.' : 'Trading enabled for this tab.');
       setEnabled(true);
       window.setTimeout(close, 1400);
-    } catch (e: any) { setErr(userFacingError(e, 'Could not enable trading. Please try again.')); }
+    } catch (e: any) {
+      // At the SoDEX key limit: point the user to Import / Reconnect instead of retrying a registration that will be refused.
+      if (e instanceof KeyCapError) { setMode('import'); setErr(e.message); }
+      else setErr(userFacingError(e, 'Could not enable trading. Please try again.'));
+    }
     finally { setBusy(false); }
   };
 
@@ -1849,16 +1909,18 @@ function KeyModal() {
         <p className="text-xs leading-relaxed text-zinc-400">
           Orders on SoDEX are signed by an <b className="text-zinc-200">API key</b>, so your wallet does not pop up for every trade. The key is generated in this browser, registered with <b className="text-zinc-200">one wallet signature</b>, and its private part never leaves this tab.
         </p>
-        <Segmented value={mode} onChange={setMode} options={[{ value: 'create', label: 'Create new key' }, { value: 'import', label: 'Import existing key' }]} />
+        <Segmented value={mode} onChange={setMode} options={[{ value: 'create', label: S.canReuseKey ? 'Use existing key' : 'Create new key' }, { value: 'import', label: 'Import / Reconnect' }]} />
         {mode === 'create' ? (
           <div className="space-y-2 rounded-2xl border border-white/[0.07] bg-black/30 p-3 text-xs text-zinc-400">
-            <Row k="Registers on" v={`${NETS[S.net].label} · account #${S.accountID ?? '–'}`} />
-            <Row k="Lifetime" v="24 hours" />
+            <Row k={S.canReuseKey ? 'Existing key' : 'Registers on'} v={S.canReuseKey && S.key ? S.key.name : `${NETS[S.net].label} · account #${S.accountID ?? '–'}`} />
+            <Row k="Lifetime" v={S.canReuseKey ? 'Until it expires' : '24 hours'} />
             <Row k="Stored" v="This tab only (sessionStorage)" />
+            {S.canReuseKey && <p className="pt-1 text-[11px] text-zinc-500">A key from this tab is still valid, so it is reused. No wallet signature and no new key.</p>}
           </div>
         ) : (
           <div className="space-y-3">
-            <Field label="Key name" hint="as shown on sodex.com/apikeys"><input value={name} onChange={(e) => setName(e.target.value)} placeholder="my-bot-key-01" className="h-10 w-full rounded-xl border border-white/10 bg-black/30 px-3 text-sm text-zinc-100 outline-none focus:border-orange-500/60" /></Field>
+            <p className="text-[11px] leading-relaxed text-zinc-500">Reconnect a key you saved earlier. SoDEX cannot give a private key back, so if you no longer have it, remove an unused key at sodex.com/apikeys and create a new one. The key is checked against your SoDEX account here in the browser and is never sent anywhere.</p>
+            <Field label="Key name" hint="optional if SoDEX lists it · as shown on sodex.com/apikeys"><input value={name} onChange={(e) => setName(e.target.value)} placeholder="my-bot-key-01" className="h-10 w-full rounded-xl border border-white/10 bg-black/30 px-3 text-sm text-zinc-100 outline-none focus:border-orange-500/60" /></Field>
             <Field label="Private key" hint="0x…"><input type="password" autoComplete="off" value={pk} onChange={(e) => setPk(e.target.value)} placeholder="0x…" className="tnum h-10 w-full rounded-xl border border-white/10 bg-black/30 px-3 text-sm text-zinc-100 outline-none focus:border-orange-500/60" /></Field>
             <p className="text-[11px] text-zinc-600">Use an API key, never your wallet's private key.</p>
           </div>
@@ -1868,8 +1930,8 @@ function KeyModal() {
         </Notice>
         {err && <Notice tone="error">{err}</Notice>}
         {enabled ? <SuccessMark title="Trading enabled" sub="Your trading key is active for this tab." /> : (
-        <Button variant="primary" size="lg" className="w-full" loading={busy} onClick={go} disabled={mode === 'import' && (!name || !pk)}>
-          {mode === 'create' ? 'Sign & enable trading' : 'Import key'}
+        <Button variant="primary" size="lg" className="w-full" loading={busy} onClick={go} disabled={mode === 'import' && !pk}>
+          {mode === 'create' ? (S.canReuseKey ? 'Use existing key' : 'Sign & enable trading') : 'Reconnect key'}
         </Button>)}
       </div>
     </Modal>
@@ -3060,7 +3122,7 @@ function Onboarding() {
     { done: !!S.wallet, label: 'Connect your wallet', sub: 'Shares your address only', act: () => S.setUi('connect', true) },
     { done: !!S.accountID, label: 'Fund your SoDEX account', sub: 'Deposit on sodex.com (BTC, ETH, SOL, USDC…)', act: () => window.open(SODEX_SITE, '_blank') },
     { done: S.keyValid, label: 'Enable trading', sub: 'One signature, key stays in this tab', act: () => S.setUi('key', true) },
-    ...(S.builder.enabled ? [{ done: S.builder.active, label: 'Approve the SoSwapDEX fee', sub: `One signature, max ${bpText(S.builder.fee)} per fill. Optional, revocable`, act: () => { if (!S.accountID) { S.toast('err', 'Fund your SoDEX account first.'); return; } S.builder.approve().then(() => S.toast('ok', 'SoSwapDEX fee approved.')).catch((e: any) => S.toast('err', userFacingError(e, 'Could not approve.'))); } }] : []),
+    ...(S.builder.enabled ? [{ done: S.builder.active, label: 'Approve the SoSwapDEX fee', sub: `One signature, max ${bpText(S.builder.fee)} per fill. Optional, revocable`, act: () => { if (!S.accountID) { S.toast('err', 'Fund your SoDEX account first.'); return; } S.builder.approve().then((r) => S.toast('ok', r === 'already' ? FEE_APPROVAL_ALREADY : 'SoSwapDEX fee approved.')).catch((e: any) => S.toast('err', userFacingError(e, 'Could not approve.'))); } }] : []),
     { done: swapped, label: 'Make your first swap', sub: 'Pick a pair, preview the route, sign in your wallet', act: () => S.setView('swap') },
   ];
   if (steps.every((s) => s.done)) return null;
@@ -6960,9 +7022,9 @@ function PerpOrderForm({ sym, t, acct, form, setForm, risk, setRisk, reload, bui
   const approveFee = async () => {
     setFeeBusy(true);
     try {
-      await S.builder.approve(acct?.aid ?? undefined);
+      const r = await S.builder.approve(acct?.aid ?? undefined, 'perps');
       const f = await reloadBuilder();
-      if (f > 0) S.toast('ok', 'SoSwapDEX fee approved. You can place your order now.');
+      if (f > 0) S.toast('ok', r === 'already' ? 'SoSwapDEX fee is already approved. You can place your order now.' : 'SoSwapDEX fee approved. You can place your order now.');
       else { setFeeUnsupported(true); S.toast('info', 'Approval sent, but SoDEX has not listed it for Perps yet. You can still trade.'); }
     } catch (e: any) {
       if (isUserRejected(e)) S.toast('err', 'Approval cancelled. Nothing was signed.');

@@ -174,7 +174,7 @@ export function isKeyGone(e: unknown): boolean {
   return isKeyGoneText(raw) || isKeyGoneText(msg) || /trading session has ended/i.test(msg);
 }
 
-const ALREADY_FRIENDLY = /please try again|tap enable trading|sodex account already has 10|not enough balance|could not reach sodex|sodex is (slow|busy)|too many requests|trading session/i;
+const ALREADY_FRIENDLY = /please try again|already has \d+ api keys|tap enable trading|sodex account already has 10|not enough balance|could not reach sodex|sodex is (slow|busy)|too many requests|trading session/i;
 
 export function looksLikeRawSodex(s: string): boolean {
   return /^(spot|perps|futures|bolt|spark)\s*:/i.test(s) || /api key error/i.test(s) || /error:\s*/i.test(s);
@@ -186,6 +186,10 @@ export function friendlySodexError(raw: string): string {
   if (ALREADY_FRIENDLY.test(s) && !looksLikeRawSodex(s)) return s;
   if (isKeyGoneText(s)) {
     return 'Your trading session has ended. Tap Enable trading to start a new one, then try again.';
+  }
+  if (isKeyCapText(s)) {
+    const n = parseKeyCap(s);
+    return `This SoDEX account already has ${n != null ? `${n} API keys` : 'the maximum number of API keys'}. Remove an unused one at sodex.com/apikeys, then try again.`;
   }
   if (/maximum number of api keys|too many api keys|reached maximum/i.test(s) || (/api keys/i.test(s) && /maximum|limit|cap/i.test(s))) {
     return 'This SoDEX account already has 10 API keys. Remove an unused one at sodex.com/apikeys, then try again.';
@@ -222,3 +226,94 @@ export const REGISTER_KEY_FAILED =
 
 export const KEYS_AT_CAP =
   'This SoDEX account already has 10 API keys. Remove an unused one at sodex.com/apikeys, then try again.';
+
+/** SoDEX answers "Failed to create new key: Already have 5 keys. Please remove some keys before creating a new one." */
+export function isKeyCapText(s: string): boolean {
+  return /already have \d+ keys?/i.test(s) || /remove some keys/i.test(s);
+}
+export function parseKeyCap(s: string): number | null {
+  const m = /already have (\d+) keys?/i.exec(s);
+  return m ? Number(m[1]) : null;
+}
+
+/** Thrown instead of asking the wallet to sign a registration that SoDEX would refuse. Carries no secrets. */
+export class KeyCapError extends Error {
+  used: number | null;
+  soswapNames: string[];
+  constructor(used: number | null, soswapNames: string[] = []) {
+    const n = used != null ? `${used} API keys` : 'the maximum number of API keys';
+    super(
+      `This SoDEX account already has ${n}, so a new one cannot be created.` +
+      (soswapNames.length ? ` SoSwapDEX keys on the account: ${soswapNames.slice(0, 5).join(', ')}.` : '') +
+      ' The private part of a key cannot be recovered from SoDEX. If you saved it, use Import / Reconnect. Otherwise remove an unused key at sodex.com/apikeys, then try again.',
+    );
+    this.name = 'KeyCapError';
+    this.used = used;
+    this.soswapNames = soswapNames;
+  }
+}
+
+export type StoredKeyLike = { name: string; pk: string; address: string; accountID: number; expiresAt: number; net: string; owner: string };
+
+/** A locally stored key may be reused when it belongs to this wallet, network and account and is not about to expire. */
+export function storedKeyUsable(
+  k: StoredKeyLike | null | undefined,
+  ctx: { owner: string | undefined; net: string; accountID: number | null | undefined; now: number },
+): boolean {
+  return !!(k && k.pk && ctx.owner && k.owner === ctx.owner && k.net === ctx.net && ctx.accountID != null && k.accountID === ctx.accountID && k.expiresAt > ctx.now + 30_000);
+}
+
+/** true = SoDEX lists it, false = SoDEX does not list it (revoked/expired), undefined = listing unavailable. */
+export function keyRegistered(listed: ApiKeyList | null | undefined, k: { name: string; address: string }): boolean | undefined {
+  if (!listed) return undefined;
+  const all = [...(listed.spot ?? []), ...(listed.perps ?? [])];
+  const addr = k.address.toLowerCase();
+  return all.some((x) => x.name === k.name || (typeof x.publicKey === 'string' && x.publicKey.toLowerCase() === addr));
+}
+
+/** Find a listed key by its public address (derived locally from a private key the user imports). */
+export function findListedKeyByAddress(listed: ApiKeyList | null | undefined, address: string): ApiKeyInfo | undefined {
+  const addr = address.toLowerCase();
+  return [...(listed?.spot ?? []), ...(listed?.perps ?? [])].find((x) => typeof x.publicKey === 'string' && x.publicKey.toLowerCase() === addr);
+}
+
+export function soswapKeyNames(listed: ApiKeyList | null | undefined): string[] {
+  const names = new Set<string>();
+  for (const x of [...(listed?.spot ?? []), ...(listed?.perps ?? [])]) if (/^soswap-/i.test(x.name)) names.add(x.name);
+  return [...names];
+}
+
+/** Listing may return seconds or milliseconds; 0/absent means no expiry reported. */
+export function keyExpiryMs(v: unknown): number | undefined {
+  const n = Number(v);
+  if (!Number.isFinite(n) || n <= 0) return undefined;
+  return n < 1e12 ? n * 1000 : n;
+}
+
+/* ───────── builder-fee approval helpers (pure, so they can be tested) ───────── */
+
+/** The approval already on SoDEX covers what this app asks for, so no signature is needed. */
+export function feeAlreadyApproved(currentRate: number, wantedRate: number): boolean {
+  return Number.isFinite(currentRate) && currentRate > 0 && currentRate >= wantedRate;
+}
+
+export const FEE_APPROVAL_ALREADY = 'The SoSwapDEX fee is already approved. Nothing to sign.';
+export const FEE_APPROVAL_OK = 'SoSwapDEX fee approved.';
+
+/**
+ * User-facing text for a failed fee approval. Only called after the approval status was re-read and
+ * it is still NOT approved, so "nothing was charged" is accurate (an approval moves no funds anyway).
+ * Code -1 is SoDEX's generic failure: it is usually transient (clock/nonce window, gateway hiccup), so one
+ * manual retry after a short wait is the right advice. The wallet signature is bound to a nonce, so the
+ * app never re-sends it on its own.
+ */
+export function feeApprovalFailure(code: number | string | undefined, raw?: string, debug = false): string {
+  const c = code ?? -1;
+  const specific = raw && !looksLikeRawSodex(raw) ? '' : friendlySodexError(raw ?? '');
+  const base = Number(c) === -1
+    ? 'SoDEX did not confirm the fee approval right now. Nothing was charged and no funds moved. Wait a few seconds, then tap Approve again. If it keeps failing, send us this code: -1.'
+    : `SoDEX did not accept the fee approval. Nothing was charged. Please try again, and send us this code if it repeats: ${c}.`;
+  const hint = /signature|expired|already been used/i.test(specific) ? ` (${specific})` : '';
+  const details = debug && raw ? ` Details for support: ${String(raw).replace(/https?:\/\/\S+/g, '').slice(0, 160)}` : '';
+  return base + hint + details;
+}

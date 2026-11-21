@@ -117,3 +117,73 @@ test('friendlySodexError: only real shortages claim a balance problem', () => {
   assert.doesNotMatch(friendlySodexError('account balance record not found'), /Not enough balance/);
   assert.doesNotMatch(friendlySodexError('margin mode cannot change'), /Not enough balance/);
 });
+
+import {
+  FEE_APPROVAL_ALREADY, KeyCapError, feeAlreadyApproved, feeApprovalFailure, findListedKeyByAddress,
+  isKeyCapText, keyExpiryMs, keyRegistered, parseKeyCap, soswapKeyNames, storedKeyUsable,
+} from '../lib/sodex-keys.ts';
+
+test('SoDEX "Already have 5 keys" is recognised, parsed and mapped to a friendly message', () => {
+  const raw = 'Failed to create new key: Already have 5 keys. Please remove some keys before creating a new one.';
+  assert.ok(isKeyCapText(raw));
+  assert.equal(parseKeyCap(raw), 5);
+  assert.match(friendlySodexError(raw), /already has 5 API keys/);
+  assert.ok(!looksLikeRawSodex(friendlySodexError(raw)));
+  assert.equal(isKeyCapText('API key not found'), false);
+  assert.equal(parseKeyCap('nothing here'), null);
+});
+
+test('KeyCapError explains the situation and never carries key material', () => {
+  const e = new KeyCapError(5, ['soswap-ab12cd34', 'soswap-ef56gh78']);
+  assert.match(e.message, /5 API keys/);
+  assert.match(e.message, /soswap-ab12cd34/);
+  assert.match(e.message, /cannot be recovered/);
+  assert.match(e.message, /Import \/ Reconnect/);
+  assert.ok(!/0x[0-9a-f]{20,}/i.test(e.message));
+});
+
+const KEY = { name: 'soswap-ab12cd34', pk: '0x' + '11'.repeat(32), address: '0x' + 'ab'.repeat(20), accountID: 7, expiresAt: 10_000_000, net: 'mainnet', owner: '0xowner' };
+const CTX = { owner: '0xowner', net: 'mainnet', accountID: 7, now: 1_000_000 };
+
+test('a stored key is reusable only for the same wallet, network and account and while not expiring', () => {
+  assert.equal(storedKeyUsable(KEY, CTX), true);
+  assert.equal(storedKeyUsable(null, CTX), false);
+  assert.equal(storedKeyUsable(KEY, { ...CTX, owner: '0xother' }), false);
+  assert.equal(storedKeyUsable(KEY, { ...CTX, net: 'testnet' }), false);
+  assert.equal(storedKeyUsable(KEY, { ...CTX, accountID: 8 }), false);
+  assert.equal(storedKeyUsable(KEY, { ...CTX, accountID: null }), false);
+  assert.equal(storedKeyUsable(KEY, { ...CTX, now: 9_990_000 }), false, 'within 30s of expiry');
+  assert.equal(storedKeyUsable({ ...KEY, pk: '' }, CTX), false);
+});
+
+test('keyRegistered distinguishes listed, revoked and unknown', () => {
+  const listed = { spot: [{ name: 'other', publicKey: '0x' + 'ab'.repeat(20).toUpperCase() }], perps: [] };
+  assert.equal(keyRegistered(listed, KEY), true, 'matched by public address, case-insensitive');
+  assert.equal(keyRegistered({ spot: [{ name: 'soswap-ab12cd34' }], perps: [] }, KEY), true, 'matched by name');
+  assert.equal(keyRegistered({ spot: [{ name: 'x' }], perps: [] }, KEY), false);
+  assert.equal(keyRegistered(null, KEY), undefined);
+  assert.equal(findListedKeyByAddress(listed, KEY.address)?.name, 'other');
+  assert.deepEqual(soswapKeyNames({ spot: [{ name: 'soswap-a' }, { name: 'mine' }], perps: [{ name: 'soswap-a' }, { name: 'soswap-b' }] }), ['soswap-a', 'soswap-b']);
+  assert.equal(keyExpiryMs(1_800_000_000), 1_800_000_000_000);
+  assert.equal(keyExpiryMs(1_800_000_000_000), 1_800_000_000_000);
+  assert.equal(keyExpiryMs(0), undefined);
+  assert.equal(keyExpiryMs('x'), undefined);
+});
+
+test('fee approval: existing approval is detected, -1 gets a clear retry message', () => {
+  assert.equal(feeAlreadyApproved(30, 30), true);
+  assert.equal(feeAlreadyApproved(50, 30), true);
+  assert.equal(feeAlreadyApproved(10, 30), false);
+  assert.equal(feeAlreadyApproved(0, 30), false);
+  assert.equal(feeAlreadyApproved(NaN, 30), false);
+  assert.match(FEE_APPROVAL_ALREADY, /already approved/);
+  const m1 = feeApprovalFailure(-1, 'spot: some raw error');
+  assert.match(m1, /did not confirm/);
+  assert.match(m1, /Nothing was charged/);
+  assert.match(m1, /tap Approve again/);
+  assert.match(m1, /code: -1/);
+  assert.ok(!m1.includes('some raw error'), 'raw text hidden unless debug');
+  assert.match(feeApprovalFailure(-1, 'oops', true), /Details for support: oops/);
+  assert.match(feeApprovalFailure(400, 'bad'), /did not accept.*code if it repeats: 400/);
+  assert.doesNotMatch(feeApprovalFailure(-1, 'insufficient margin'), /Not enough balance/);
+});
