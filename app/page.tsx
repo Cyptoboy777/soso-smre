@@ -4469,7 +4469,7 @@ async function maybeWithApproval(provider: any, owner: string, q: NormalizedQuot
   } catch {
     // If allowance cannot be read, ask for approval as its own signed step rather than guessing.
   }
-  return [approvalStep(q.originCurrency, spender, q.originChainId, owner), ...q.steps];
+  return [approvalStep(q.originCurrency, spender, q.originChainId, owner, q.inAmountRaw), ...q.steps];
 }
 
 function WithdrawPanel() {

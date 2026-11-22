@@ -27,11 +27,14 @@ export function txParams(step: RouteStep): Record<string, string> | null {
 
 const ERC20_APPROVE_PREFIX = '0x095ea7b3';
 
-/** Minimal ERC-20 approve calldata (spender, max uint256). */
-export function approveCalldata(spender: string): string {
-  const addr = spender.toLowerCase().replace(/^0x/, '').padStart(64, '0');
-  const max = 'f'.repeat(64);
-  return ERC20_APPROVE_PREFIX + addr + max;
+/** ERC-20 approve calldata limited to the exact quoted input amount. */
+export function approveCalldata(spender: string, amount: string): string {
+  if (!/^0x[0-9a-fA-F]{40}$/.test(spender)) throw new Error('Invalid approval spender.');
+  if (!/^\d+$/.test(amount)) throw new Error('Invalid approval amount.');
+  const value = BigInt(amount);
+  if (value <= 0n || value >= 1n << 256n) throw new Error('Invalid approval amount.');
+  const addr = spender.toLowerCase().slice(2).padStart(64, '0');
+  return ERC20_APPROVE_PREFIX + addr + value.toString(16).padStart(64, '0');
 }
 
 export function allowanceCalldata(owner: string, spender: string): string {
@@ -61,13 +64,13 @@ export function needsApproval(originCurrency: string): boolean {
   return !!originCurrency && originCurrency.toLowerCase() !== NATIVE_ADDRESS.toLowerCase();
 }
 
-export function approvalStep(token: string, spender: string, chainId: number, owner: string): RouteStep {
+export function approvalStep(token: string, spender: string, chainId: number, owner: string, amount: string): RouteStep {
   return {
     kind: 'transaction',
     chainId,
-    action: 'Approve the token',
-    description: 'Your wallet will ask you to allow the route contract to move this token. This is a standard approval. Nothing else is sent in this step.',
-    tx: { from: owner, to: token, data: approveCalldata(spender), value: '0x0', chainId },
+    action: 'Approve the quoted amount',
+    description: 'Your wallet will allow the route contract to move only the exact amount in this quote. Nothing else is sent in this step.',
+    tx: { from: owner, to: token, data: approveCalldata(spender, amount), value: '0x0', chainId },
   };
 }
 
