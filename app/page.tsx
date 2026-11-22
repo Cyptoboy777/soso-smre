@@ -1330,7 +1330,8 @@ function useSoSwapStore(): Store {
       const results = await placeOrders(net, key, orders, fee > 0 ? { id: BUILDER_ID, fee } : undefined);
       setFlights((f) => f.map((x) => {
         const r = results.find((row) => row.clOrdID === x.clOrdID);
-        if (!r || x.status !== 'submitting') return x;
+        if (x.status !== 'submitting') return x;
+        if (!r) return { ...x, status: 'submitted', detail: 'Exchange confirmation pending; checking status.' };
         if (r.code !== 0) return { ...x, status: 'failed', detail: 'The exchange did not accept this order.', settledAt: Date.now() };
         return { ...x, status: 'submitted', orderID: r.orderID };
       }));
