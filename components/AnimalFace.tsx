@@ -1,9 +1,11 @@
 'use client';
 import React, { useId } from 'react';
+import Robot3D from './Robot3D';
 
 /** 'orb' is the plain SoSwapDEX AI helmet-orb; the others add an animal's ears / horns and a little nose + mouth to it. */
-export type AnimalKind = 'orb' | 'dog' | 'fox' | 'cat' | 'bear' | 'bull' | 'owl';
+export type AnimalKind = 'robot' | 'orb' | 'dog' | 'fox' | 'cat' | 'bear' | 'bull' | 'owl';
 export const ANIMALS: { kind: AnimalKind; label: string; vibe: string }[] = [
+  { kind: 'robot', label: '3D Robot', vibe: 'Futuristic' },
   { kind: 'orb', label: 'SoSwapDEX orb', vibe: 'Classic' },
   { kind: 'dog', label: 'Dog', vibe: 'Loyal' },
   { kind: 'fox', label: 'Fox', vibe: 'Quick & clever' },
@@ -93,6 +95,7 @@ function Features({ kind }: { kind: AnimalKind }) {
 export default function AnimalOrb({ kind, talking = false, compact = false, size, still = false, stage = false, expression }: { kind: AnimalKind; talking?: boolean; compact?: boolean; size?: number; still?: boolean; stage?: boolean; expression?: Expression }) {
   const expr: Expression = expression ?? (talking ? 'talk' : 'happy');
   const uid = useId().replace(/[^a-zA-Z0-9]/g, '');
+  if (kind === 'robot') return <Robot3D size={size} talking={talking} compact={compact} still={still} stage={stage} expression={expression} />;
   const id = (n: string) => `${uid}${n}`;
   const url = (n: string) => `url(#${id(n)})`;
   const round = kind === 'owl';

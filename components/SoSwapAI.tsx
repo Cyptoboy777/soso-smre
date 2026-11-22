@@ -4,7 +4,8 @@ import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import "./soswap-ai.css";
 import AnimalOrb, { ANIMALS, type AnimalKind, type Expression } from "./AnimalFace";
-import { BarChart3, Newspaper, Repeat, Search } from "lucide-react";
+import { BarChart3, Newspaper, Repeat, Search, Volume2, VolumeX } from "lucide-react";
+import { primeAudio, speak, stopSpeaking, voiceSupported } from "@/lib/voice";
 
 type Message = { role: "user" | "assistant"; content: string };
 
@@ -63,7 +64,8 @@ function Hero({ kind, busy, onAsk }: { kind: AnimalKind; busy: boolean; onAsk: (
   );
 }
 
-const BOT_KEY = "soswap.bot.v1";
+const BOT_KEY = "soswap.bot.v2";
+const VOICE_KEY = "soswap.voice.v1";
 
 export default function SoSwapAI() {
   const [open, setOpen] = useState(false);
@@ -71,7 +73,24 @@ export default function SoSwapAI() {
   const [busy, setBusy] = useState(false);
   const [listening, setListening] = useState(false);
   const [showPick, setShowPick] = useState(false);
-  const [kind, setKind] = useState<AnimalKind>("orb");
+  const [kind, setKind] = useState<AnimalKind>("robot");
+  const [voiceOn, setVoiceOn] = useState(false);
+  const [speaking, setSpeaking] = useState(false);
+  const [canSpeak, setCanSpeak] = useState(false);
+  const voiceRef = useRef(false);
+  const talking = busy || speaking;
+  useEffect(() => {
+    setCanSpeak(voiceSupported());
+    try { if (localStorage.getItem(VOICE_KEY) === "1") { setVoiceOn(true); voiceRef.current = true; } } catch { /* storage unavailable */ }
+    return () => stopSpeaking();
+  }, []);
+  const say = (text: string) => speak(text, { start: () => setSpeaking(true), end: () => setSpeaking(false) });
+  const toggleVoice = () => {
+    const on = !voiceOn;
+    setVoiceOn(on); voiceRef.current = on;
+    try { localStorage.setItem(VOICE_KEY, on ? "1" : "0"); } catch { /* ignore */ }
+    if (on) { primeAudio(); say("Voice is on."); } else { stopSpeaking(); setSpeaking(false); }
+  };
   useEffect(() => {
     try { const k = localStorage.getItem(BOT_KEY) as AnimalKind | null; if (k && ANIMALS.some((a) => a.kind === k)) setKind(k); } catch { /* storage unavailable */ }
   }, []);
@@ -97,6 +116,7 @@ export default function SoSwapAI() {
     setMessages(next);
     setInput("");
     setBusy(true);
+    stopSpeaking(); setSpeaking(false);
 
     try {
       const response = await fetch("/api/assistant", {
@@ -106,10 +126,9 @@ export default function SoSwapAI() {
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Assistant request failed.");
-      setMessages((current) => [
-        ...current,
-        { role: "assistant", content: data.reply || "I couldn't form a reply. Please try again." },
-      ]);
+      const reply = data.reply || "I couldn't form a reply. Please try again.";
+      setMessages((current) => [...current, { role: "assistant", content: reply }]);
+      if (voiceRef.current) say(reply);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Something went wrong.";
       setMessages((current) => [
@@ -144,8 +163,10 @@ export default function SoSwapAI() {
     recognition.onerror = () => setListening(false);
     recognition.onresult = (event: any) => {
       const transcript = event.results?.[0]?.[0]?.transcript || "";
-      setInput((current) => current ? `${current} ${transcript}` : transcript);
+      if (voiceRef.current && transcript.trim()) void sendMessage(transcript);
+      else setInput((current) => current ? `${current} ${transcript}` : transcript);
     };
+    stopSpeaking(); setSpeaking(false); primeAudio();
     recognition.start();
   }
 
@@ -155,9 +176,9 @@ export default function SoSwapAI() {
         className="ss-launcher"
         type="button"
         aria-label={open ? "Close SoSwapDEX AI" : "Open SoSwapDEX AI"}
-        onClick={() => setOpen((value) => !value)}
+        onClick={() => { if (open) { stopSpeaking(); setSpeaking(false); } setOpen((value) => !value); }}
       >
-        {open ? <span className="ss-launcher__close">×</span> : <Orb compact kind={kind} talking={busy} />}
+        {open ? <span className="ss-launcher__close">×</span> : <Orb compact kind={kind} talking={talking} />}
         {!open && <span className="ss-launcher__ping" />}
       </button>
 
@@ -168,13 +189,16 @@ export default function SoSwapAI() {
           transition={{ duration: 0.26, ease: [0.22, 1, 0.36, 1] }} style={{ transformOrigin: "bottom right" }}>
           <header className="ss-panel__header">
             <div className="ss-panel__identity">
-              <button type="button" className="ss-panel__orbbtn" onClick={() => setShowPick((v) => !v)} aria-expanded={showPick} aria-label="Change bot face" title="Change bot face"><Orb compact kind={kind} talking={busy} /></button>
+              <button type="button" className="ss-panel__orbbtn" onClick={() => setShowPick((v) => !v)} aria-expanded={showPick} aria-label="Change bot face" title="Change bot face"><Orb compact kind={kind} talking={talking} /></button>
               <div>
                 <div className="ss-panel__name">SoSwapDEX AI <span className="ss-beta">BETA</span></div>
                 <div className="ss-panel__status"><i /> Your Web3 co-pilot</div>
               </div>
             </div>
-            <button className="ss-icon-button" onClick={() => setOpen(false)} aria-label="Close chat">×</button>
+            <div className="ss-panel__actions">
+              {canSpeak && <button type="button" className={`ss-icon-button ss-speaker ${voiceOn ? "is-on" : ""}`} onClick={toggleVoice} aria-pressed={voiceOn} aria-label={voiceOn ? "Turn robot voice off" : "Turn robot voice on"} title={voiceOn ? "Robot voice on. Replies are read aloud and the mic sends automatically." : "Turn on robot voice"}>{voiceOn ? <Volume2 size={18} /> : <VolumeX size={18} />}</button>}
+              <button className="ss-icon-button" onClick={() => { stopSpeaking(); setSpeaking(false); setOpen(false); }} aria-label="Close chat">×</button>
+            </div>
           </header>
 
           {showPick && <div className="ss-picker" role="group" aria-label="Choose your bot face">
@@ -188,16 +212,16 @@ export default function SoSwapAI() {
           }
 
           <main className="ss-chat">
-            {messages.length <= 1 && <Hero kind={kind} busy={busy} onAsk={(q) => sendMessage(q)} />}
+            {messages.length <= 1 && <Hero kind={kind} busy={talking} onAsk={(q) => sendMessage(q)} />}
             {messages.map((message, index) => (
               <div className={`ss-message ss-message--${message.role}`} key={`${message.role}-${index}`}>
-                {message.role === "assistant" && <div className="ss-message__avatar"><Orb compact kind={kind} talking={busy} /></div>}
-                <div className="ss-message__bubble">{message.content}</div>
+                {message.role === "assistant" && <div className="ss-message__avatar"><Orb compact kind={kind} talking={talking && index === messages.length - 1} /></div>}
+                <div className="ss-message__bubble">{message.content}{message.role === "assistant" && canSpeak && index > 0 && <button type="button" className="ss-replay" onClick={() => { primeAudio(); say(message.content); }} aria-label="Read this reply aloud" title="Read aloud"><Volume2 size={13} /></button>}</div>
               </div>
             ))}
             {busy && (
               <div className="ss-message ss-message--assistant">
-                <div className="ss-message__avatar"><Orb compact kind={kind} talking={busy} /></div>
+                <div className="ss-message__avatar"><Orb compact kind={kind} talking={talking} /></div>
                 <div className="ss-message__bubble ss-typing"><i /><i /><i /><span>Thinking</span></div>
               </div>
             )}
@@ -240,7 +264,7 @@ export default function SoSwapAI() {
               type="button"
               onClick={startVoiceInput}
               aria-label="Use voice input"
-              title="Voice input"
+              title={voiceOn ? "Speak. Your question is sent when you stop talking. Uses your browser's speech service." : "Voice input (uses your browser's speech service)"}
             >{listening ? "●" : "⌁"}</button>
             <button className="ss-send" type="submit" disabled={!input.trim() || busy} aria-label="Send message">↑</button>
           </form>
