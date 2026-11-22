@@ -8,7 +8,7 @@ import { normalizeLifiQuote } from '../lib/routes/lifi.ts';
 import { getNormalizedQuote, readFeeEnv } from '../lib/routes/quote.ts';
 import { allowRequest, resetRateLimit } from '../lib/routes/rateLimit.ts';
 import { validateQuoteBody, validateRequestId, validateTxHash } from '../lib/routes/validate.ts';
-import { nextPollMs, statusLabel } from '../lib/routes/execute.ts';
+import { approveCalldata, approvalStep, nextPollMs, statusLabel } from '../lib/routes/execute.ts';
 import type { QuoteInput } from '../lib/routes/types.ts';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -56,6 +56,18 @@ test('malformed addresses, chain ids and amounts are rejected', () => {
   assert.equal(validateQuoteBody({ ...input, amount: '12.5' }).ok, false);
   assert.equal(validateQuoteBody({ ...input, amount: '0' }).ok, false);
   assert.equal(validateQuoteBody({ ...input, originChainId: 999 }).ok, false);
+});
+
+test('ERC-20 approval is limited to the exact quoted amount', () => {
+  const spender = '0x2222222222222222222222222222222222222222';
+  const amount = '1000000';
+  const calldata = approveCalldata(spender, amount);
+  assert.equal(calldata, '0x095ea7b3' + '0'.repeat(24) + '2'.repeat(40) + BigInt(amount).toString(16).padStart(64, '0'));
+  assert.equal(approvalStep(input.originCurrency, spender, input.originChainId, input.user, amount).tx?.data, calldata);
+  assert.throws(() => approveCalldata(spender, '0'));
+  assert.throws(() => approveCalldata(spender, '1e6'));
+  assert.throws(() => approveCalldata(spender, (1n << 256n).toString()));
+  assert.throws(() => approveCalldata('not-an-address', amount));
 });
 
 test('request id and tx hash are strictly whitelisted', () => {
