@@ -28,7 +28,7 @@ import HeroOrbit from '@/components/motion/HeroOrbit';
 import SuccessMark from '@/components/motion/SuccessMark';
 import QuoteRefreshRing from '@/components/motion/QuoteRefreshRing';
 import PendingOrdersPill, { type FlightRow } from '@/components/motion/PendingOrdersPill';
-import { drawShareCard, drawWinCard, canvasToBlob, SHARE_W, SHARE_H, type ShareData } from '@/components/shareCard';
+import { drawShareCard, drawStoryCard, drawWinCard, canvasToBlob, SHARE_W, SHARE_H, type ShareData } from '@/components/shareCard';
 import { mergeFills, buildTrades, weeklyInsight, isShareable, shareText, recordSnapshot, portfolioChange, normSide, type JFill as JournalFill, type JTrade, type Insight, type PortfolioSnap } from '@/lib/journal';
 import { evaluateWatch, readSettings, readSeen, DEFAULT_WATCH, EMPTY_SEEN, type WatchSettings, type WatchSeen, type WatchItem } from '@/lib/watch-alerts';
 import { buildBrief, briefIsEmpty } from '@/lib/daily-brief';
@@ -2491,6 +2491,23 @@ function SwapPanel() {
   }, []);
   const setLeaveFees = (v: boolean) => { setLeaveFeesState(v); lsSet(LEAVE_FEES_KEY, v); };
 
+  useEffect(() => {
+    const apply = () => {
+      const f = swapFill;
+      if (!f.from || !f.to) return;
+      const a = S.assetByKey[f.from], b = S.assetByKey[f.to];
+      if (!a || !b || a.key === b.key) { swapFill.from = swapFill.to = swapFill.amount = undefined; return; }
+      setFromKey(f.from); setToKey(f.to); setAmount(f.amount ?? '');
+      const r = !b.isQuote ? b : !a.isQuote ? a : null;
+      if (r?.symbol) S.setSelected(r.symbol.name);
+      swapFill.from = swapFill.to = swapFill.amount = undefined;
+    };
+    apply();
+    window.addEventListener('soswap-swap-apply', apply);
+    return () => window.removeEventListener('soswap-swap-apply', apply);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const fromA = S.assetByKey[fromKey], toA = S.assetByKey[toKey];
   const slip = clamp(parseFloat(S.slippage) || 0.5, 0.01, 20);
 
@@ -3175,8 +3192,27 @@ function TokenChart({ tokens }: { tokens: DailyArticle['tokens'] }) {
 }
 
 /** One article per day for everyone. The server writes it once and caches it for 24 hours, so opening it costs no AI credits. */
+/** Draws the story card on this device and shares or saves it. Nothing is uploaded. */
+async function shareStory(d: DailyArticle, mode: 'share' | 'download', say: (s: string) => void) {
+  try {
+    const c = document.createElement('canvas');
+    await drawStoryCard(c, { headline: d.headline, sector: d.sector, day: d.day, tokens: d.tokens });
+    const blob = await canvasToBlob(c);
+    if (!blob) { say('Could not make the image. Please try again.'); return; }
+    const file = new File([blob], `soswap-market-story-${d.day}.png`, { type: 'image/png' });
+    const url = window.location.origin + '/';
+    const text = `${d.headline}. SoSwap Market Story, ${d.day}. ${url}`;
+    const nav: any = navigator;
+    if (mode === 'share' && nav.canShare?.({ files: [file] })) { await nav.share({ files: [file], text }); return; }
+    if (mode === 'share' && nav.share) { await nav.share({ text, url }); return; }
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = file.name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+    say(mode === 'share' ? 'Sharing is not available here, so the image was saved.' : 'Image saved.');
+  } catch (e: any) { if (e?.name !== 'AbortError') say('Sharing is not available here. Use Download image.'); }
+}
+
 function DailyArticleCard() {
   const S = useS();
+  const [note, setNote] = useState('');
   const [st, setSt] = useState<{ s: 'loading' | 'ok' | 'err'; d?: DailyArticle }>({ s: 'loading' });
   const load = useCallback(async () => {
     setSt({ s: 'loading' });
@@ -3213,6 +3249,11 @@ function DailyArticleCard() {
       </div>
       {d.watch.length > 0 && <div className="mx-4 mb-3 rounded-lg bg-black/30 p-2.5 text-[12px] text-zinc-400"><b className="text-zinc-200">Double-check: </b>{d.watch.join(' · ')}</div>}
       {d.sources.length > 0 && <div className="mx-4 mb-3 text-[11px] text-zinc-500">Sources (SoSoValue): {d.sources.map((x, i) => <span key={i}>{i > 0 && ' · '}<a href={x.url} target="_blank" rel="noopener noreferrer" className="underline hover:text-zinc-300">{x.source || 'Link'}</a></span>)}</div>}
+      <div className="mx-4 mb-3 flex flex-wrap items-center gap-2">
+        <Button size="sm" variant="primary" onClick={() => void shareStory(d, 'share', setNote)}>Share story</Button>
+        <Button size="sm" onClick={() => void shareStory(d, 'download', setNote)}>Download image</Button>
+        {note && <span className="text-[11px] text-orange-300" role="status">{note}</span>}
+      </div>
       <p className="border-t border-white/[0.06] px-4 py-2.5 text-[10px] text-zinc-500">Written by AI from SoSoValue news and SoDEX prices. It can be wrong and is not financial advice. Naming a token is not a suggestion to buy or sell it. Trading can lose money.</p>
     </Card>
   );
@@ -6612,6 +6653,8 @@ function PlanReview() {
 const skillIntent: { tab: SkillTab | null; pair?: string } = { tab: null };
 /** One-shot handoff from Trade Check to Swap so Route Preview opens on the same pair and size. */
 const swapIntent: { pair?: string; side?: 'buy' | 'sell'; usd?: string; focus?: boolean } = {};
+/** From the assistant's voice/typed swap command: one-shot values for the Swap form. Filling the form never sends anything. */
+const swapFill: { from?: string; to?: string; amount?: string } = {};
 const limitPrefill: { pair?: string; side?: 'buy' | 'sell'; price?: string; qty?: string } = {};
 function armLimitPrefill(p: { pair: string; side: 'buy' | 'sell'; price: string; qty: string }) {
   limitPrefill.pair = p.pair; limitPrefill.side = p.side; limitPrefill.price = p.price; limitPrefill.qty = p.qty;
@@ -7488,6 +7531,20 @@ function WalletButton() {
 function Shell() {
   const S = useS();
   const view = S.view;
+  useEffect(() => {
+    const onFill = (e: Event) => {
+      const d = (e as CustomEvent).detail as { from: string; to: string; amount: string; result?: string };
+      const a = S.assetByKey[d.from], b = S.assetByKey[d.to];
+      if (!a || !b) { d.result = 'unknown'; return; }
+      swapFill.from = d.from; swapFill.to = d.to; swapFill.amount = d.amount;
+      S.setView('swap');
+      window.dispatchEvent(new Event('soswap-swap-apply'));
+      d.result = 'ok';
+      S.toast('ok', `Swap form filled: ${d.amount} ${d.from} to ${d.to}. Nothing was sent. Check the route, then sign it yourself.`);
+    };
+    window.addEventListener('soswap:swap-fill', onFill);
+    return () => window.removeEventListener('soswap:swap-fill', onFill);
+  }, [S]);
   useEffect(() => {
     document.documentElement.dataset.soswapView = view;
     return () => { delete document.documentElement.dataset.soswapView; };

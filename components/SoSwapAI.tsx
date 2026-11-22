@@ -5,6 +5,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import "./soswap-ai.css";
 import AnimalOrb, { ANIMALS, type AnimalKind, type Expression } from "./AnimalFace";
 import { BarChart3, Newspaper, Repeat, Search, Volume2, VolumeX } from "lucide-react";
+import { parseSwapCommand } from "@/lib/voice-command";
 import { primeAudio, speak, stopSpeaking, voiceSupported } from "@/lib/voice";
 
 type Message = { role: "user" | "assistant"; content: string };
@@ -115,6 +116,21 @@ export default function SoSwapAI() {
     const next = [...messages, { role: "user" as const, content: trimmed }];
     setMessages(next);
     setInput("");
+    const cmd = parseSwapCommand(trimmed);
+    if (cmd) {
+      // A swap request fills the Swap form on this device. Nothing is sent and nothing is signed.
+      const detail: { from: string; to: string; amount: string; result?: string } = { ...cmd };
+      window.dispatchEvent(new CustomEvent("soswap:swap-fill", { detail }));
+      if (detail.result) {
+        const reply = detail.result === "ok"
+          ? `Done. I filled the Swap form with ${cmd.amount} ${cmd.from} to ${cmd.to}. Nothing has been sent. Check the route and total cost, then sign it yourself.`
+          : `I could not find ${cmd.from} or ${cmd.to} on SoDEX. Check the names and try again.`;
+        setMessages((current) => [...current, { role: "assistant", content: reply }]);
+        if (voiceRef.current) say(reply);
+        if (detail.result === "ok" && window.matchMedia("(max-width: 520px)").matches) setOpen(false);
+        return;
+      }
+    }
     setBusy(true);
     stopSpeaking(); setSpeaking(false);
 

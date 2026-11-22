@@ -35,6 +35,7 @@ const watch = nodeTest('tests/watch-alerts.test.ts');
 const brief = nodeTest('tests/daily-brief.test.ts');
 const rateLimit = nodeTest('tests/rate-limit.test.ts');
 const safeUrl = nodeTest('tests/safe-url.test.ts');
+const voiceCmd = nodeTest('tests/voice-command.test.ts');
 
 function withTsExt(src) {
   return src.replaceAll(/from ['"](\.[^'"]+)['"]/g, (m, spec) => spec.endsWith('.ts') || spec.endsWith('.json') ? m : m.replace(spec, spec + '.ts'));
@@ -57,4 +58,4 @@ writeFileSync(join(r, 'tests', 'route-quote.test.ts'), readFileSync('tests/route
 const cfg = nodeTest(join(r, 'tests', 'sodex-config.test.ts'));
 const routes = nodeTest(join(r, 'tests', 'route-quote.test.ts'));
 
-process.exit((setup.status ?? 1) || (guard.status ?? 1) || (grid.status ?? 1) || (bt.status ?? 1) || (perps.status ?? 1) || (keys.status ?? 1) || (balances.status ?? 1) || (transfer.status ?? 1) || (swapUx.status ?? 1) || (journal.status ?? 1) || (watch.status ?? 1) || (brief.status ?? 1) || (rateLimit.status ?? 1) || (safeUrl.status ?? 1) || (cfg.status ?? 1) || (routes.status ?? 1));
+process.exit((setup.status ?? 1) || (guard.status ?? 1) || (grid.status ?? 1) || (bt.status ?? 1) || (perps.status ?? 1) || (keys.status ?? 1) || (balances.status ?? 1) || (transfer.status ?? 1) || (swapUx.status ?? 1) || (journal.status ?? 1) || (watch.status ?? 1) || (brief.status ?? 1) || (rateLimit.status ?? 1) || (safeUrl.status ?? 1) || (voiceCmd.status ?? 1) || (cfg.status ?? 1) || (routes.status ?? 1));
