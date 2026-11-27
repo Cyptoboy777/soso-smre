@@ -102,6 +102,7 @@ import {
   type RecentPair, type FlightStatus,
 } from '@/lib/swap-ux';
 import React, { createContext, useCallback, useContext, useEffect, useId, useMemo, useRef, useState } from 'react';
+import { WealthHub } from '@/components/wealth-hub';
 import {
   AlertTriangle, ArrowDownUp, ArrowUpRight, Bot, CalendarClock, Check, ChevronDown, Copy, ExternalLink,
   Grid3x3, History, Info, KeyRound, Layers, LineChart, Loader2, LogOut, Plug, Plus, RefreshCw, Search,
@@ -787,7 +788,7 @@ function quoteBuy(asks: Level[], funds: number) {
 
 /* ═════════════════════════ app store (context) ═════════════════════════ */
 
-type View = 'home' | 'swap' | 'perps' | 'markets' | 'cross' | 'bots' | 'skills' | 'guide' | 'portfolio';
+type View = 'home' | 'swap' | 'perps' | 'markets' | 'cross' | 'bots' | 'skills' | 'guide' | 'portfolio' | 'wealth';
 type ToastKind = 'ok' | 'err' | 'info';
 type WalletInfo = { id: string; name: string; icon?: string; provider: any };
 type Connected = { info: WalletInfo; address: string; chainId: number };
@@ -7488,6 +7489,7 @@ const NAV: { id: View; label: string; icon: React.ReactNode }[] = [
   { id: 'swap', label: 'Swap', icon: <ArrowDownUp className="h-[18px] w-[18px]" /> },
   { id: 'perps', label: 'Perps', icon: <TrendingUp className="h-[18px] w-[18px]" /> },
   { id: 'markets', label: 'Markets', icon: <BarChart3 className="h-[18px] w-[18px]" /> },
+  { id: 'wealth', label: 'Wealth', icon: <Coins className="h-[18px] w-[18px]" /> },
   { id: 'cross', label: 'Cross-Chain', icon: <Link2 className="h-[18px] w-[18px]" /> },
   { id: 'bots', label: 'Bots', icon: <Bot className="h-[18px] w-[18px]" /> },
   { id: 'skills', label: 'Skills', icon: <SkillsMark size={20} /> },
@@ -7549,7 +7551,7 @@ function Shell() {
     document.documentElement.dataset.soswapView = view;
     return () => { delete document.documentElement.dataset.soswapView; };
   }, [view]);
-  const Page = { home: HomeView, swap: SwapView, perps: PerpsView, markets: MarketsHub, cross: CrossChainView, bots: BotsView, skills: SkillsView, guide: GuideView, portfolio: PortfolioView }[view];
+  const Page = { home: HomeView, swap: SwapView, perps: PerpsView, markets: MarketsHub, cross: CrossChainView, bots: BotsView, skills: SkillsView, guide: GuideView, portfolio: PortfolioView, wealth: () => <WealthHub wallet={S.wallet} net={S.net} onConnect={() => S.setUi('connect', true)} onTrade={() => S.setView('perps')} /> }[view];
   return (
     <div className="relative min-h-screen overflow-x-hidden font-sans text-zinc-200">
       <div aria-hidden className="ss-bg"><div className="ss-bg-grid" /><div className="ss-bg-grain" /></div>
