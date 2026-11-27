@@ -5,12 +5,12 @@ import { PwaBoot } from '@/components/Pwa';
 
 export const metadata: Metadata = {
   metadataBase: new URL('https://soswapdex.xyz'),
-  title: 'SoSwapDEX — Swap on SoDEX mainnet',
-  description: 'Live SoDEX markets, route preview before you sign, SoSoValue news and ETF flows. Non-custodial: you sign every order in your own wallet.',
+  title: 'SoSwapDEX — Trade, Wealth & Rewards on SoDEX',
+  description: 'Explore SoDEX spot and perpetual markets, track SoPoints, and claim Blind Box rewards. Non-custodial: you sign every order in your own wallet.',
   applicationName: 'SoSwapDEX',
   appleWebApp: { capable: true, title: 'SoSwapDEX', statusBarStyle: 'black-translucent' },
   icons: { icon: '/icons/icon-192.png', apple: '/icons/apple-touch-icon.png' },
-  openGraph: { title: 'SoSwapDEX: swap on SoDEX mainnet', description: 'Live routes, a preview before you sign, risk-check skills. Non-custodial.', type: 'website', siteName: 'SoSwapDEX' },
+  openGraph: { title: 'SoSwapDEX: markets, wealth and rewards', description: 'Explore SoDEX markets, track SoPoints, and claim eligible Blind Box rewards. Non-custodial.', type: 'website', siteName: 'SoSwapDEX' },
   formatDetection: { telephone: false },
 };
 export const viewport: Viewport = { themeColor: '#000000', width: 'device-width', initialScale: 1, viewportFit: 'cover' };

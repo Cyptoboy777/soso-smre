@@ -15,7 +15,7 @@ const HOSTS: Record<string, string> = {
   mainnet: 'https://mainnet-gw.sodex.dev',
   testnet: 'https://testnet-gw.sodex.dev',
 };
-const FORWARD_HEADERS = ['content-type', 'accept', 'x-api-key', 'x-api-sign', 'x-api-nonce', 'x-api-chain'];
+const FORWARD_HEADERS = ['content-type', 'accept', 'authorization', 'x-api-key', 'x-api-sign', 'x-api-nonce', 'x-api-chain'];
 const MAX_BODY = 32 * 1024;
 
 // Spot: exact endpoints only. Reads are public market data and address-only account reads; writes are user-signed trading actions.
@@ -33,6 +33,10 @@ const PERPS_MODIFY = /^api\/v1\/perps\/trade\/orders\/modify$/; // user-signed c
 const PERPS_LEVERAGE = /^api\/v1\/perps\/trade\/leverage$/; // user-signed leverage update
 const KEYREG = /^api\/v1\/user\/0x[0-9a-fA-F]{40}\/api-keys$/;
 const BUILDERS = /^api\/v1\/user\/0x[0-9a-fA-F]{40}\/builders$/; // builder-fee approval (GET status, POST signed approval)
+const REWARDS_AUTH = /^api\/v1\/auth\/(nonce|verify)$/;
+const REWARDS_PUBLIC = /^api\/v1\/(lottery\/(meta|feed|draw\/entries)|sopoints\/(week\/info|volume-weights))$/;
+const REWARDS_PRIVATE_GET = /^api\/v1\/(lottery\/(treasures|boxes|box\/sign-params|job\/[0-9]+|jobs|ledger|history|pfps)|sopoints\/(summary|week\/list))$/;
+const REWARDS_PRIVATE_POST = /^api\/v1\/(lottery\/(treasure\/open|box\/(open|merge)))$/;
 
 function cacheFor(path: string, method: string): string {
   if (method !== 'GET') return 'no-store';
@@ -55,7 +59,7 @@ async function handle(req: NextRequest, ctx: { params: Promise<{ path: string[] 
   const host = HOSTS[net];
   const path = rest.join('/');
   const method = req.method;
-  const allowed = (method === 'GET' && SPOT_GET.test(path)) || (method === 'POST' && SPOT_POST.test(path)) || (method === 'DELETE' && SPOT_DELETE.test(path)) || (method === 'GET' && PERPS_READ.test(path)) || (method === 'GET' && PERPS_COINS.test(path)) || (method === 'POST' && PERPS_TRANSFER.test(path)) || (method === 'GET' && PERPS_MARKET.test(path)) || ((method === 'POST' || method === 'DELETE') && PERPS_ORDERS.test(path)) || (method === 'POST' && PERPS_LEVERAGE.test(path)) || (method === 'POST' && PERPS_MODIFY.test(path)) || ((method === 'GET' || method === 'POST') && KEYREG.test(path)) || ((method === 'GET' || method === 'POST') && BUILDERS.test(path));
+  const allowed = (method === 'GET' && SPOT_GET.test(path)) || (method === 'POST' && SPOT_POST.test(path)) || (method === 'DELETE' && SPOT_DELETE.test(path)) || (method === 'GET' && PERPS_READ.test(path)) || (method === 'GET' && PERPS_COINS.test(path)) || (method === 'POST' && PERPS_TRANSFER.test(path)) || (method === 'GET' && PERPS_MARKET.test(path)) || ((method === 'POST' || method === 'DELETE') && PERPS_ORDERS.test(path)) || (method === 'POST' && PERPS_LEVERAGE.test(path)) || (method === 'POST' && PERPS_MODIFY.test(path)) || ((method === 'GET' || method === 'POST') && KEYREG.test(path)) || ((method === 'GET' || method === 'POST') && BUILDERS.test(path)) || ((method === 'GET' || method === 'POST') && REWARDS_AUTH.test(path)) || (method === 'GET' && (REWARDS_PUBLIC.test(path) || REWARDS_PRIVATE_GET.test(path))) || (method === 'POST' && REWARDS_PRIVATE_POST.test(path));
   if (!host || !allowed || path.includes('..')) return NextResponse.json({ error: 'Not found.' }, { status: 404 });
 
   if (method !== 'GET' && !sameOrigin(req)) return NextResponse.json({ error: 'Not allowed.' }, { status: 403 });
