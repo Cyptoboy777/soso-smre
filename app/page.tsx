@@ -103,6 +103,7 @@ import {
 } from '@/lib/swap-ux';
 import React, { createContext, useCallback, useContext, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { WealthHub } from '@/components/wealth-hub';
+import EcosystemExplorer from '@/components/EcosystemExplorer';
 import {
   AlertTriangle, ArrowDownUp, ArrowUpRight, Bot, CalendarClock, Check, ChevronDown, Copy, ExternalLink,
   Grid3x3, History, Info, KeyRound, Layers, LineChart, Loader2, LogOut, Plug, Plus, RefreshCw, Search,
@@ -3703,6 +3704,7 @@ function HomeView() {
       </div>
 
       <DailyBrief />
+      <EcosystemExplorer onNavigate={(destination) => S.setView(destination)} />
 
       <Reveal className="mt-8">
         <div className="mb-3 flex items-baseline justify-between gap-3">
