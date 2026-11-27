@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next';
 import './globals.css';
 import SoSwapAI from '@/components/SoSwapAI';
 import { PwaBoot } from '@/components/Pwa';
+import { Analytics } from '@vercel/analytics/next';
 
 export const metadata: Metadata = {
   metadataBase: new URL('https://soswapdex.xyz'),
@@ -22,6 +23,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         {children}
         <SoSwapAI />
         <PwaBoot />
+        <Analytics />
       </body>
     </html>
   );
