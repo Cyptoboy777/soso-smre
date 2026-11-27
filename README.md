@@ -31,6 +31,11 @@ SoSwapDEX is a non-custodial trading interface for **SoDEX mainnet** (spot and p
 - **Bots (drafts):** DCA, Grid and Signal dry-run previews with backtests on real candles and real fees. They never send orders.
 - **Portfolio and Home:** balances, positions, a *Get started* checklist, a local watchlist with price, 24h change, Trade button and alert bell.
 
+### Wealth and SoDEX Rewards
+- **Wealth hub** (own tab) connects to the SoDEX Rewards APIs: sign in with a wallet message (`auth/nonce` + `auth/verify`, no gas, no funds move), then see your **SoPoints** summary and this week's info, and your **Blind Box** treasures.
+- **Claim Blind Box rewards** with one tap (`lottery/treasure/open`) and watch the claim job status until it finishes.
+- All calls go through the same-origin gateway, which only forwards the specific Rewards paths it allowlists. The sign-in token stays in your tab.
+
 ### Markets and news
 - Every SoDEX spot pair with live prices, SoSoValue news, ETF flows and sector moves.
 - **SoSwap Market Story:** the daily article described above, with sources, a token chart, a Share story / Download image card (1200x630, drawn on your device, no wallet data) and a disclaimer.
@@ -54,7 +59,7 @@ SoSwapDEX is a non-custodial trading interface for **SoDEX mainnet** (spot and p
 - Reads a live SoDEX + SoSoValue snapshot on the server, refuses to ask for seed phrases, never gives price predictions.
 
 ### Monetisation (all optional)
-- **Builder fee** (SoDEX Builder Race): orders of approved users carry `builder: {id: 2674, fee: 10}` (0.01%). Off unless `NEXT_PUBLIC_BUILDER_ENABLED=1`. If SoDEX refuses the approval, users can still trade and nothing is charged.
+- **Builder fee** (SoDEX Builder Race): fully integrated for Spot and Perps. Approved users' orders carry `builder: {id: 2674, fee}` (0.01% with `NEXT_PUBLIC_BUILDER_FEE=10`). The fee prompt and fee lines appear only after the builder account is funded (SoDEX requires 100 vUSDC in Spot and 100 in Perps) and `NEXT_PUBLIC_BUILDER_ENABLED=1` is set. Until then no fee is shown or charged. If SoDEX refuses an approval, users can still trade and nothing is charged.
 - **Referral link** and **tip address** boxes appear only when `NEXT_PUBLIC_REFERRAL_URL` / `NEXT_PUBLIC_TIP_ADDRESS` are set.
 - **Route fee** on cross-chain routes exists but is off (`NEXT_PUBLIC_ROUTE_FEE_BPS=0`).
 
@@ -111,14 +116,15 @@ Import the repo in Vercel (Framework: Next.js), set the variables for Production
 Installable PWA (manifest, icons, service worker that never caches `/api`), layouts checked at 390px, and wallet deep links for MetaMask, Trust, Coinbase and OKX that reopen SoSwapDEX inside the wallet browser.
 
 ## Project map
-- `app/page.tsx` main app (views, Perps, Swap, Skills) · `app/api/*` server routes (`sodex`, `soso`, `skills`, `ask`, `assistant`, `daily-article`, `route`)
+- `app/page.tsx` main app (views, Perps, Swap, Skills), `components/wealth-hub.tsx` Wealth and Blind Box · `app/api/*` server routes (`sodex`, `soso`, `skills`, `ask`, `assistant`, `daily-article`, `route`)
 - `lib/perps.ts` Perps maths (liquidation, sizing, guards) · `lib/risk.ts`, `lib/trade-guard.ts` risk grades · `lib/voice.ts`, `lib/voice-command.ts` voice and commands
 - `components/Robot3D.tsx`, `SoSwapAI.tsx` assistant · `components/shareCard.ts` share images
 - `tests/` unit tests for the maths, parsers, key handling and rate limits
 
 ## Status and honest notes
 - Automated tests and browser checks (with mocked SoDEX responses) pass. Test a **tiny** real order first: order signing, TP/SL and fee approval depend on live SoDEX behaviour.
-- The builder fee approval needs the builder account funded on SoDEX. If SoDEX refuses it, users can still trade without the fee.
+- **Builder fee status:** the integration is complete, but fee collection starts only once the builder account is funded. Until then the app shows no fee line and trades without one.
+- Tested on mainnet with small amounts by the owner. Keep amounts small until you trust your own setup.
 - Trading can lose money. Nothing in the app is financial advice, and no tool can guarantee against losses.
 - SoSwapDEX is independent and not operated by SoDEX or SoSoValue.
 
