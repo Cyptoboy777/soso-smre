@@ -1,6 +1,6 @@
 # Perps phase 2: checklist before any perps code
 
-Status: not started. Spot "Arm and confirm" is live; perps waits until every item below is checked and the result is written next to it.
+Status: superseded. Perps shipped (risk setup, orders, TP/SL edit, builder fee). The items below remain the live-verification checklist and are not yet recorded as done.
 Date written: 2026-11-17. SoDEX docs index: https://docs.sodex.com/llms.txt
 
 ## Must confirm first (none of these is verified yet)
