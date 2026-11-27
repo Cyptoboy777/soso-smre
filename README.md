@@ -4,7 +4,7 @@ Non-custodial trading interface on the **SoDEX mainnet spot order book** with **
 
 | | |
 | --- | --- |
-| **Site** | https://soswapdex.xyz (DNS pending) |
+| **Site** | https://soswapdex.xyz |
 | **Live app** | https://soswapdex.xyz |
 | **Repo** | https://github.com/Cyptoboy777/soso-smre |
 | **Builder Race** | https://www.buildsoso.xyz (builder ID `2674`) |
