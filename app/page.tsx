@@ -104,6 +104,7 @@ import {
 } from '@/lib/swap-ux';
 import React, { createContext, useCallback, useContext, useEffect, useId, useMemo, useRef, useState, useTransition } from 'react';
 import { WealthHub } from '@/components/wealth-hub';
+import ViewBoundary from '@/components/ViewBoundary';
 import EcosystemExplorer from '@/components/EcosystemExplorer';
 import {
   AlertTriangle, ArrowDownUp, ArrowUpRight, Bot, CalendarClock, Check, ChevronDown, Copy, ExternalLink,
@@ -7652,7 +7653,7 @@ function Shell() {
       </header>
 
       <main className="relative z-10 mx-auto min-h-[70vh] max-w-[1180px] px-4 pb-28 pt-6 sm:pb-10">
-        <MotionPage key={view}><Page /></MotionPage>
+        <MotionPage key={view}><ViewBoundary resetKey={view} onHome={() => S.setView('home')}><Page /></ViewBoundary></MotionPage>
         <SupportBox />
         <footer className="mt-12 border-t border-white/[0.06] pt-5 pr-0 text-[11px] max-[520px]:pr-20 leading-relaxed text-zinc-600">{DISCLAIMER}</footer>
       </main>
