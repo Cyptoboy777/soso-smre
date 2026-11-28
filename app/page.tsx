@@ -825,15 +825,19 @@ function useWallets() {
   const [wallets, setWallets] = useState<WalletInfo[]>([]);
   useEffect(() => {
     const seen = new Map<string, WalletInfo>();
+    const existingProvider = window.ethereum;
     const onAnnounce = (e: any) => {
       const d = e.detail; if (!d?.info || !d?.provider) return;
       seen.set(d.info.uuid, { id: d.info.rdns || d.info.uuid, name: d.info.name, icon: d.info.icon, provider: d.provider });
       setWallets(Array.from(seen.values()));
     };
     window.addEventListener('eip6963:announceProvider', onAnnounce as EventListener);
-    window.dispatchEvent(new Event('eip6963:requestProvider'));
+    // Avoid provoking reinjection in legacy wallet extensions when a provider already exists.
+    if (!existingProvider) window.dispatchEvent(new Event('eip6963:requestProvider'));
     const t = setTimeout(() => {
-      if (!seen.size && window.ethereum) setWallets([{ id: 'injected', name: 'Browser wallet', provider: window.ethereum }]);
+      if (!seen.size && (existingProvider || window.ethereum)) {
+        setWallets([{ id: 'injected', name: 'Browser wallet', provider: existingProvider ?? window.ethereum }]);
+      }
     }, 500);
     return () => { window.removeEventListener('eip6963:announceProvider', onAnnounce as EventListener); clearTimeout(t); };
   }, []);
