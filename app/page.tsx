@@ -49,6 +49,7 @@ import TradeGuardCard from '@/components/TradeGuardCard';
 import SmartExitCard from '@/components/SmartExitCard';
 import MoveNewsLine from '@/components/MoveNewsLine';
 import { safeHttpUrl } from '@/lib/safe-url';
+import { legacyWallets, mergeWallets, sameWallet } from '@/lib/wallet-detect';
 import AskSoSwap from '@/components/AskSoSwap';
 import {
   bookMetrics, computeGuard, computeSafeSize, pickMoveNews, suggestExit,
@@ -824,22 +825,37 @@ const useS = () => { const s = useContext(Ctx); if (!s) throw new Error('store')
 function useWallets() {
   const [wallets, setWallets] = useState<WalletInfo[]>([]);
   useEffect(() => {
-    const seen = new Map<string, WalletInfo>();
-    const existingProvider = window.ethereum;
+    // EIP-6963 wallets announce themselves, some only when asked, and some inject late. So: listen first, ask right away,
+    // ask again a few times while the page settles, and ask whenever the tab regains focus. Older wallets that only set
+    // window.ethereum are found through their flags and known globals.
+    const announced = new Map<string, WalletInfo>();
+    let sig = '';
+    const publish = () => {
+      const list = mergeWallets(Array.from(announced.values()), legacyWallets(window), lsGet<string | null>('soswap.wallet', null)) as WalletInfo[];
+      const s = list.map((w) => w.id).join('|');
+      if (s !== sig) { sig = s; setWallets(list); }
+    };
     const onAnnounce = (e: any) => {
       const d = e.detail; if (!d?.info || !d?.provider) return;
-      seen.set(d.info.uuid, { id: d.info.rdns || d.info.uuid, name: d.info.name, icon: d.info.icon, provider: d.provider });
-      setWallets(Array.from(seen.values()));
+      announced.set(d.info.rdns || d.info.uuid, { id: d.info.rdns || d.info.uuid, name: d.info.name, icon: d.info.icon, provider: d.provider });
+      publish();
     };
+    const ask = () => { window.dispatchEvent(new Event('eip6963:requestProvider')); publish(); };
     window.addEventListener('eip6963:announceProvider', onAnnounce as EventListener);
-    // Avoid provoking reinjection in legacy wallet extensions when a provider already exists.
-    if (!existingProvider) window.dispatchEvent(new Event('eip6963:requestProvider'));
-    const t = setTimeout(() => {
-      if (!seen.size && (existingProvider || window.ethereum)) {
-        setWallets([{ id: 'injected', name: 'Browser wallet', provider: existingProvider ?? window.ethereum }]);
-      }
-    }, 500);
-    return () => { window.removeEventListener('eip6963:announceProvider', onAnnounce as EventListener); clearTimeout(t); };
+    window.addEventListener('ethereum#initialized', ask);
+    window.addEventListener('focus', ask);
+    window.addEventListener('soswap:rescan-wallets', ask);
+    document.addEventListener('visibilitychange', ask);
+    ask();
+    const timers = [250, 800, 2000, 4500].map((ms) => setTimeout(ask, ms));
+    return () => {
+      timers.forEach(clearTimeout);
+      window.removeEventListener('eip6963:announceProvider', onAnnounce as EventListener);
+      window.removeEventListener('ethereum#initialized', ask);
+      window.removeEventListener('focus', ask);
+      window.removeEventListener('soswap:rescan-wallets', ask);
+      document.removeEventListener('visibilitychange', ask);
+    };
   }, []);
   return wallets;
 }
@@ -971,7 +987,7 @@ function useSoSwapStore(): Store {
       });
       return;
     }
-    const w = wallets.find((x) => x.id === last);
+    const w = wallets.find((x) => sameWallet(last, x));
     if (!w) return;
     (async () => {
       try {
@@ -1725,6 +1741,8 @@ function friendlyConnectError(e: any, kind: 'wallet' | 'wc') {
   const code = e?.code;
   const m = String(e?.message ?? e ?? '');
   if (code === 4001 || /reject|denied|closed|cancel/i.test(m)) return 'Connection was cancelled in the wallet.';
+  if (code === -32002 || /already pending|already processing|request of type/i.test(m)) return 'Your wallet already has a request open. Open the wallet extension, approve or reject it, then try again.';
+  if (/locked|unlock/i.test(m)) return 'Your wallet is locked. Unlock it, then try again.';
   return kind === 'wc' ? 'Could not open WalletConnect. Please try again.' : 'Could not connect. Please try that wallet again.';
 }
 
@@ -1795,7 +1813,7 @@ function WalletModal() {
   }
 
   return (
-    <Modal open={open} onClose={close} title="Connect a wallet" maxW="sm:max-w-3xl">
+    <Modal open={open} onClose={close} title="Connect a wallet" maxW="sm:max-w-md">
       <ConnectPicker wallets={S.wallets} wcEnabled={S.wcEnabled} busy={busy} err={err} onPick={doConnect} onWC={doConnectWC} />
     </Modal>
   );
@@ -1816,70 +1834,102 @@ function isDetectedPopular(wallets: WalletInfo[], p: PopularWallet) {
   return wallets.some((w) => resolveWalletKind(w.id, w.name) === p.id || w.name.toLowerCase().includes(p.name.toLowerCase()) || w.id.toLowerCase().includes(p.id));
 }
 
-/** Two-pane wallet picker: detected EIP-6963 wallets first (real icons), then popular ones with official logos and install links. */
+/** One-column wallet picker: brand header, wallets found in this browser (with Recent / Detected tags), WalletConnect, then ways to get a wallet. */
 function ConnectPicker({ wallets, wcEnabled, busy, err, onPick, onWC }: {
   wallets: WalletInfo[]; wcEnabled: boolean; busy: string | null; err: string | null; onPick: (w: WalletInfo) => void; onWC: () => void;
 }) {
   const [mobile, setMobile] = useState(false);
   const [url, setUrl] = useState('');
   const [copied, setCopied] = useState(false);
+  const [lastId, setLastId] = useState<string | null>(null);
+  const [scanning, setScanning] = useState(false);
+  const [what, setWhat] = useState(false);
   useEffect(() => {
     setUrl(window.location.origin + '/');
+    setLastId(lsGet<string | null>('soswap.wallet', null));
     const ua = navigator.userAgent;
     setMobile(/android|iphone|ipad|ipod|mobile/i.test(ua) || (/Macintosh/i.test(ua) && navigator.maxTouchPoints > 1));
   }, []);
+  const rescan = () => { setScanning(true); window.dispatchEvent(new Event('soswap:rescan-wallets')); setTimeout(() => setScanning(false), 1200); };
   const popular = POPULAR_WALLETS.filter((p) => !isDetectedPopular(wallets, p) && (!mobile || p.mobile));
-  const rowCls = 'flex w-full items-center gap-3 rounded-2xl px-2.5 py-2 text-left transition hover:bg-white/[0.06] disabled:opacity-60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-400';
-  const group = (t: string) => <div className="mb-1.5 mt-3.5 px-2.5 text-[11px] font-semibold uppercase tracking-wider text-zinc-500 first:mt-0">{t}</div>;
+  const rowCls = 'flex min-h-[58px] w-full items-center gap-3 rounded-2xl border border-white/[0.08] bg-white/[0.03] px-3.5 py-2 text-left transition hover:border-orange-500/50 hover:bg-orange-500/[0.06] disabled:opacity-60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-400';
   return (
-    <div className="grid gap-5 sm:grid-cols-[minmax(0,320px)_1fr]">
-      <div className="min-w-0">
-        {wallets.length > 0 && (<>{group('Installed')}
-          {wallets.map((w) => (
-            <button key={w.id} type="button" onClick={() => onPick(w)} disabled={!!busy} className={rowCls}>
+    <div className="mx-auto w-full max-w-[420px]">
+      <div className="flex flex-col items-center text-center">
+        <Logo size={44} />
+        <div className="mt-3 text-lg font-semibold text-zinc-50">Connect to SoSwapDEX</div>
+        <p className="mt-1 max-w-[320px] text-[13px] leading-relaxed text-zinc-400">Choose a wallet. Only your public address is shared, and nothing moves until you sign.</p>
+      </div>
+
+      <div className="mt-5 space-y-2" role="list" aria-label="Wallets">
+        {wallets.map((w) => {
+          const recent = sameWallet(lastId, w);
+          return (
+            <button key={w.id} role="listitem" type="button" onClick={() => onPick(w)} disabled={!!busy} className={rowCls}>
               <WalletGlyph id={w.id} name={w.name} src={w.icon} />
               <span className="min-w-0 flex-1 truncate text-[15px] font-semibold text-zinc-50">{w.name}</span>
-              {busy === w.id ? <Spinner /> : <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-300">Detected</span>}
+              {busy === w.id ? <Spinner /> : recent
+                ? <span className="rounded-full bg-orange-500/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-orange-300">Recent</span>
+                : <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-300">Detected</span>}
             </button>
-          ))}</>)}
-        {group(wallets.length ? 'Popular' : mobile ? 'Open SoSwapDEX in your wallet' : 'Popular')}
-        {popular.map((p) => {
-          const href = mobile && p.mobile && url ? p.mobile(url) : p.install;
-          return (
-            <a key={p.id} href={href} target="_blank" rel="noreferrer noopener" className={rowCls} aria-label={`${mobile ? 'Open' : 'Install'} ${p.name}`}>
-              <WalletGlyph id={p.id} name={p.name} />
-              <span className="min-w-0 flex-1 truncate text-[15px] font-semibold text-zinc-50">{p.name}</span>
-              <span className="text-[12px] font-medium text-zinc-500">{mobile && p.mobile ? 'Open' : 'Get'}</span>
-            </a>
           );
         })}
         {wcEnabled && (
           <button type="button" onClick={onWC} disabled={!!busy} className={rowCls}>
             <OfficialMark kind="walletconnect" size={40} />
-            <span className="min-w-0 flex-1"><span className="block text-[15px] font-semibold text-zinc-50">WalletConnect</span><span className="block text-[11px] text-zinc-500">QR code or any phone wallet</span></span>
+            <span className="min-w-0 flex-1"><span className="block text-[15px] font-semibold text-zinc-50">WalletConnect</span><span className="block text-[11px] text-zinc-500">Scan a QR code or use a phone wallet</span></span>
             {busy === 'walletconnect' && <Spinner />}
           </button>
         )}
-        {mobile && url && (
-          <button type="button" onClick={() => { navigator.clipboard?.writeText(url).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1800); }).catch(() => undefined); }}
-            className="mt-3 h-10 w-full rounded-xl border border-white/10 bg-white/[0.04] text-[12px] font-semibold text-zinc-300">{copied ? 'Link copied' : 'Copy link to open in a wallet browser'}</button>
-        )}
-        {err && <div className="mt-3"><Notice tone="error">{err}</Notice></div>}
-        {mobile && wallets.length === 0 && <p className="mt-3 px-1 text-[11px] leading-relaxed text-zinc-500">Phone browsers cannot reach wallets directly. Tapping a wallet reopens SoSwapDEX inside that wallet's own browser. Press Connect there.</p>}
       </div>
-      <aside className={cx('rounded-2xl border border-white/[0.06] bg-white/[0.02] p-5', 'hidden sm:block')}>
-        <div className="text-center text-[15px] font-semibold text-zinc-50">What is a wallet?</div>
-        <div className="mt-5 space-y-5">
-          <div className="flex gap-3.5"><span className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl border border-orange-500/30 bg-orange-500/10 text-orange-300"><Wallet className="h-6 w-6" /></span>
-            <div><div className="text-sm font-semibold text-zinc-100">Your keys, your funds</div><p className="mt-0.5 text-[13px] leading-relaxed text-zinc-400">A wallet holds the keys to your assets. SoSwapDEX never holds them, and you approve every order yourself.</p></div></div>
-          <div className="flex gap-3.5"><span className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl border border-orange-500/30 bg-orange-500/10 text-orange-300"><Plug className="h-6 w-6" /></span>
-            <div><div className="text-sm font-semibold text-zinc-100">A new way to log in</div><p className="mt-0.5 text-[13px] leading-relaxed text-zinc-400">No email or password. Connecting shares only your public address. Nothing is sent or approved until you sign.</p></div></div>
+
+      {wallets.length === 0 && !mobile && (
+        <div className="mt-3 rounded-2xl border border-dashed border-white/[0.12] bg-black/20 p-3.5 text-[13px] leading-relaxed text-zinc-400">
+          <div className="font-semibold text-zinc-200">No wallet found in this browser yet</div>
+          Install one below. Already installed? Make sure it is enabled for this site and unlocked, then scan again.
         </div>
-        <div className="mt-6 text-center">
-          <a href="https://ethereum.org/en/wallets/find-wallet/" target="_blank" rel="noreferrer noopener" className="inline-flex h-10 items-center rounded-full bg-orange-500 px-5 text-sm font-semibold text-black transition hover:bg-orange-400">Get a wallet</a>
-          <div className="mt-2"><a href="https://ethereum.org/en/wallets/" target="_blank" rel="noreferrer noopener" className="text-sm font-medium text-orange-300 hover:text-orange-200">Learn more</a></div>
-        </div>
-      </aside>
+      )}
+      {!mobile && (
+        <button type="button" onClick={rescan} className="mt-2 inline-flex h-8 items-center gap-1.5 rounded-lg px-2 text-[12px] font-medium text-zinc-400 hover:text-zinc-200">
+          <RefreshCw className={cx('h-3.5 w-3.5', scanning && 'animate-spin')} />{scanning ? 'Scanning…' : "Don't see your wallet? Scan again"}
+        </button>
+      )}
+
+      {popular.length > 0 && (
+        <>
+          <div className="mb-2 mt-4 flex items-center gap-3 text-[11px] font-semibold uppercase tracking-wider text-zinc-500"><span className="h-px flex-1 bg-white/[0.07]" />{mobile ? 'Open in your wallet' : 'Get a wallet'}<span className="h-px flex-1 bg-white/[0.07]" /></div>
+          <div className="grid grid-cols-2 gap-2">
+            {popular.map((p) => {
+              const href = mobile && p.mobile && url ? p.mobile(url) : p.install;
+              return (
+                <a key={p.id} href={href} target="_blank" rel="noreferrer noopener" aria-label={`${mobile ? 'Open' : 'Install'} ${p.name}`}
+                  className="flex min-w-0 items-center gap-2 rounded-xl border border-white/[0.07] bg-white/[0.02] px-2.5 py-2 transition hover:border-white/20 hover:bg-white/[0.05]">
+                  <WalletGlyph id={p.id} name={p.name} size={28} />
+                  <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-zinc-200">{p.name}</span>
+                  <span className="text-[11px] text-zinc-500">{mobile && p.mobile ? 'Open' : 'Get'}</span>
+                </a>
+              );
+            })}
+          </div>
+        </>
+      )}
+      {mobile && url && (
+        <button type="button" onClick={() => { navigator.clipboard?.writeText(url).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1800); }).catch(() => undefined); }}
+          className="mt-3 h-10 w-full rounded-xl border border-white/10 bg-white/[0.04] text-[12px] font-semibold text-zinc-300">{copied ? 'Link copied' : 'Copy link to open in a wallet browser'}</button>
+      )}
+      {mobile && wallets.length === 0 && <p className="mt-3 px-1 text-[11px] leading-relaxed text-zinc-500">Phone browsers cannot reach wallets directly. Tapping a wallet reopens SoSwapDEX inside that wallet's own browser. Press Connect there.</p>}
+      {err && <div className="mt-3"><Notice tone="error">{err}</Notice></div>}
+
+      <div className="mt-5 border-t border-white/[0.07] pt-3">
+        <div className="flex items-center justify-center gap-1.5 text-[11px] text-zinc-500"><ShieldCheck className="h-3.5 w-3.5 text-emerald-400" />Non-custodial. SoSwapDEX never sees your keys.</div>
+        <button type="button" onClick={() => setWhat((v) => !v)} aria-expanded={what} className="mx-auto mt-2 block text-[12px] font-medium text-orange-300 hover:text-orange-200">{what ? 'Hide' : 'New to wallets? What is a wallet?'}</button>
+        {what && (
+          <p className="mt-2 rounded-xl bg-white/[0.03] p-3 text-[12px] leading-relaxed text-zinc-400">
+            A wallet is an app or browser extension that holds the keys to your assets. There is no email or password: connecting shares only your public address, and you approve every order yourself.{' '}
+            <a href="https://ethereum.org/en/wallets/find-wallet/" target="_blank" rel="noreferrer noopener" className="font-medium text-orange-300 hover:text-orange-200">Find a wallet</a>
+          </p>
+        )}
+      </div>
     </div>
   );
 }
