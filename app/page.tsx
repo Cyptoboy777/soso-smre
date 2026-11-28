@@ -3296,9 +3296,9 @@ function MarketsView() {
         <Segmented value={tab} onChange={setTab} options={[{ value: 'all', label: `All ${S.syms.length || ''}` }, { value: 'fav', label: 'Favorites' }, { value: 'up', label: 'Gainers' }, { value: 'down', label: 'Losers' }]} />
       </div>
       {S.marketErr && <div className="p-4"><ErrorBox msg={S.marketErr} onRetry={S.reloadMarkets} /></div>}
-      <div className="hidden grid-cols-[minmax(170px,1.5fr)_1fr_.8fr_1fr_212px] gap-2 px-4 py-2 text-[11px] font-medium uppercase tracking-wider text-zinc-600 sm:grid">
+      <div className="hidden min-w-0 grid-cols-[minmax(0,1fr)_auto_auto_auto] gap-2 px-4 py-2 text-[11px] font-medium uppercase tracking-wider text-zinc-600 sm:grid">
         <H k="pair">Pair</H><H k="price" right>Price</H><H k="chg" right>24h</H>
-        <H k="vol" right>Volume (24h)</H><span />
+        <span />
       </div>
       <div className="flex items-center justify-between px-4 py-2 text-[11px] font-medium uppercase tracking-wider text-zinc-600 sm:hidden">
         <H k="pair">Pair</H>
@@ -3308,7 +3308,7 @@ function MarketsView() {
         {S.marketLoading && !S.syms.length && Array.from({ length: 8 }).map((_, i) => <Skeleton key={i} className="mx-4 my-2 h-10" />)}
         {!S.marketLoading && !rows.length && !S.marketErr && <Empty icon={<Search className="h-5 w-5" />} title={tab === 'fav' ? 'No favorites yet' : 'No pairs match'} body={tab === 'fav' ? 'Tap the star next to a pair to pin it here.' : undefined} />}
         {rows.map(({ s, t }, i) => (
-          <div key={s.name} className="ss-row cursor-pointer border-t border-white/[0.04] px-4 py-2.5 hover:bg-white/[0.04] sm:grid sm:grid-cols-[minmax(170px,1.5fr)_1fr_.8fr_1fr_212px] sm:items-center sm:gap-2"
+          <div key={s.name} className="ss-row min-w-0 cursor-pointer border-t border-white/[0.04] px-4 py-2.5 hover:bg-white/[0.04] sm:grid sm:grid-cols-[minmax(0,1fr)_auto_auto_auto] sm:items-center sm:gap-2"
             onClick={() => { S.setSelected(s.name); S.setView('swap'); }}>
             <div className="flex min-w-0 items-center gap-2.5">
               <span className="tnum hidden w-4 text-[11px] text-zinc-600 sm:block">{i + 1}</span>
@@ -3331,11 +3331,11 @@ function MarketsView() {
             <div className="mt-1 flex items-center justify-end gap-4 sm:mt-0 sm:contents">
               <div className="tnum text-right text-sm text-zinc-100">{t ? <Flash v={t.last}><Num v={px(t.last)} /></Flash> : <Skeleton className="ml-auto h-4 w-16" />}</div>
               <div className="text-right">{t ? <Chg pct={t.changePct} /> : <Skeleton className="ml-auto h-4 w-12" />}</div>
-              <div className="tnum hidden text-right text-sm text-zinc-300 sm:block">{t ? '$' + compact(t.quoteVol) : '–'}</div>
-              <div className="hidden items-center justify-end gap-2 sm:flex">
+              <div className="tnum hidden text-right text-sm text-zinc-300">{t ? '$' + compact(t.quoteVol) : '–'}</div>
+              <div className="hidden min-w-0 items-center justify-end gap-2 sm:flex">
                 {!s.halted && (
-                  <button type="button" onClick={(e) => { e.stopPropagation(); goToTradeCheck(S, s.name); }}
-                    className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap text-[11px] font-semibold text-orange-300 hover:text-orange-200">
+                  <button type="button" aria-label={`Check ${s.display} trade`} title="Check this trade" onClick={(e) => { e.stopPropagation(); goToTradeCheck(S, s.name); }}
+                    className="hidden shrink-0 items-center gap-1 whitespace-nowrap text-[11px] font-semibold text-orange-300 hover:text-orange-200">
                     <ShieldCheck className="h-3 w-3" />Check this trade
                   </button>
                 )}
