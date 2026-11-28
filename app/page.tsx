@@ -102,7 +102,7 @@ import {
   sizeFromQuoteAmount, quoteFromSize, isLimitPriceFarFromMarket,
   type RecentPair, type FlightStatus,
 } from '@/lib/swap-ux';
-import React, { createContext, useCallback, useContext, useEffect, useId, useMemo, useRef, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useId, useMemo, useRef, useState, useTransition } from 'react';
 import { WealthHub } from '@/components/wealth-hub';
 import EcosystemExplorer from '@/components/EcosystemExplorer';
 import {
@@ -809,7 +809,7 @@ type Store = {
   selected: string; setSelected: (s: string) => void; favs: string[]; toggleFav: (s: string) => void;
   slippage: string; setSlippage: (s: string) => void;
   deadman: boolean; setDeadman: (b: boolean) => void;
-  view: View; setView: (v: View) => void;
+  view: View; setView: (v: View) => void; navPending: boolean;
   ui: { connect: boolean; key: boolean; settings: boolean }; setUi: (k: 'connect' | 'key' | 'settings', v: boolean) => void;
   toast: (kind: ToastKind, text: string) => void; toasts: { id: number; kind: ToastKind; text: string }[];
   place: (orders: OrderIn[]) => Promise<OrderResult[]>; cancel: (items: { symbolID: number; orderID: number }[]) => Promise<OrderResult[]>;
@@ -864,7 +864,10 @@ const KEY_STORE = 'soswap.key.v1';
 
 function useSoSwapStore(): Store {
   const [net, setNetState] = useState<Net>('mainnet');
-  const [view, setView] = useState<View>('home');
+  const [view, setViewNow] = useState<View>('home');
+  // A heavy screen (charts, order books) renders in the background while the current one stays on screen, so a tab tap never shows a blank page.
+  const [navPending, startNav] = useTransition();
+  const setView = useCallback((v: View) => { startNav(() => setViewNow(v)); }, []);
   const [ui, setUiState] = useState({ connect: false, key: false, settings: false });
   const [toasts, setToasts] = useState<{ id: number; kind: ToastKind; text: string }[]>([]);
   const [selected, setSelected] = useState('vBTC_vUSDC');
@@ -873,7 +876,7 @@ function useSoSwapStore(): Store {
   const [deadman, setDeadmanState] = useState(false);
 
   useEffect(() => {
-    try { const v = new URLSearchParams(window.location.search).get('view'); if (v && ['swap', 'markets', 'cross', 'bots', 'skills', 'guide'].includes(v)) setView(v as View); } catch { /* ignore */ }
+    try { const v = new URLSearchParams(window.location.search).get('view'); if (v && ['swap', 'markets', 'cross', 'bots', 'skills', 'guide'].includes(v)) setViewNow(v as View); } catch { /* ignore */ }
     setNetState(lsGet<Net>('soswap.net', 'mainnet'));
     setFavs(lsGet<string[]>('soswap.favs', []));
     setSlippageState(lsGet<string>('soswap.slip', '0.5'));
@@ -1434,7 +1437,7 @@ function useSoSwapStore(): Store {
     moveTarget, openMoveToSpot, closeMoveToSpot, submitMoveToSpot,
     key, keyValid, canReuseKey, createKey, importKey, forgetKey, builder,
     selected, setSelected, favs, toggleFav, slippage, setSlippage, deadman, setDeadman,
-    view, setView, ui, setUi, toast, toasts, place, cancel, available, priceOf,
+    view, setView, navPending, ui, setUi, toast, toasts, place, cancel, available, priceOf,
     flights, orderInFlight, dismissFlights,
   };
 }
@@ -3925,6 +3928,12 @@ function SectorsPanel() {
       ) : <Empty icon={<Grid3x3 className="h-5 w-5" />} title="No sector data returned" />)}
     </Card>
   );
+}
+
+/** A named component, so React keeps its state between renders (an inline arrow would remount it every render). */
+function WealthView() {
+  const S = useS();
+  return <WealthHub wallet={S.wallet} net={S.net} onConnect={() => S.setUi('connect', true)} onTrade={() => S.setView('perps')} />;
 }
 
 function MarketsHub() {
@@ -7589,6 +7598,7 @@ function WalletButton() {
 function Shell() {
   const S = useS();
   const view = S.view;
+  useEffect(() => { try { window.scrollTo({ top: 0, left: 0 }); } catch { /* ignore */ } }, [view]);
   useEffect(() => {
     const onFill = (e: Event) => {
       const d = (e as CustomEvent).detail as { from: string; to: string; amount: string; result?: string };
@@ -7607,11 +7617,12 @@ function Shell() {
     document.documentElement.dataset.soswapView = view;
     return () => { delete document.documentElement.dataset.soswapView; };
   }, [view]);
-  const Page = { home: HomeView, swap: SwapView, perps: PerpsView, markets: MarketsHub, cross: CrossChainView, bots: BotsView, skills: SkillsView, guide: GuideView, portfolio: PortfolioView, wealth: () => <WealthHub wallet={S.wallet} net={S.net} onConnect={() => S.setUi('connect', true)} onTrade={() => S.setView('perps')} /> }[view];
+  const Page = { home: HomeView, swap: SwapView, perps: PerpsView, markets: MarketsHub, cross: CrossChainView, bots: BotsView, skills: SkillsView, guide: GuideView, portfolio: PortfolioView, wealth: WealthView }[view];
   return (
     <div className="relative min-h-screen overflow-x-hidden font-sans text-zinc-200">
       <div aria-hidden className="ss-bg"><div className="ss-bg-grid" /><div className="ss-bg-grain" /></div>
 
+      {S.navPending && <div aria-hidden className="ss-navbar" />}
       <header className="ss-header sticky top-0 z-40 border-b border-white/[0.06]">
         <div className="mx-auto flex max-w-[1180px] items-center gap-4 px-4 py-2.5">
           <button onClick={() => S.setView('home')} className="flex items-center gap-2" aria-label="SoSwapDEX home"><Logo size={32} /><Wordmark /></button>
@@ -7641,7 +7652,7 @@ function Shell() {
       </header>
 
       <main className="relative z-10 mx-auto min-h-[70vh] max-w-[1180px] px-4 pb-28 pt-6 sm:pb-10">
-        <AnimatePresence mode="wait" initial={false}><MotionPage key={view}><Page /></MotionPage></AnimatePresence>
+        <MotionPage key={view}><Page /></MotionPage>
         <SupportBox />
         <footer className="mt-12 border-t border-white/[0.06] pt-5 pr-0 text-[11px] max-[520px]:pr-20 leading-relaxed text-zinc-600">{DISCLAIMER}</footer>
       </main>

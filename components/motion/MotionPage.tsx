@@ -1,19 +1,9 @@
 "use client";
 
-import { motion, useReducedMotion } from "framer-motion";
 import type { ReactNode } from "react";
 
-/** Screen change: mobile slides + scales with a spring; desktop fades up. Reduced-motion is opacity only. */
+/** Screen change. CSS-only (transform slide/rise from phone.css plus a short fade that never starts from invisible), so the new screen is on
+ * screen the moment it renders. No exit animation and no waiting: nothing here can leave a blank page. */
 export default function MotionPage({ children }: { children: ReactNode }) {
-  const reduce = useReducedMotion();
-  return (
-    <motion.div
-      className={reduce ? undefined : "ss-screen"}
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1, transition: { duration: reduce ? 0.01 : 0.28, ease: [0.22, 1, 0.36, 1] } }}
-      exit={{ opacity: 0, transition: { duration: reduce ? 0.01 : 0.12, ease: "easeOut" } }}
-    >
-      {children}
-    </motion.div>
-  );
+  return <div className="ss-screen ss-screen-in">{children}</div>;
 }

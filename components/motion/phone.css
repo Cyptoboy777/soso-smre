@@ -91,3 +91,18 @@
   .ss-odo.is-ready .ss-odo-strip { transition: none !important; }
   .ss-count-up .ss-count-live, .ss-count-down .ss-count-live { color: inherit; }
 }
+
+/* Fade that starts mostly visible (never from 0), so there is no flash of empty page. */
+@keyframes ss-screen-in { from { opacity: .55; } to { opacity: 1; } }
+.ss-screen-in { animation: ss-screen-in .18s ease-out both; }
+@media (prefers-reduced-motion: no-preference) {
+  .ss-screen.ss-screen-in { animation: ss-screen-in .18s ease-out both, ss-fade-rise .32s cubic-bezier(0.22, 1, 0.36, 1) both; }
+}
+@media (max-width: 767px) and (prefers-reduced-motion: no-preference) {
+  .ss-screen.ss-screen-in { animation: ss-screen-in .18s ease-out both, ss-phone-slide .42s cubic-bezier(0.16, 1.15, 0.3, 1) both; }
+}
+@media (prefers-reduced-motion: reduce) { .ss-screen-in { animation: none; } }
+
+/* Thin progress line while a heavy screen is being prepared in the background. */
+.ss-navbar { position: fixed; left: 0; top: 0; height: 2px; width: 100%; z-index: 120; background: linear-gradient(90deg, transparent, #fb923c, transparent); transform-origin: left; animation: ss-navbar 1s ease-in-out infinite; pointer-events: none; }
+@keyframes ss-navbar { 0% { transform: translateX(-100%); } 100% { transform: translateX(100%); } }
